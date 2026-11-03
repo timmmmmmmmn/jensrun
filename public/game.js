@@ -3819,7 +3819,8 @@ $('#boardTabs').addEventListener('click', (e) => {
 $('#boardBtn').addEventListener('click', () => { boardMode = mode; showScreen('#board'); renderBoard(); });
 $('#boardBack').addEventListener('click', () => showScreen('#menu'));
 // controleer of onze naam nog bestaat
-if (save.name) apiCall('/api/me?id=' + save.playerId).then((r) => { if (r.status === 404) forgetName(); }).catch(() => {});
+// naam ophalen: de beheerder kan een naam hebben aangepast
+if (save.name) apiCall('/api/me?id=' + save.playerId).then((r) => { if (r.status === 404) forgetName(); else if (r.ok && r.name && r.name !== save.name) { save.name = r.name; persist(); } }).catch(() => {});
 persist();
 
 // =====================================================================

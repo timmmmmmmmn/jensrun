@@ -439,6 +439,22 @@ async function api(req, env, url) {
       await db.prepare('DELETE FROM sessions WHERE player_id = ?').bind(b.id).run();
       return json({ ok: !!r.meta.changes });
     }
+    if (path === '/api/admin/rename' && req.method === 'POST') {
+      const b = await body(req);
+      if (!ID_RE.test(b.id || '')) return json({ error: 'id' }, 400);
+      const name = cleanName(b.name);
+      if (!name) return json({ error: 'Naam moet 2 tot 16 tekens zijn (letters, cijfers, spatie).' }, 400);
+      const key = name.toLowerCase();
+      const taken = await db.prepare('SELECT 1 FROM players WHERE name_key = ? AND id != ?').bind(key, b.id).first();
+      if (taken) return json({ error: 'Die naam is al bezet.' }, 409);
+      // ook op de Wall of Fame meteen de nieuwe naam
+      const r = await db.batch([
+        db.prepare('UPDATE players SET name = ?, name_key = ? WHERE id = ?').bind(name, key, b.id),
+        db.prepare('UPDATE fame SET name = ? WHERE player_id = ?').bind(name, b.id),
+        db.prepare('UPDATE fame_nl SET name = ? WHERE player_id = ?').bind(name, b.id),
+      ]);
+      return r[0].meta.changes ? json({ name }) : json({ error: 'onbekend' }, 404);
+    }
     if (path === '/api/admin/fame' && req.method === 'GET') {
       const { results } = await db.prepare(`SELECT player_id AS id, name, score, created, 'nijmegen' AS c FROM fame UNION ALL SELECT player_id, name, score, created, 'nl' FROM fame_nl ORDER BY created ASC`).all();
       return json({ rows: results });

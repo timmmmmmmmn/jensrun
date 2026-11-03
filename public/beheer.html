@@ -15,7 +15,7 @@
   input { flex: 1; font: inherit; padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; min-width: 0; }
   button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 14px; background: var(--orange); color: #fff; cursor: pointer; }
   button.del { background: #e5383b; padding: 6px 10px; }
-  button.pw { background: #555; padding: 2px 6px; font-size: 12px; }
+  button.pw, button.ren { background: #555; padding: 2px 6px; font-size: 12px; }
   table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   th { font-size: 12px; text-transform: uppercase; color: var(--muted); }
@@ -67,7 +67,7 @@ async function load() {
     $('#msg').textContent = rows.length + ' spelers';
     $('#tbl').hidden = false;
     $('#tbl tbody').innerHTML = rows.map((r) => `<tr>
-      <td>${esc(r.name)}${r.email ? `<br><small>${esc(r.email)}</small> <button class="pw" data-pw="${esc(r.id)}" data-name="${esc(r.name)}">🔑</button>` : ''}</td><td class="n">${r.fiets ?? ''}</td><td class="n">${r.telefoon ?? ''}</td><td class="n">${r.terror ?? ''}</td><td class="n">${r.school ?? ''}</td>
+      <td>${esc(r.name)} <button class="ren" data-ren="${esc(r.id)}" data-name="${esc(r.name)}" title="Naam aanpassen">✏️</button>${r.email ? `<br><small>${esc(r.email)}</small> <button class="pw" data-pw="${esc(r.id)}" data-name="${esc(r.name)}">🔑</button>` : ''}</td><td class="n">${r.fiets ?? ''}</td><td class="n">${r.telefoon ?? ''}</td><td class="n">${r.terror ?? ''}</td><td class="n">${r.school ?? ''}</td>
       <td>${new Date(r.created).toLocaleDateString('nl-NL')}</td>
       <td><button class="del" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Verwijder</button></td></tr>`).join('');
     const cfg = await call('/api/admin/config');
@@ -89,6 +89,19 @@ $('#fame').onclick = async (e) => {
 };
 $('#load').onclick = load;
 $('#key').onkeydown = (e) => { if (e.key === 'Enter') load(); };
+$('#tbl').addEventListener('click', async (e) => {
+  const b = e.target.closest('.ren');
+  if (!b) return;
+  const name = prompt(`Nieuwe naam voor ${b.dataset.name} (2 tot 16 tekens):`, b.dataset.name);
+  if (!name || name === b.dataset.name) return;
+  try {
+    const r = await fetch('/api/admin/rename', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify({ id: b.dataset.ren, name }) });
+    const d = await r.json();
+    if (!r.ok) { $('#msg').textContent = d.error || 'Fout ' + r.status; return; }
+    await load();
+    $('#msg').textContent = `${b.dataset.name} heet nu ${d.name}`;
+  } catch (err) { $('#msg').textContent = err.message; }
+});
 $('#tbl').addEventListener('click', async (e) => {
   const p = e.target.closest('.pw');
   if (!p) return;
