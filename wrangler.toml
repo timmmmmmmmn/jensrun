@@ -1,0 +1,26 @@
+name = "jensrun"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+not_found_handling = "none"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "jensrun-db"
+database_id = "8b048657-605b-4195-9d9c-642f102a9ee7"
+migrations_dir = "migrations"
+
+[[routes]]
+pattern = "jensrun.timvanbergen.nl"
+custom_domain = true
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

@@ -1,0 +1,4 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": { "namespace": "android_app", "package_name": "nl.timvanbergen.jensrun", "sha256_cert_fingerprints": ["E1:AB:53:AD:0F:F2:A1:D6:73:64:87:8B:0B:D7:F7:5D:D4:44:E1:F0:1E:ED:73:66:F9:CD:F7:88:F8:1C:F3:C4"] }
+}]

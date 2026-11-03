@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Jens Run beheer</title>
+<style>
+  :root { --orange: #ff8a00; --ink: #1d1a24; --muted: #6d6677; --line: #eadfcd; }
+  body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: #fffaf0; color: var(--ink); }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: var(--orange); margin: 0 0 16px; }
+  h2 { font-size: 16px; margin: 20px 0 8px; }
+  .row { display: flex; gap: 8px; margin-bottom: 16px; }
+  input { flex: 1; font: inherit; padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; min-width: 0; }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 14px; background: var(--orange); color: #fff; cursor: pointer; }
+  button.del { background: #e5383b; padding: 6px 10px; }
+  button.pw { background: #555; padding: 2px 6px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; color: var(--muted); }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  #msg { color: var(--muted); margin-bottom: 12px; }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Jens Run beheer</h1>
+  <div class="row">
+    <input id="key" type="password" placeholder="Beheersleutel" autocomplete="current-password">
+    <button id="load">Laden</button>
+  </div>
+  <div id="msg"></div>
+  <div id="cfg" hidden>
+    <h2>NEC-wedstrijddagen (één datum per regel, JJJJ-MM-DD)</h2>
+    <textarea id="dates" rows="6" style="width:100%;font:inherit;padding:8px;border:2px solid var(--line);border-radius:10px"></textarea>
+    <div class="row" style="margin-top:8px"><button id="saveDates">Opslaan</button></div>
+    <h2>De muur</h2>
+    <p id="wallNow">–</p>
+    <button id="clearWall" class="del">Muur leegmaken</button>
+  </div>
+  <h2 id="fameH" hidden>Wall of Fame</h2>
+  <div class="wrap"><table id="fame" hidden>
+    <thead><tr><th>Naam</th><th>Verhaal</th><th>Score</th><th>Datum</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <h2 id="spelersH" hidden>Ranglijst-spelers</h2>
+  <div class="wrap"><table id="tbl" hidden>
+    <thead><tr><th>Naam</th><th>🚲</th><th>📱</th><th>📯</th><th>🎆</th><th>Sinds</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+try { $('#key').value = localStorage.getItem('jr-admin') || ''; } catch (e) {}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function call(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value } });
+  if (!r.ok) throw new Error(r.status === 401 ? 'Verkeerde sleutel' : 'Fout ' + r.status);
+  return r.json();
+}
+async function load() {
+  try { localStorage.setItem('jr-admin', $('#key').value); } catch (e) {}
+  try {
+    const { rows } = await call('/api/admin/players');
+    $('#msg').textContent = rows.length + ' spelers';
+    $('#tbl').hidden = false;
+    $('#tbl tbody').innerHTML = rows.map((r) => `<tr>
+      <td>${esc(r.name)}${r.email ? `<br><small>${esc(r.email)}</small> <button class="pw" data-pw="${esc(r.id)}" data-name="${esc(r.name)}">🔑</button>` : ''}</td><td class="n">${r.fiets ?? ''}</td><td class="n">${r.telefoon ?? ''}</td><td class="n">${r.terror ?? ''}</td><td class="n">${r.school ?? ''}</td>
+      <td>${new Date(r.created).toLocaleDateString('nl-NL')}</td>
+      <td><button class="del" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Verwijder</button></td></tr>`).join('');
+    const cfg = await call('/api/admin/config');
+    $('#cfg').hidden = false;
+    $('#dates').value = (cfg.wedstrijden || []).join('\n');
+    $('#wallNow').textContent = cfg.wall ? `${cfg.wall.name}: ${cfg.wall.text}` : 'Leeg';
+    const f = await call('/api/admin/fame');
+    $('#fame').hidden = false; $('#fameH').hidden = false; $('#spelersH').hidden = false;
+    $('#fame tbody').innerHTML = f.rows.length ? f.rows.map((r) => `<tr><td>${esc(r.name)}</td><td>${r.c === 'nl' ? 'Nederland' : 'Nijmegen'}</td><td class="n">${r.score}</td>
+      <td>${new Date(r.created).toLocaleDateString('nl-NL')}</td>
+      <td><button class="del" data-fame="${esc(r.id)}" data-c="${r.c}" data-name="${esc(r.name)}">Verwijder</button></td></tr>`).join('') : '<tr><td colspan="5">Nog niemand</td></tr>';
+  } catch (e) { $('#msg').textContent = e.message; $('#tbl').hidden = true; }
+}
+$('#fame').onclick = async (e) => {
+  const b = e.target.closest('.del');
+  if (!b || !confirm(`${b.dataset.name} van de Wall of Fame halen?`)) return;
+  try { await call('/api/admin/fame/delete', { method: 'POST', body: JSON.stringify({ id: b.dataset.fame, c: b.dataset.c }) }); load(); }
+  catch (err) { $('#msg').textContent = err.message; }
+};
+$('#load').onclick = load;
+$('#key').onkeydown = (e) => { if (e.key === 'Enter') load(); };
+$('#tbl').addEventListener('click', async (e) => {
+  const p = e.target.closest('.pw');
+  if (!p) return;
+  const pw = prompt(`Nieuw wachtwoord voor ${p.dataset.name} (min. 8 tekens):`);
+  if (!pw) return;
+  try { const r = await call('/api/admin/password', { method: 'POST', body: JSON.stringify({ id: p.dataset.pw, password: pw }) }); $('#msg').textContent = r.ok ? 'Wachtwoord gewijzigd' : 'Geen account'; }
+  catch (err) { $('#msg').textContent = err.message; }
+});
+$('#tbl').onclick = async (e) => {
+  const b = e.target.closest('.del');
+  if (!b || !confirm(`${b.dataset.name} en alle scores verwijderen?`)) return;
+  try { await call('/api/admin/delete', { method: 'POST', body: JSON.stringify({ id: b.dataset.id }) }); load(); }
+  catch (err) { $('#msg').textContent = err.message; }
+};
+if ($('#key').value) load();
+$('#saveDates').onclick = async () => {
+  try { await call('/api/admin/config', { method: 'POST', body: JSON.stringify({ wedstrijden: $('#dates').value.split(/\s+/).filter(Boolean) }) }); load(); }
+  catch (e) { $('#msg').textContent = e.message; }
+};
+$('#clearWall').onclick = async () => {
+  if (!confirm('Muur leegmaken?')) return;
+  try { await call('/api/admin/config', { method: 'POST', body: JSON.stringify({ clearWall: true }) }); load(); }
+  catch (e) { $('#msg').textContent = e.message; }
+};
+</script>
+</body>
+</html>
