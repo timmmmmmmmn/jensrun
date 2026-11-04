@@ -374,7 +374,20 @@ function singBio() {
 // muziek: menu en spel, via WebAudio zodat het volume ook op iPhone werkt
 const music = { eltune: new Audio('audio/radio/eltune.mp3'), chip: new Audio('audio/radio/chiptune.mp3'), menu: new Audio('audio/menu.mp3'), story: new Audio('audio/story.mp3'), verhaalmenu: new Audio('audio/verhaalmenu.mp3'), nederland: new Audio('audio/nederland.mp3'), game: new Audio('audio/game.mp3') };
 const musicGain = {};
-for (const a of Object.values(music)) { a.loop = true; a.preload = 'auto'; a.crossOrigin = 'anonymous'; }
+for (const a of Object.values(music)) {
+  a.loop = true; a.preload = 'auto'; a.crossOrigin = 'anonymous';
+  // een stream die stukgaat (netwerk, telefoon die iets anders deed): even later opnieuw laden
+  a.addEventListener('error', () => setTimeout(() => { try { a.load(); a.play().catch(() => {}); } catch (e) { /* later weer */ } }, 1500));
+}
+// elke aanraking of toets: audio weer aanzetten (browsers staan starten alleen toe na een klik)
+for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, () => {
+  if (!ac) return;
+  if (ac.state !== 'running') ac.resume().catch(() => {});
+  musicKick();
+}, { capture: true, passive: true });
+// muziek gaat mee met je score: bij 2,5 miljoen punten 75% harder en 1,5× zo snel (dat is het maximum)
+const musicBoost = () => (state === 'run' || state === 'paused') && !curLevel ? Math.sqrt(clamp(score / 2.5e6, 0, 1)) : 0;
+const musicWatch = {};
 function musicInit() {
   for (const [k, a] of Object.entries(music)) {
     const g = ac.createGain(); g.gain.value = 0;
@@ -407,16 +420,30 @@ function stopGameover() {
 }
 function updateMusic(dt) {
   if (!ac || !musicGain.menu) return;
-  if (ac.state === 'suspended') return;
+  if (ac.state !== 'running') {
+    // probeer het af en toe zelf weer aan te zetten (zonder klik lukt dat niet altijd)
+    if ((musicWatch.resumeT = (musicWatch.resumeT || 0) - dt) <= 0 && !document.hidden) { musicWatch.resumeT = 1; ac.resume().catch(() => {}); }
+    return;
+  }
   // tijdens game over / level gehaald speelt alleen dat muziekje; in een level eigen muziek
   const storyMenu = curScreen === '#levels' || curScreen === '#lvldone' || (curScreen === '#fame' && curLevel);
   let want = newsPlaying ? null : state === 'cutscene' && !gameoverSrc ? 'verhaalmenu' : state === 'run' || state === 'aanloop' || (state === 'mini' && !mini.paused && !mini.over) ? (curLevel ? (campaign === 'nederland' ? 'nederland' : 'story') : 'game') : gameoverSrc || state === 'paused' || state === 'dying' || state === 'photo' || state === 'replay' ? null : storyMenu ? 'verhaalmenu' : 'menu';
   if (want === 'menu' && save.radio && save.radio !== 'menu') want = save.radio === 'uit' ? null : save.radio;
+  const boost = want === 'game' ? musicBoost() : 0;
   for (const [k, a] of Object.entries(music)) {
-    const target = save.sound && want === k ? MUSIC_VOL * (save.set.music / 100) * (ac.currentTime < Math.max(voiceUntil, verslagUntil) ? 0.35 : 1) : 0;
+    const target = save.sound && want === k ? MUSIC_VOL * (save.set.music / 100) * (1 + 0.75 * boost) * (ac.currentTime < Math.max(voiceUntil, verslagUntil) ? 0.35 : 1) : 0;
     const g = musicGain[k].gain;
     g.value = damp(g.value, target, target > g.value ? 2.5 : 5, dt);
+    const rate = k === 'game' ? 1 + 0.5 * boost : 1;
+    if (Math.abs(a.playbackRate - rate) > 0.01) a.playbackRate = rate;
     if (target > 0 && a.paused) a.play().catch(() => {});
+    // waakhond: het nummer dat moet spelen moet ook écht doorlopen
+    if (target > 0 && !document.hidden) {
+      const w = musicWatch[k] ||= { t: a.currentTime, stuck: 0 };
+      if (!a.paused && a.currentTime === w.t) w.stuck += dt; else w.stuck = 0;
+      w.t = a.currentTime;
+      if (w.stuck > 2.5) { w.stuck = 0; try { if (a.readyState < 3) a.load(); a.play().catch(() => {}); } catch (e) { /* volgende keer */ } }
+    }
   }
 }
 let lastSpeak = 0;
@@ -12037,4 +12064,4 @@ const ARC = {
   },
 };
 
-window.__jr = { startMini, comboHit, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { startMini, comboHit, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
