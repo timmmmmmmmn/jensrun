@@ -679,3 +679,12 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 .ipod #menu .mode b { font-size: 9px; }
 .ipod .mini-btn { width: 60px; height: 60px; font-size: 22px; }
 .ipod .mini-osso .mini-btn.fire { width: 78px; height: 78px; }
+/* vuurwerk: doorspoelen */
+.mini.ff::after { content: '⏩'; position: absolute; right: max(16px, env(safe-area-inset-right)); top: 64px; font-size: 34px; animation: blink .6s steps(1) infinite; }
+/* Mijn Osso: vizier in het midden */
+.mini-cross { display: none; position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); }
+.mini-cross::before, .mini-cross::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1px #000; }
+.mini-cross::before { left: 10px; top: 0; width: 2px; height: 22px; }
+.mini-cross::after { top: 10px; left: 0; height: 2px; width: 22px; }
+.mini-osso .mini-cross { display: block; }
+.mini-osso .mini-btn.view { width: 54px; height: 54px; font-size: 20px; align-self: flex-end; }
