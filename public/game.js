@@ -9126,6 +9126,7 @@ function buildKamer() {
   poster('img/spandoek.png', 1.8, 1.8, -1.6, 2.3, -4.43);
   poster('img/shane-foto.jpg', 1.4, 1.04, 1.4, 2.4, -4.43);
   poster('img/menu-bg.jpg', 2.4, 1.35, -3.93, 2.3, -1.5, Math.PI / 2);
+  poster('img/poster-jens.jpg', 1.7, 1.06, 3.93, 2.0, -2.7, -Math.PI / 2); // "Jens in, like, 2 jaar" boven het bed
   // bed in NEC-kleuren
   solid(2, 0.5, 3, M('#5a3a22'), 2.9, 0.25, -2.7);
   kamer.add(mesh(box(1.9, 0.2, 2.9), fabricMat('#c8202b'), 2.9, 0.6, -2.7));
