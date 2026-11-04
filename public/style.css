@@ -760,3 +760,5 @@ a.btn { text-decoration: none; text-align: center; display: block; }
   #toast small { font-size: 11px; }
 }
 @keyframes fxHypeM { 0% { transform: scale(.3); opacity: 0; } 18% { transform: scale(1.08); opacity: 1; } 30% { transform: scale(1); } 75% { opacity: 1; } 100% { transform: translateY(-12px); opacity: 0; } }
+/* slow-motion: beeld even blauwig en scherp */
+body.slomo #c { filter: saturate(1.4) contrast(1.1) hue-rotate(-12deg); }

@@ -76,62 +76,62 @@ const MODES = {
 const SHOP = {
   shout: { label: 'Kreet', items: [
     { id: 'hup', name: 'Hup!', price: 0, text: 'Hup!' },
-    { id: 'gonl', name: 'Go Nederland!', price: 100, text: 'GO NEDERLAND!', voice: 'gonl' },
-    { id: 'bio', name: 'Nooit meer naar bio 🎵', price: 200, text: '🎵 Nooit meer naar bio 🎵', voice: 'bio' },
-    { id: 'dbivo', name: 'DBIVO', price: 300, text: 'DIE BEKER IS VAN ONS!', clip: 'dbivo' },
+    { id: 'gonl', name: 'Go Nederland!', price: 300, text: 'GO NEDERLAND!', voice: 'gonl' },
+    { id: 'bio', name: 'Nooit meer naar bio 🎵', price: 600, text: '🎵 Nooit meer naar bio 🎵', voice: 'bio' },
+    { id: 'dbivo', name: 'DBIVO', price: 900, text: 'DIE BEKER IS VAN ONS!', clip: 'dbivo' },
   ] },
   shirt: { label: 'Shirt', items: [
     { id: 'wit', name: 'Wit shirtje', price: 0 },
-    { id: 'vierdaagse', name: 'Vierdaagse', price: 150 },
-    { id: 'oranje', name: 'Oranje', price: 200 },
-    { id: 'uefa', name: 'UEFA shirt', price: 350 },
-    { id: 'rammstein', name: 'Rammstein shirt', price: 350 },
-    { id: 'heineken', name: 'Heineken-setje', price: 500 },
-    { id: 'nec6', name: 'NEC-shirt #6 Nejašmić', price: 450 },
-    { id: 'eurotour', name: 'NEC European Tour-shirt', price: 400 },
-    { id: 'feyenoord', name: 'Feyenoord-shirt', price: 300 },
+    { id: 'vierdaagse', name: 'Vierdaagse', price: 450 },
+    { id: 'oranje', name: 'Oranje', price: 600 },
+    { id: 'uefa', name: 'UEFA shirt', price: 1050 },
+    { id: 'rammstein', name: 'Rammstein shirt', price: 1050 },
+    { id: 'heineken', name: 'Heineken-setje', price: 1500 },
+    { id: 'nec6', name: 'NEC-shirt #6 Nejašmić', price: 1350 },
+    { id: 'eurotour', name: 'NEC European Tour-shirt', price: 1200 },
+    { id: 'feyenoord', name: 'Feyenoord-shirt', price: 900 },
     { id: 'goud', name: 'Gouden NEC-shirt (plakboek)', price: 99999 },
     { id: 'pas', name: 'Seizoensshirt (seizoenspas)', price: 99999, pass: true },
   ] },
   head: { label: 'Hoofd', items: [
     { id: 'normaal', name: 'Gewoon', price: 0 },
-    { id: 'middenscheiding', name: 'Middenscheiding', price: 200 },
-    { id: 'pet', name: 'Skere pet', price: 250 },
-    { id: 'manen', name: 'Lange blonde manen', price: 400 },
-    { id: 'spike', name: 'Gel-spike', price: 350 },
-    { id: 'bivak', name: 'NEC-bivakmuts', price: 350 },
+    { id: 'middenscheiding', name: 'Middenscheiding', price: 600 },
+    { id: 'pet', name: 'Skere pet', price: 750 },
+    { id: 'manen', name: 'Lange blonde manen', price: 1200 },
+    { id: 'spike', name: 'Gel-spike', price: 1050 },
+    { id: 'bivak', name: 'NEC-bivakmuts', price: 1050 },
     { id: 'kroon', name: 'Kroon (seizoenspas)', price: 99999, pass: true },
-    { id: 'kuif', name: 'Platinablonde kuif', price: 450 },
-    { id: 'laser', name: 'Laserogen', price: 700 },
+    { id: 'kuif', name: 'Platinablonde kuif', price: 1350 },
+    { id: 'laser', name: 'Laserogen', price: 2100 },
   ] },
   rug: { label: 'Rug', items: [
     { id: 'geen', name: 'Niks op je rug', price: 0 },
-    { id: 'cape', name: 'Spandoek-cape', price: 500 },
+    { id: 'cape', name: 'Spandoek-cape', price: 1500 },
   ] },
   hand: { label: 'Hand', items: [
     { id: 'geen', name: 'Lege hand', price: 0 },
-    { id: 'cola', name: 'Blikje cola', price: 80 },
-    { id: 'fanta', name: 'Blikje Fanta', price: 80 },
-    { id: 'fietsbel', name: 'Fietsbel', price: 100 },
-    { id: 'ballon', name: 'Ballon', price: 120 },
-    { id: 'toeter', name: 'PVC-toeter', price: 150 },
-    { id: 'fakkel', name: 'Rode fakkel', price: 250 },
+    { id: 'cola', name: 'Blikje cola', price: 240 },
+    { id: 'fanta', name: 'Blikje Fanta', price: 240 },
+    { id: 'fietsbel', name: 'Fietsbel', price: 300 },
+    { id: 'ballon', name: 'Ballon', price: 360 },
+    { id: 'toeter', name: 'PVC-toeter', price: 450 },
+    { id: 'fakkel', name: 'Rode fakkel', price: 750 },
     { id: 'minibeker', name: 'Mini-beker (seizoenspas)', price: 99999, pass: true },
   ] },
   skill: { label: 'Extra', items: [
     { id: 'geen', name: 'Gewoon springen', price: 0 },
-    { id: 'dubbel', name: 'Dubbelspringen', price: 600 },
+    { id: 'dubbel', name: 'Dubbelspringen', price: 1800 },
   ] },
   maatje: { label: 'Maatje', items: [
     { id: 'geen', name: 'Alleen', price: 0 },
-    { id: 'duif', name: 'Duif', price: 250 },
-    { id: 'hond', name: 'Saar de hond', price: 350 },
+    { id: 'duif', name: 'Duif', price: 750 },
+    { id: 'hond', name: 'Saar de hond', price: 1050 },
   ] },
   bril: { label: 'Bril', items: [
     { id: 'geen', name: 'Geen bril', price: 0 },
-    { id: 'filter', name: 'Die ene filter zonnebril', price: 300 },
-    { id: 'lennon', name: 'John Lennon bril', price: 250 },
-    { id: 'snor', name: 'Snor', price: 200 },
+    { id: 'filter', name: 'Die ene filter zonnebril', price: 900 },
+    { id: 'lennon', name: 'John Lennon bril', price: 750 },
+    { id: 'snor', name: 'Snor', price: 600 },
   ] },
 };
 
@@ -434,7 +434,7 @@ function updateMusic(dt) {
     const target = save.sound && want === k ? MUSIC_VOL * (save.set.music / 100) * (1 + 0.75 * boost) * (ac.currentTime < Math.max(voiceUntil, verslagUntil) ? 0.35 : 1) : 0;
     const g = musicGain[k].gain;
     g.value = damp(g.value, target, target > g.value ? 2.5 : 5, dt);
-    const rate = k === 'game' ? 1 + 0.5 * boost : 1;
+    const rate = k === 'game' ? (1 + 0.5 * boost) * (slomoT > 0 ? 0.72 : 1) : 1;
     if (Math.abs(a.playbackRate - rate) > 0.01) a.playbackRate = rate;
     if (target > 0 && a.paused) a.play().catch(() => {});
     // waakhond: het nummer dat moet spelen moet ook écht doorlopen
@@ -2463,7 +2463,7 @@ function setMode(m, force) {
 
 function resetRun() {
   newsCancel();
-  feverT = 0; nearRecord = false; hudK = 0; renHype = false; xpScore = 0; nextMicro = 100; bekerRun = 0; speedTier = 0; gainXp(0);
+  feverT = 0; slomoT = 0; slomoCD = 3; nearRecord = false; hudK = 0; renHype = false; xpScore = 0; nextMicro = 100; bekerRun = 0; speedTier = 0; gainXp(0);
   if (seg) endSeg(); if (waalOn) setWaal(false); segRollT = 30;
   if (patrickRijder) brommerPatrick(false);
   if (fietsT > 0 || voiceSrc) stopFiets();
@@ -3283,7 +3283,7 @@ function collide() {
         coinFly(_pv.set(player.x, player.y + 1.4, -0.3), camera);
         if (dn >= 8) popWorld('+' + 10 * n * scoreMult(), _pv.set(player.x + 0.8, player.y + 2.3, -0.3), camera, 'good small');
         bekerRun = bekerRunT > 0 ? bekerRun + 1 : 1; bekerRunT = 1.4;
-        if (bekerRun === 10 || bekerRun === 25 || bekerRun === 50 || bekerRun === 100) { hype(`🏆 BEKERSTREAK ×${bekerRun}!`, bekerRun >= 50 ? 'mega' : ''); score += bekerRun * 10 * scoreMult(); }
+        if (bekerRun === 10 || bekerRun === 25 || bekerRun === 50 || bekerRun === 100) { hype(`🏆 BEKERSTREAK ×${bekerRun}!`, bekerRun >= 50 ? 'mega' : ''); buzz(TRIL.streak); score += bekerRun * 10 * scoreMult(); }
         buzz(8);
         if (++streak % 40 === 0) goodShout();
       }
@@ -3353,14 +3353,14 @@ function collide() {
 
 // MYSTERY KIST: je weet nooit wat erin zit (en dat is precies het leuke)
 function mysteryKist() {
-  hype('📦 MYSTERY KIST…');
+  hype('📦 MYSTERY KIST…'); buzz(TRIL.kist);
   for (let i = 0; i < 9; i++) tone(500 + i * 90, 0.05, 'square', 0.05, null, i * 0.09);
   setTimeout(() => {
     if (state !== 'run') return;
     const r = Math.random();
     if (r < 0.04) {
       save.bekers += 500; runBekers += 500; persist();
-      hype('💰 JACKPOT!<small>+500 BEKERS</small>', 'mega'); fxFlash('#ffd23f', 0.5);
+      hype('💰 JACKPOT!<small>+500 BEKERS</small>', 'mega'); fxFlash('#ffd23f', 0.5); buzz(TRIL.jackpot);
       burst(new THREE.Vector3(player.x, 2, 0), 70, 9, [goldMat, ...sparkMats], 1.4);
       for (let i = 0; i < 12; i++) setTimeout(() => fxDing(), i * 70);
     } else if (r < 0.44) {
@@ -3532,7 +3532,7 @@ function gainXp(n) {
   if (up) {
     const bonus = 20 + save.lvl * 10;
     save.bekers += bonus; runBekers += bonus;
-    hype(`⭐ LEVEL ${save.lvl}!<small>+${bonus} bekers</small>`, 'mega', 'level');
+    hype(`⭐ LEVEL ${save.lvl}!<small>+${bonus} bekers</small>`, 'mega', 'level'); buzz(TRIL.level);
     fxFlash('#7dff6a', 0.3);
     persist();
   }
@@ -3552,7 +3552,7 @@ function earlyHooks(dt) {
     score += 25 * scoreMult(); nextMicro += 100;
   }
   // sneller: per snelheidstrap een melding
-  if (speedTier < SPEED_TIERS.length && baseSpeed > SPEED_TIERS[speedTier]) { speedTier++; hype('⚡ SNELLER!', '', 'riser'); fxFlash('#5ad1ff', 0.15); }
+  if (speedTier < SPEED_TIERS.length && baseSpeed > SPEED_TIERS[speedTier]) { speedTier++; hype('⚡ SNELLER!', '', 'riser'); fxFlash('#5ad1ff', 0.15); buzz(TRIL.sneller); }
   bekerRunT -= dt;
 }
 function updateRun(dt) {
@@ -3569,7 +3569,7 @@ function updateRun(dt) {
   }
   if (!bestPassed && save.best[mode] > 200 && score > save.best[mode]) {
     bestPassed = true;
-    hype('🏅 NIEUW RECORD!', 'mega'); fxFlash('#ffd23f', 0.3);
+    hype('🏅 NIEUW RECORD!', 'mega'); fxFlash('#ffd23f', 0.3); buzz(TRIL.record);
     verslaggever('record', true);
     goodShout(true);
   }
@@ -3726,8 +3726,11 @@ renderer.setAnimationLoop(() => {
   const cap = (state === 'run' || state === 'mini' || state === 'aanloop' || state === 'dying' || state === 'replay' || state === 'photo' || state === 'cutscene') && !fps30 ? 1000 / 60 : 1000 / 30;
   if (t - last < cap - 2) return;
   autoQuality(t - last);
-  const dt = Math.min((t - last) / 1000, 0.05);
+  let dt = Math.min((t - last) / 1000, 0.05);
   last = t;
+  if (slomoCD > 0) slomoCD -= dt;
+  if (slomoT > 0) { slomoT -= dt; if (state === 'run') dt *= 0.28; }
+  document.body.classList.toggle('slomo', slomoT > 0 && state === 'run');
   const p0 = PERF.on ? performance.now() : 0;
   if (state === 'run') updateRun(dt);
   else if (state === 'aanloop') updateAanloop(dt);
@@ -3844,7 +3847,7 @@ function renderShop() {
   $('#tabs').innerHTML = Object.entries(SHOP).map(([k, s]) => `<button class="tab ${k === shopTab ? 'sel' : ''}" data-tab="${k}">${s.label}</button>`).join('');
   $('#items').innerHTML = SHOP[shopTab].items.map((it) => {
     const own = owns(shopTab, it.id), eq = save.eq[shopTab] === it.id, sel = shopSel[shopTab] === it.id;
-    const status = eq ? '✓ Aan' : own ? 'Gekocht' : `🏆 ${it.price}`;
+    const status = eq ? '✓ Aan' : own ? 'Gekocht' : `🏆 ${it.price.toLocaleString('nl-NL')}`;
     return `<button class="item ${own ? 'owned' : ''} ${eq ? 'eq' : ''} ${sel ? 'sel' : ''} ${!own && save.bekers < it.price ? 'cant' : ''}" data-id="${it.id}"><b>${it.name}</b><small>${status}</small></button>`;
   }).join('');
   const it = SHOP[shopTab].items.find((i) => i.id === shopSel[shopTab]);
@@ -3856,8 +3859,8 @@ function renderShop() {
   if (eq) { btn.textContent = '✓ In gebruik'; btn.disabled = true; $('#siStatus').textContent = 'Dit heb je aan.'; }
   else if (own) { btn.textContent = 'Aantrekken'; $('#siStatus').textContent = 'Al gekocht.'; }
   else if (it.price >= 99999) { btn.textContent = it.pass ? '🔒 Seizoenspas' : '🔒 Plakboek'; btn.disabled = true; $('#siStatus').textContent = it.pass ? 'Te verdienen met de seizoenspas (🎟️ in het menu).' : 'Alleen te verdienen door het plakboek vol te maken.'; }
-  else if (save.bekers >= it.price) { btn.textContent = `Kopen · 🏆 ${it.price}`; btn.classList.add('buy'); $('#siStatus').textContent = 'Je hebt genoeg bekers.'; }
-  else { btn.textContent = `🏆 ${it.price}`; btn.disabled = true; $('#siStatus').textContent = `Je mist nog ${it.price - save.bekers} bekers.`; }
+  else if (save.bekers >= it.price) { btn.textContent = `Kopen · 🏆 ${it.price.toLocaleString('nl-NL')}`; btn.classList.add('buy'); $('#siStatus').textContent = 'Je hebt genoeg bekers.'; }
+  else { btn.textContent = `🏆 ${it.price.toLocaleString('nl-NL')}`; btn.disabled = true; $('#siStatus').textContent = `Je mist nog ${(it.price - save.bekers).toLocaleString('nl-NL')} bekers.`; }
 }
 $('#tabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tab]');
@@ -7123,11 +7126,24 @@ function buzz(pattern) {
   if (!save.vibe || !navigator.vibrate) return;
   try { navigator.vibrate(pattern); } catch (e) { /* niet ondersteund */ }
 }
+// vaste trilpatronen per soort beloning (Android; iPhones trillen niet vanuit een webpagina)
+const TRIL = {
+  rakelings: 12, ontweken: 6, level: [40, 30, 40, 30, 110], koorts: [60, 40, 60, 40, 60, 40, 160], kist: [15, 25, 15, 25, 15, 25, 70],
+  jackpot: [80, 40, 80, 40, 80, 40, 250], streak: [20, 20, 45], sneller: [10, 30, 10, 30, 10], record: [100, 50, 100, 50, 300], slomo: [70],
+};
 
 // =====================================================================
 //  COMBO: rakelings ontwijken en springen/glijden bouwt een combo op
 // =====================================================================
-let feverBeat = 0, feverStep = 0;
+let feverBeat = 0, feverStep = 0, slomoT = 0, slomoCD = 0;
+// SLOW-MOTION: superrakelings op snelheid = de tijd staat heel even (bijna) stil
+function slomo(o) {
+  slomoT = 0.38; slomoCD = 6;
+  fxFlash('#5ad1ff', 0.3); buzz(TRIL.slomo);
+  tone(180, 0.5, 'sine', 0.18, 70); whoosh(0.18);
+  const pts = 100 * scoreMult(); score += pts;
+  popWorld(`😮 SUPERRAKELINGS +${pts}`, _pv.set(o.x, 2.4, o.z || -1), camera, 'big');
+}
 let combo = 0, comboT = 0, comboShown = -1, feverT = 0, nearRecord = false, hudK = 0, renHype = true;
 const comboMult = () => 1 + Math.min(8, Math.floor(combo / 4)) * 0.25; // tot ×3
 const COMBO_HYPE = { 10: 'COMBO 10!', 20: 'ON FIRE! 🔥', 30: 'NIET TE STOPPEN!', 50: 'LEGENDARISCH!', 75: 'JENS IS EEN GOD', 100: '100 COMBO?!' };
@@ -7135,11 +7151,11 @@ function comboHit(label) {
   const before = comboMult();
   combo++;
   comboT = 3.5;
-  if (label) whoosh(label === 'rakelings' ? 0.13 : 0.08);
+  if (label) { whoosh(label === 'rakelings' ? 0.13 : 0.08); buzz(TRIL[label] || 10); }
   if (label && (label !== 'ontweken' || combo % 3 === 0)) popWorld(label === 'over' ? (player.slideT > 0 ? 'ERONDERDOOR!' : 'EROVERHEEN!') : label === 'ontweken' ? 'ONTWEKEN!' : 'RAKELINGS!', _pv.set(player.x, player.y + 2.4, -0.5), camera, 'blue');
   if (COMBO_HYPE[combo]) hype(COMBO_HYPE[combo], combo >= 30 ? 'mega' : '');
   // elke 15 combo: KOORTS, 8 seconden dubbele punten
-  if (combo % 15 === 0) { feverT = 8; hype('🔥 KOORTS!<small>8 seconden dubbele punten</small>', 'mega'); fxFlash('#ff8a00', 0.35); }
+  if (combo % 15 === 0) { feverT = 8; hype('🔥 KOORTS!<small>8 seconden dubbele punten</small>', 'mega'); fxFlash('#ff8a00', 0.35); buzz(TRIL.koorts); }
   recordStat('combo', 0, combo);
   if (combo === 10) verslaggever('combo');
   score += 15 * comboMult() * scoreMult();
@@ -7175,7 +7191,7 @@ function comboPass(o) {
   const edge = Math.abs(player.x - o.x) - o.w / 2;
   if (runTime < 40 && edge >= 1.3 && edge < 2.6) { comboHit('ontweken'); return; } // in het begin telt alles
   if (edge < 0.25) { if (player.y > 0.3 || player.slideT > 0) comboHit('over'); } // overheen of eronder door
-  else if (edge < 1.3) comboHit('rakelings');
+  else if (edge < 1.3) { comboHit('rakelings'); if (edge < 0.6 && speed > 17 && slomoCD <= 0) slomo(o); }
 }
 
 // =====================================================================
@@ -9646,16 +9662,16 @@ function enterKlas() {
 }
 // ---------- osso inrichten: meubels kopen met bekers ----------
 const OSSO_ITEMS = [
-  { id: 'necbank', icon: '🛋️', name: 'NEC-bank', price: 300 },
-  { id: 'gamekast', icon: '🕹️', name: 'Gamekast', price: 450 },
-  { id: 'voetbaltafel', icon: '⚽', name: 'Voetbaltafel', price: 400 },
-  { id: 'aquarium', icon: '🐠', name: 'Aquarium', price: 350 },
-  { id: 'discobal', icon: '🪩', name: 'Discobal', price: 250 },
-  { id: 'vlag', icon: '🚩', name: 'Grote NEC-vlag', price: 150 },
-  { id: 'lavalamp', icon: '🔮', name: 'Lavalamp', price: 120 },
-  { id: 'snoep', icon: '🍬', name: 'Snoepautomaat', price: 300 },
-  { id: 'kerstboom', icon: '🎄', name: 'Kerstboom', price: 200 },
-  { id: 'goudwc', icon: '🚽', name: 'Gouden wc', price: 800 },
+  { id: 'necbank', icon: '🛋️', name: 'NEC-bank', price: 900 },
+  { id: 'gamekast', icon: '🕹️', name: 'Gamekast', price: 1350 },
+  { id: 'voetbaltafel', icon: '⚽', name: 'Voetbaltafel', price: 1200 },
+  { id: 'aquarium', icon: '🐠', name: 'Aquarium', price: 1050 },
+  { id: 'discobal', icon: '🪩', name: 'Discobal', price: 750 },
+  { id: 'vlag', icon: '🚩', name: 'Grote NEC-vlag', price: 450 },
+  { id: 'lavalamp', icon: '🔮', name: 'Lavalamp', price: 360 },
+  { id: 'snoep', icon: '🍬', name: 'Snoepautomaat', price: 900 },
+  { id: 'kerstboom', icon: '🎄', name: 'Kerstboom', price: 600 },
+  { id: 'goudwc', icon: '🚽', name: 'Gouden wc', price: 2400 },
 ];
 const ossoHas = (id) => !!save.ossoItems?.[id];
 let disco = null;
@@ -9706,7 +9722,7 @@ function buildOssoItems(col, solid, use) {
   }
 }
 function renderOssoShop() {
-  $('#osShopList').innerHTML = OSSO_ITEMS.map((it) => `<button class="item ${ossoHas(it.id) ? 'owned' : ''} ${!ossoHas(it.id) && save.bekers < it.price ? 'cant' : ''}" data-oi="${it.id}"><b>${it.icon} ${it.name}</b><small>${ossoHas(it.id) ? '✓ Staat in je osso' : `🏆 ${it.price}`}</small></button>`).join('');
+  $('#osShopList').innerHTML = OSSO_ITEMS.map((it) => `<button class="item ${ossoHas(it.id) ? 'owned' : ''} ${!ossoHas(it.id) && save.bekers < it.price ? 'cant' : ''}" data-oi="${it.id}"><b>${it.icon} ${it.name}</b><small>${ossoHas(it.id) ? '✓ Staat in je osso' : `🏆 ${it.price.toLocaleString('nl-NL')}`}</small></button>`).join('');
   $('#osShopBekers').textContent = `🏆 ${save.bekers.toLocaleString('nl-NL')}`;
 }
 $('#kmShop').addEventListener('click', () => { if (document.pointerLockElement) document.exitPointerLock(); renderOssoShop(); $('#osShop').classList.remove('hidden'); });
@@ -10590,7 +10606,6 @@ function hype(html, cls = '', snd = cls === 'mega' ? 'fanfareUp' : 'fanfare') {
   el.className = 'fx-hype ' + cls; el.innerHTML = html;
   void el.offsetWidth; el.classList.add('on');
   if (snd === 'fanfareUp') jingle.fanfare(1.26); else jingle[snd]?.();
-  buzz([15, 25, 30]);
 }
 // flits: alleen een gloed langs de randen, het midden (waar je naar kijkt) blijft vrij
 function fxFlash(color = '#fff', a = 0.4) {
@@ -11667,7 +11682,7 @@ MINI.osso = {
     mini.score += pts;
     popWorld(`+${pts}${mult > 1 ? ' ×' + mult : ''}`, _pv.set(f.x, 2.2, f.z), mini.cam, mult > 2 ? 'big' : '');
     const naam = { 2: 'DUBBEL!', 3: 'TRIPLE!', 5: 'MULTI-KILL!', 8: 'RAMPAGE!', 12: 'ONSTOPBAAR!', 18: 'GODLIKE JENS!' }[st.streakN];
-    if (naam) { hype(naam, st.streakN >= 8 ? 'mega' : ''); if (st.streakN >= 5) fxFlash('#ff8a3d', 0.2); }
+    if (naam) { hype(naam, st.streakN >= 8 ? 'mega' : ''); buzz(TRIL.streak); if (st.streakN >= 5) fxFlash('#ff8a3d', 0.2); }
     miniBurst(new THREE.Vector3(f.x, 1.2, f.z), 18, 7, miniSparkMats, 0.8);
     if (Math.random() < (f.d.boss ? 1 : 0.2)) this.drop(f.x, f.z, f.d.boss ? 'hp' : null);
     tone(f.d.boss ? 160 : 420, 0.3, 'sawtooth', 0.08, 90);
@@ -12155,4 +12170,4 @@ const ARC = {
   },
 };
 
-window.__jr = { startMini, comboHit, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
