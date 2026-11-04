@@ -722,3 +722,6 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 #score.bump { animation: scoreBump .35s ease-out; }
 @keyframes scoreBump { 40% { transform: scale(1.35); color: #fff; } }
 #score { transform-origin: left center; }
+.bijna { text-align: center; font-weight: 700; color: #ffb36b; font-size: 15px; animation: blink 1s steps(1) 3; }
+#againBtn { animation: againPulse 1.4s ease-in-out infinite; }
+@keyframes againPulse { 50% { transform: scale(1.04); } }

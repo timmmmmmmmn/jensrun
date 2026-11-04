@@ -2152,6 +2152,7 @@ const POWER_LOOK = {
   brommer: { ring: '#ffd23f', label: 'BROMMER', bg: '#1d1a24', sx: 1.3 },
   'beker-van-ons': { ring: '#ff8a00', label: 'DE BEKER IS VAN ONS', bg: '#ff8a00', sx: 2.2 },
   nitraat: { ring: '#e2231a', label: 'DUM BUM NITRAAT', bg: '#c8202b', sx: 2.0 },
+  kist: { ring: '#b18cff', label: 'MYSTERY KIST', bg: '#6a2a9a', sx: 1.8 },
 };
 function makePower(type) {
   const g = new THREE.Group();
@@ -2164,6 +2165,12 @@ function makePower(type) {
     g.add(makeSjaalPower());
   } else if (type === 'fiets') {
     const f = makeBike('#c8202b'); f.scale.setScalar(0.75); f.position.y = -0.4; f.rotation.y = 0.8; g.add(f);
+  } else if (type === 'kist') {
+    const k = new THREE.Group();
+    k.add(mesh(box(0.8, 0.6, 0.6), M('#7a3ab0', { emissive: '#2a0a4a' })));
+    k.add(mesh(box(0.84, 0.14, 0.64), M('#ffd23f', { emissive: '#6a5000' }), 0, 0.12, 0));
+    k.add(mesh(box(0.14, 0.62, 0.64), M('#ffd23f', { emissive: '#6a5000' })));
+    g.add(k);
   } else if (type === 'nitraat') {
     const bundle = new THREE.Group();
     for (const [x, z] of [[-0.1, 0.05], [0.1, 0.05], [0, -0.1]]) { const n = makeNitraat(); n.position.set(x, 0, z); bundle.add(n); }
@@ -2375,7 +2382,7 @@ function clearRocket() {
 let mode = MODES[save.mode] && !MODES[save.mode].hidden ? save.mode : 'telefoon';
 let state = 'menu';
 let speed = 0, baseSpeed = 0, dist = 0, score = 0, runBekers = 0;
-let spawnZ = -40, nextSign = 0, nextPower = 0, streetIdx = 0;
+let spawnZ = -40, nextSign = 0, nextPower = 0, streetIdx = 0, nextRegen = 260, firstPower = true;
 let nearT = 0, chaseDist = 4.6, brommerT = 0, bekerT = 0, invulnT = 0;
 let nitraten = 0;
 const shots = [], particles = [];
@@ -2429,7 +2436,7 @@ function setMode(m, force) {
 
 function resetRun() {
   newsCancel();
-  feverT = 0; nearRecord = false; hudK = 0;
+  feverT = 0; nearRecord = false; hudK = 0; renHype = false;
   if (seg) endSeg(); if (waalOn) setWaal(false); segRollT = 30;
   if (patrickRijder) brommerPatrick(false);
   if (fietsT > 0 || voiceSrc) stopFiets();
@@ -2439,7 +2446,7 @@ function resetRun() {
   schoolPhase = null; schoolBlock = null; nextSchoolDist = 700; schoolCount = 0; indoorDocent = null;
   if (boss) { scene.remove(boss.mesh); boss = null; }
   clearObjs();
-  speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 12.5;
+  speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
   path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800);
@@ -2450,7 +2457,7 @@ function resetRun() {
   if (curLevel) prepareLevel(levelIdx);
   else if (boss) { scene.remove(boss.mesh); boss = null; }
   applyTheme(curLevel ? THEMES[curLevel.theme] : THEMES.oost);
-  spawnZ = -42; nextSign = 380; nextPower = rand(180, 320); streetIdx = Math.floor(Math.random() * STREETS.length);
+  spawnZ = -42; nextSign = 380; nextPower = rand(85, 130); nextRegen = 260; firstPower = true; streetIdx = Math.floor(Math.random() * STREETS.length);
   nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 30;
   deathT = 0; shakeT = 0; runTime = 0; lineT = mode === 'telefoon' ? rand(30, 45) : rand(6, 9); toetT = rand(4, 7);
   nitraten = 0;
@@ -2534,6 +2541,8 @@ function spawnRow(z) {
     if (Math.random() < 0.5) spawnCoinsLine(Math.floor(Math.random() * 3), z - 2, 4);
   } else {
     const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+    // BEKERREGEN: alle drie de banen vol
+    if (!early && !path && ahead > nextRegen) { nextRegen = ahead + rand(650, 950); for (const l of [0, 1, 2]) spawnCoinsLine(l, z, 9); setTimeout(() => { if (state === 'run') { hype('🏆 BEKERREGEN!'); fxFlash('#ffd23f', 0.2); } }, 600); return; }
     if (!early && !path && ahead > nextFork && !ebos) { nextFork = ahead + 99999; spawnFork(z); spawnCoinsLine(1, z - 6, 4); return; }
     if (!early && ahead > nextSchat) { nextSchat = ahead + rand(700, 1200); spawnSchat(lanes[0], z); spawnCoinsLine(lanes[1], z); return; }
     if (!early && ahead > nextKaart) { nextKaart = ahead + rand(700, 1100); spawnKaart(lanes[0], z); }
@@ -2548,10 +2557,12 @@ function spawnRow(z) {
     }
     freeLane = lanes[nBlock];
     if (ahead > nextPower && brommerT <= 0 && bekerT <= 0 && weekly?.rule.id !== 'geenpower') {
-      nextPower = ahead + rand(220, 380);
-      const type = pick(['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets']);
+      nextPower = ahead + rand(200, 340);
+      // de eerste is altijd een mystery kist: meteen iets spannends
+      const type = firstPower ? 'kist' : pick(['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'kist', 'kist', 'kist']);
+      firstPower = false;
       addObj('power', makePower(type), LANES[freeLane], z, 0, 0, 0, { y: 1.0, type });
-    } else if (Math.random() < 0.65) {
+    } else if (Math.random() < (early ? 1 : 0.65)) {
       spawnCoinsLine(freeLane, z);
     }
   }
@@ -2931,6 +2942,9 @@ function finishRun() {
   $('#overBekers').textContent = '+' + runBekers;
   $('#overBest').textContent = Math.max(s, best).toLocaleString('nl-NL');
   $('#newBest').classList.toggle('hidden', !isBest || s === 0);
+  const bijna = !isBest && best > 0 && s >= best * 0.75;
+  $('#overBijna').classList.toggle('hidden', !bijna);
+  if (bijna) $('#overBijna').textContent = `😩 Zo dichtbij! Nog maar ${(best - s + 1).toLocaleString('nl-NL')} punten tot je record`;
   $('#overRank').classList.add('hidden');
   $('#overName').classList.add('hidden');
   const ch = challengeResult(s);
@@ -3306,7 +3320,35 @@ function collide() {
   }
 }
 
+// MYSTERY KIST: je weet nooit wat erin zit (en dat is precies het leuke)
+function mysteryKist() {
+  hype('📦 MYSTERY KIST…');
+  for (let i = 0; i < 9; i++) tone(500 + i * 90, 0.05, 'square', 0.05, null, i * 0.09);
+  setTimeout(() => {
+    if (state !== 'run') return;
+    const r = Math.random();
+    if (r < 0.04) {
+      save.bekers += 500; runBekers += 500; persist();
+      hype('💰 JACKPOT!<small>+500 BEKERS</small>', 'mega'); fxFlash('#ffd23f', 0.5);
+      burst(new THREE.Vector3(player.x, 2, 0), 70, 9, [goldMat, ...sparkMats], 1.4);
+      for (let i = 0; i < 12; i++) setTimeout(() => fxDing(), i * 70);
+    } else if (r < 0.44) {
+      const n = pick([25, 40, 60, 100]);
+      save.bekers += n; runBekers += n; persist();
+      hype(`🏆 +${n} BEKERS!`); for (let i = 0; i < 5; i++) setTimeout(() => fxDing(), i * 80);
+    } else if (r < 0.64) {
+      const pts = 1000 * scoreMult(); score += pts;
+      hype(`⭐ +${pts.toLocaleString('nl-NL')} PUNTEN!`);
+    } else if (r < 0.8) {
+      feverT = 8; hype('🔥 KOORTS!<small>8 seconden dubbele punten</small>', 'mega'); fxFlash('#ff8a00', 0.3);
+    } else {
+      const t = pick(['brommer', 'beker-van-ons', 'sjaal', 'nitraat']);
+      activatePower(t);
+    }
+  }, 950);
+}
 function activatePower(type) {
+  if (type === 'kist') { buzz([30, 40, 30]); missionEvent('power'); fxFlash('#b18cff', 0.3); burst(new THREE.Vector3(player.x, 1.4, 0), 30, 6, sparkMats, 0.9); mysteryKist(); return; }
   buzz([30, 40, 30]);
   fxFlash({ brommer: '#5ad1ff', 'beker-van-ons': '#ffd23f', sjaal: '#7dff6a', fiets: '#ff5a3a' }[type] || '#ffffff', 0.28);
   burst(new THREE.Vector3(player.x, 1.4, 0), 30, 6, sparkMats, 0.9);
@@ -3450,6 +3492,7 @@ function updateChaser(dt, moving) {
 }
 
 function updateRun(dt) {
+  if (!renHype) { renHype = true; if (!curLevel) { hype('REN, JENS!'); fxFlash('#ffffff', 0.25); } }
   introT += dt;
   runTime += dt;
   if (shoutCool > 0) shoutCool -= dt;
@@ -3465,7 +3508,8 @@ function updateRun(dt) {
     verslaggever('record', true);
     goodShout(true);
   }
-  if (baseSpeed < (curLevel ? curLevel.maxSpeed : 30)) baseSpeed += dt * (baseSpeed < 17 ? 0.3 : 0.14);
+  // endless: de eerste 30 seconden hard optrekken (zo zit je er meteen in), daarna rustig verder
+  if (baseSpeed < (curLevel ? curLevel.maxSpeed : 30)) baseSpeed += dt * (!curLevel && runTime < 30 ? 0.33 : baseSpeed < 17 ? 0.3 : 0.12);
   // fiets: 2x zo snel aan het begin, maar later nooit meer dan ~30 (of 15% boven lopen)
   const target = (brommerT > 0 ? baseSpeed * 1.55 : fietsT > 0 ? Math.max(baseSpeed * 1.15, Math.min(baseSpeed * 2, 30)) : baseSpeed) * hillSpeed() * (seg?.active ? SEG_DEFS[seg.type].mul : 1);
   speed = damp(speed, target, introT < 1 ? 2.5 : 4, dt);
@@ -7018,7 +7062,7 @@ function buzz(pattern) {
 // =====================================================================
 //  COMBO: rakelings ontwijken en springen/glijden bouwt een combo op
 // =====================================================================
-let combo = 0, comboT = 0, comboShown = -1, feverT = 0, nearRecord = false, hudK = 0;
+let combo = 0, comboT = 0, comboShown = -1, feverT = 0, nearRecord = false, hudK = 0, renHype = true;
 const comboMult = () => 1 + Math.min(8, Math.floor(combo / 4)) * 0.25; // tot ×3
 const COMBO_HYPE = { 10: 'COMBO 10!', 20: 'ON FIRE! 🔥', 30: 'NIET TE STOPPEN!', 50: 'LEGENDARISCH!', 75: 'JENS IS EEN GOD', 100: '100 COMBO?!' };
 function comboHit(label) {
