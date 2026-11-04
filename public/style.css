@@ -330,7 +330,7 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 .fchip.sel { border-color: var(--yellow); background: rgba(255,120,40,.25); color: var(--yellow); }
 .fchip small { font-family: var(--title); font-size: 9px; color: #2a1300; background: var(--yellow); padding: 2px 4px; margin-left: 4px; text-shadow: none; }
 .combo {
-  position: absolute; left: max(16px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 64px);
+  position: absolute; left: max(16px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 84px);
   font-family: var(--title); font-size: 18px; color: #fff; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
   animation: pop .2s steps(2);
 }
@@ -725,3 +725,8 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 .bijna { text-align: center; font-weight: 700; color: #ffb36b; font-size: 15px; animation: blink 1s steps(1) 3; }
 #againBtn { animation: againPulse 1.4s ease-in-out infinite; }
 @keyframes againPulse { 50% { transform: scale(1.04); } }
+/* XP-balk onder de score */
+.xpbar { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.xpbar b { font-family: var(--title); font-weight: 400; font-size: 10px; color: #7dff6a; text-shadow: 2px 2px 0 #000; }
+.xpbar span { width: 110px; height: 8px; background: rgba(0,0,0,.6); border: 2px solid #000; position: relative; }
+.xpbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, #2bb673, #7dff6a); transition: width .25s; }

@@ -2463,7 +2463,7 @@ function setMode(m, force) {
 
 function resetRun() {
   newsCancel();
-  feverT = 0; nearRecord = false; hudK = 0; renHype = false;
+  feverT = 0; nearRecord = false; hudK = 0; renHype = false; xpScore = 0; nextMicro = 100; bekerRun = 0; speedTier = 0; gainXp(0);
   if (seg) endSeg(); if (waalOn) setWaal(false); segRollT = 30;
   if (patrickRijder) brommerPatrick(false);
   if (fietsT > 0 || voiceSrc) stopFiets();
@@ -3280,6 +3280,8 @@ function collide() {
         missionEvent('bekers', n);
         const dn = fxDing();
         popWorld('+' + 10 * n * scoreMult(), _pv.set(player.x, player.y + 2.1, -0.3), camera, dn > 6 ? 'good' : '');
+        bekerRun = bekerRunT > 0 ? bekerRun + 1 : 1; bekerRunT = 1.4;
+        if (bekerRun === 10 || bekerRun === 25 || bekerRun === 50 || bekerRun === 100) { hype(`🏆 BEKERSTREAK ×${bekerRun}!`, bekerRun >= 50 ? 'mega' : ''); score += bekerRun * 10 * scoreMult(); }
         buzz(8);
         if (++streak % 40 === 0) goodShout();
       }
@@ -3518,7 +3520,40 @@ function updateChaser(dt, moving) {
   pose(cameraman, 'cam', dt);
 }
 
+// ---------- XP-balk: de eerste levels gaan razendsnel, daarna steeds langer ----------
+const xpNeed = (l) => Math.round(150 * Math.pow(l, 1.6));
+let xpScore = 0, nextMicro = 100, bekerRun = 0, bekerRunT = 0, speedTier = 0;
+const SPEED_TIERS = [17, 20, 23, 26, 29];
+function gainXp(n) {
+  save.lvl ||= 1; save.xp = (save.xp || 0) + n;
+  let up = false;
+  while (save.xp >= xpNeed(save.lvl)) { save.xp -= xpNeed(save.lvl); save.lvl++; up = true; }
+  if (up) {
+    const bonus = 20 + save.lvl * 10;
+    save.bekers += bonus; runBekers += bonus;
+    hype(`⭐ LEVEL ${save.lvl}!<small>+${bonus} bekers</small>`, 'mega');
+    fxFlash('#7dff6a', 0.3);
+    burst(new THREE.Vector3(player.x, 2, 0), 50, 8, sparkMats, 1.2);
+    persist();
+  }
+  $('#xpLv').textContent = 'LV ' + save.lvl;
+  $('#xpFill').style.width = Math.min(100, (save.xp / xpNeed(save.lvl)) * 100) + '%';
+}
+function earlyHooks(dt) {
+  if (curLevel) return;
+  // XP komt uit je punten
+  if (score > xpScore) { gainXp(Math.floor(score - xpScore)); xpScore = Math.floor(score); }
+  // elke 100 meter een klein beloninkje (tot 1000 m)
+  if (nextMicro <= 1000 && dist > nextMicro) {
+    popAt(`${nextMicro} M!`, innerWidth / 2, innerHeight * 0.3, 'good'); fxDing();
+    score += 25 * scoreMult(); nextMicro += 100;
+  }
+  // sneller: per snelheidstrap een melding
+  if (speedTier < SPEED_TIERS.length && baseSpeed > SPEED_TIERS[speedTier]) { speedTier++; hype('⚡ SNELLER!'); fxFlash('#5ad1ff', 0.15); }
+  bekerRunT -= dt;
+}
 function updateRun(dt) {
+  earlyHooks(dt);
   if (!renHype) { renHype = true; if (!curLevel) { hype('REN, JENS!'); fxFlash('#ffffff', 0.25); } }
   introT += dt;
   runTime += dt;
@@ -7096,7 +7131,7 @@ function comboHit(label) {
   const before = comboMult();
   combo++;
   comboT = 3.5;
-  if (label) popWorld(label === 'over' ? (player.slideT > 0 ? 'ERONDERDOOR!' : 'EROVERHEEN!') : 'RAKELINGS!', _pv.set(player.x, player.y + 2.4, -0.5), camera, 'blue');
+  if (label) popWorld(label === 'over' ? (player.slideT > 0 ? 'ERONDERDOOR!' : 'EROVERHEEN!') : label === 'ontweken' ? 'ONTWEKEN!' : 'RAKELINGS!', _pv.set(player.x, player.y + 2.4, -0.5), camera, 'blue');
   if (COMBO_HYPE[combo]) hype(COMBO_HYPE[combo], combo >= 30 ? 'mega' : '');
   // elke 15 combo: KOORTS, 8 seconden dubbele punten
   if (combo % 15 === 0) { feverT = 8; hype('🔥 KOORTS!<small>8 seconden dubbele punten</small>', 'mega'); fxFlash('#ff8a00', 0.35); burst(new THREE.Vector3(player.x, 1.5, 0), 40, 7, sparkMats, 1); }
@@ -7129,6 +7164,7 @@ const NO_COMBO = new Set(['beker', 'power', 'deco', 'sign', 'landmark', 'checkpo
 function comboPass(o) {
   if (state !== 'run' || o.hit || o.dead || NO_COMBO.has(o.kind) || !o.w) return;
   const edge = Math.abs(player.x - o.x) - o.w / 2;
+  if (runTime < 40 && edge >= 1.3 && edge < 2.6) { comboHit('ontweken'); return; } // in het begin telt alles
   if (edge < 0.25) { if (player.y > 0.3 || player.slideT > 0) comboHit('over'); } // overheen of eronder door
   else if (edge < 1.3) comboHit('rakelings');
 }
