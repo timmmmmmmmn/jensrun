@@ -54,6 +54,37 @@
     <div id="snapCap" class="snap-cap">Op de fiets 🚲</div>
     <div class="snap-bottom"><i class="lens"></i><i class="shutter"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" /></svg></i><i class="lens"></i></div>
   </div>
+  <!-- MINIGAMES: Glijden, Vuurwerk, Mijn Osso -->
+  <div id="mini" class="mini hidden">
+    <div class="mini-top">
+      <div id="miniScore" class="mini-score">0</div>
+      <div id="miniInfo" class="mini-info"></div>
+      <button id="miniPause" class="icon-btn" aria-label="Pauze">❚❚</button>
+    </div>
+    <div id="miniMsg" class="mini-msg"></div>
+    <div id="miniCtl" class="mini-ctl"></div>
+    <div id="miniPauseBox" class="mini-pausebox hidden"><div class="panel small"><h2>Pauze</h2><button id="mpResume" class="btn big">DOORGAAN</button><button id="mpQuit" class="btn">Stoppen</button></div></div>
+  </div>
+  <div id="miniOver" class="screen hidden">
+    <div class="panel small">
+      <h2 id="moTitle"></h2>
+      <p id="moText" class="mo-text"></p>
+      <div class="stats"><div><small>Score</small><b id="moScore">0</b></div><div><small>Record</small><b id="moBest">0</b></div><div><small>Bekers</small><b id="moBekers">0</b></div></div>
+      <div id="moNew" class="newbest hidden">NIEUW RECORD!</div>
+      <div id="moRank" class="hint"></div>
+      <button id="moAgain" class="btn big">OPNIEUW</button>
+      <button id="moMenu" class="btn">Menu</button>
+    </div>
+  </div>
+  <!-- JENS ARCADE in De Hub -->
+  <div id="arcade" class="screen hidden">
+    <div class="panel arc-panel">
+      <h2>🕹️ Jens Arcade</h2>
+      <div id="arcMenu" class="arc-menu"></div>
+      <div id="arcStage" class="arc-stage hidden"><canvas id="arcCv" width="320" height="240"></canvas></div>
+      <button id="arcBack" class="btn">Terug</button>
+    </div>
+  </div>
   <div id="toast"></div>
   <div id="note"></div>
 
@@ -92,7 +123,7 @@
       <button id="playBtn" class="btn big">RENNEN!</button>
       <div class="row">
         <button id="shopBtn" class="btn alt">👕 Winkel</button>
-        <button id="kamerBtn" class="btn alt">🏠 Osso</button>
+        <button id="kamerBtn" class="btn alt">🏠 De Hub</button>
         <button id="socialBtn" class="btn alt sq bell" aria-label="Samen">👥</button>
         <button id="fameBtn" class="btn alt sq" aria-label="Wall of Fame">👑</button>
       </div>
@@ -111,7 +142,7 @@
         <button data-go="#shopBtn"><i>👕</i>Winkel</button>
         <button data-go="#samenBtn" id="mSamen" class="bell" data-n=""><i>👥</i>Samen</button>
         <button data-go="#storyBtn" class="m-mid"><i>📖</i>Verhaal</button>
-        <button data-go="#kamerBtn"><i>🏠</i>Osso</button>
+        <button data-go="#kamerBtn"><i>🏠</i>De Hub</button>
         <button id="mMoreBtn" class="bell" data-n=""><i>☰</i>Meer</button>
       </nav>
       <div id="mMore" class="m-sheet hidden"><div class="m-sheet-in">
@@ -339,7 +370,7 @@
   <!-- OSSO (first person door het huis van Jens) -->
   <div id="kamer" class="screen hidden osso">
     <div class="osso-top">
-      <h2>🏠 Jens z'n osso</h2>
+      <h2>🏠 De Hub</h2>
       <div id="kmStats" class="badges"></div>
       <button id="kmShop" class="btn alt">🛒 Inrichten</button>
       <button id="kmBack" class="btn alt">🚪 Weg</button>

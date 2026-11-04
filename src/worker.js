@@ -1,5 +1,7 @@
 // Jens Run – ranglijst API. Statische bestanden komen uit public/.
-const MODES = new Set(['fiets', 'telefoon', 'terror', 'school', 'bazen']);
+const MODES = new Set(['fiets', 'telefoon', 'terror', 'school', 'bazen', 'glijden', 'vuurwerk', 'osso']);
+// minigames met een eigen puntentelling (geen afstand)
+const MINI_MODES = new Set(['glijden', 'vuurwerk', 'osso']);
 const EMOJI = ['😂', '🔥', '👑', '💀', '🤡'];
 // grove woorden die niet op de muur mogen
 const BAD = /kanker|tering|tyfus|hoer|mongool|nigg|neger|homo|flikker|kut|lul|pedo|nazi|hitler|jood|kkk|sieg|heil/i;
@@ -95,7 +97,7 @@ async function api(req, env, url) {
     if (!Number.isFinite(score) || !Number.isFinite(dist) || !Number.isFinite(secs) || score < 0 || dist < 0) return json({ error: 'ongeldig' }, 400);
     // grove plausibiliteitscheck: max snelheid ~40 m/s, score max ~2x afstand + bekers + gesloopte obstakels
     const mult = Math.min(20, Math.max(1, Math.floor(Number(b.mult) || 1)));
-    if (b.mode === 'bazen' ? score > dist / 4000 + 1 : dist > secs * 42 + 50 || score > (dist * 2.2 + bekers * 20 + secs * 60 + 500) * mult) return json({ error: 'ongeldig' }, 400);
+    if (MINI_MODES.has(b.mode) ? score > secs * 1500 + 5000 : b.mode === 'bazen' ? score > dist / 4000 + 1 : dist > secs * 42 + 50 || score > (dist * 2.2 + bekers * 20 + secs * 60 + 500) * mult) return json({ error: 'ongeldig' }, 400);
     const p = await db.prepare('SELECT name FROM players WHERE id = ?').bind(b.id).first();
     if (!p) return json({ error: 'onbekend' }, 404);
     if (b.mode !== 'bazen') {
