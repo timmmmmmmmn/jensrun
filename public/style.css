@@ -688,3 +688,11 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 .mini-cross::after { top: 10px; left: 0; height: 2px; width: 22px; }
 .mini-osso .mini-cross { display: block; }
 .mini-osso .mini-btn.view { width: 54px; height: 54px; font-size: 20px; align-self: flex-end; }
+/* Rennen is de hoofdmodus: dubbel zo breed */
+.mode.main { grid-column: span 2; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto auto; column-gap: 10px; align-items: center; text-align: left; padding-left: 12px; background: linear-gradient(rgba(255,138,61,.28), rgba(0,0,0,.6)); }
+.mode.main .ic { grid-row: span 3; font-size: 34px; }
+.mode.main b { font-size: 19px; }
+.mode.main .tag { font-style: normal; font-family: var(--title); font-size: 8px; color: var(--yellow); letter-spacing: 1px; }
+#menu .mode.main b { font-size: 14px; }
+#menu .mode.main .ic { font-size: 28px; }
+@media (max-width: 700px) { #menu .mode.main { border-radius: 14px; padding-left: 10px; } #menu .mode.main .tag { font-size: 7px; } }

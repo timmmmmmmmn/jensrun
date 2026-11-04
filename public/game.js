@@ -3659,7 +3659,7 @@ function showScreen(sel) {
 function renderModes() {
   const el = $('#modes');
   el.innerHTML = Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => modeOpen(k)
-    ? `<button class="mode ${k === mode ? 'sel' : ''}" data-mode="${k}"><span class="ic">${m.icon}</span><b>${m.label}</b><small>🏅 ${(save.best[k] || 0).toLocaleString('nl-NL')}</small></button>`
+    ? `<button class="mode ${k === mode ? 'sel' : ''} ${k === 'telefoon' ? 'main' : ''}" data-mode="${k}"><span class="ic">${m.icon}</span><b>${m.label}</b>${k === 'telefoon' ? '<i class="tag">HOOFDMODUS</i>' : ''}<small>🏅 ${(save.best[k] || 0).toLocaleString('nl-NL')}</small></button>`
     : `<button class="mode locked" data-mode="${k}"><span class="ic">🔒</span><b>${m.label}</b><small>${(MODE_UNLOCK[k] / 1000).toLocaleString('nl-NL')}k in 1 run</small></button>`).join('');
   let d = $('#modeDesc');
   if (!d) { d = document.createElement('div'); d.id = 'modeDesc'; d.className = 'mode-desc'; el.after(d); }
