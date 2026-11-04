@@ -3228,7 +3228,8 @@ function collide() {
         save.bekers += n;
         score += 10 * n * scoreMult();
         missionEvent('bekers', n);
-        sfx.beker();
+        const dn = fxDing();
+        popWorld('+' + 10 * n * scoreMult(), _pv.set(player.x, player.y + 2.1, -0.3), camera, dn > 6 ? 'good' : '');
         buzz(8);
         if (++streak % 40 === 0) goodShout();
       }
@@ -3442,14 +3443,14 @@ function updateRun(dt) {
   runTime += dt;
   if (shoutCool > 0) shoutCool -= dt;
   if (dist > nextMilestone) {
-    toast(`${nextMilestone} m!`, 1.2);
+    if (nextMilestone % 1000 === 0) hype(`${nextMilestone.toLocaleString('nl-NL')} METER!`, nextMilestone % 5000 === 0 ? 'mega' : ''); else toast(`${nextMilestone} m!`, 1.2);
     if (nextMilestone % 1000 === 0) verslaggever('meter');
     nextMilestone += 500;
     goodShout(true);
   }
   if (!bestPassed && save.best[mode] > 200 && score > save.best[mode]) {
     bestPassed = true;
-    toast('NIEUW RECORD!', 1.4);
+    hype('🏅 NIEUW RECORD!', 'mega'); fxFlash('#ffd23f', 0.3);
     verslaggever('record', true);
     goodShout(true);
   }
@@ -5013,7 +5014,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 //  FIETS (power-up): Jens fietst zo lang als het filmpje duurt
 // =====================================================================
-const FIETS_CLIPS = 36;
+const FIETS_CLIPS = 38;
 let fietsDmg = 0;
 let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0;
 const jensBike = makeBike('#c8202b');
@@ -10398,6 +10399,43 @@ function miniMsg(t, dur = 1.6) {
   el.innerHTML = t; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
   clearTimeout(miniMsg.tm); miniMsg.tm = setTimeout(() => el.classList.remove('on'), dur * 1000);
 }
+// ---------- effectjes (hele game): zwevende punten, grote meldingen, flitsen, oplopende tonen ----------
+function popAt(text, x, y, cls = '') {
+  const box = $('#fx');
+  if (!box || box.childElementCount > 24) return;
+  const el = document.createElement('div');
+  el.className = 'fx-pop ' + cls; el.textContent = text;
+  el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px';
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+const _pv = new THREE.Vector3();
+function popWorld(text, pos, cam, cls) {
+  _pv.copy(pos).project(cam);
+  if (_pv.z > 1 || Math.abs(_pv.x) > 1.2 || Math.abs(_pv.y) > 1.2) return;
+  popAt(text, (_pv.x + 1) / 2 * innerWidth + rand(-12, 12), (1 - _pv.y) / 2 * innerHeight, cls);
+}
+function hype(html, cls = '') {
+  const el = $('#fxHype');
+  el.className = 'fx-hype ' + cls; el.innerHTML = html;
+  void el.offsetWidth; el.classList.add('on');
+  [523, 659, 784, 1047].forEach((f, i) => tone(f * (cls === 'mega' ? 1.26 : 1), 0.12, 'square', 0.06, null, i * 0.06));
+  buzz([20, 30, 40]);
+}
+function fxFlash(color = '#fff', a = 0.4) {
+  const el = $('#fxFlash');
+  el.style.background = color; el.style.transition = 'none'; el.style.opacity = a;
+  requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = 'opacity .4s'; el.style.opacity = 0; }));
+}
+// bekers en munten: elke volgende binnen een seconde klinkt een toon hoger
+let dingN = 0, dingT = 0;
+function fxDing() {
+  const t = performance.now();
+  dingN = t - dingT < 900 ? Math.min(dingN + 1, 14) : 0; dingT = t;
+  const f = 880 * Math.pow(2, dingN / 12);
+  tone(f, 0.07, 'square', 0.07); tone(f * 1.5, 0.11, 'square', 0.06, null, 0.05);
+  return dingN;
+}
 function startMini(kind) {
   audioInit();
   stopGameover();
@@ -10633,6 +10671,12 @@ const GL_OBS = {
   gat: { r: 0.8, hole: true, pts: 0 },
   schans: { r: 0.9, ramp: true, pts: 0 },
   beker: { r: 0.6, pickup: true, make: () => makeCup(0.55), pts: 50 },
+  boost: { r: 1.0, boost: true, pts: 0 },
+  // mensen op de glijbaan: je hoort ze al van ver
+  docent: { r: 0.5, person: 'docent', pose: 'point', line: '🧑‍🏫 JENS! NAAR DE CONRECTOR!', snd: () => sfx.schoolbel() },
+  fietser: { r: 0.6, person: 'fietser', pose: 'bike', move: 6, line: '🚲 JENS, WACHT NOU! *tring tring*', snd: () => { sfx.bel(); setTimeout(() => sfx.bel(), 350); } },
+  shane: { r: 0.5, person: 'shane', pose: 'grab', line: '📱 Jens, je telefoon!', snd: () => playClip('shane' + (1 + Math.floor(Math.random() * 6)), true) || sfx.ring() },
+  boa: { r: 0.55, person: 'boa', pose: 'point', line: '👮 HANDHAVING! STAAN BLIJVEN!', snd: () => sfx.fluit() },
 };
 function glSpawn(s) {
   const st = mini.s, w = glW(s), cx = glCx(s);
@@ -10643,11 +10687,13 @@ function glSpawn(s) {
     const d = GL_OBS[type], ss = s + sOff;
     let m;
     if (d.hole) { m = mesh(box(1.6, 0.04, 2.2), M('#141414'), 0, 0.03, 0); m.add(mesh(box(1.9, 0.03, 2.5), M('#3a2a1a'), 0, 0, 0)); }
+    else if (d.boost) { m = new THREE.Group(); m.add(mesh(box(1.8, 0.03, 2.4), M('#1f9a4a', { emissive: '#0a5a20' }), 0, 0.03, 0)); for (let i = 0; i < 3; i++) { const a = mesh(new THREE.ConeGeometry(0.45, 0.6, 3), M('#7dff6a', { emissive: '#2a8a20' }), 0, 0.06, 0.6 - i * 0.6); a.rotation.x = -Math.PI / 2; a.scale.y = 0.2; m.add(a); } }
+    else if (d.person) { const pm = osModel(d.person); m = pm.root; m.userData.p = pm.p; m.rotation.y = Math.PI; }
     else if (d.ramp) { m = new THREE.Group(); const sch = mesh(box(1.8, 0.12, 2.2), M('#c8202b'), 0, 0.25, 0); sch.rotation.x = 0.35; m.add(sch); m.add(mesh(box(1.8, 0.04, 0.3), M('#ffd23f'), 0, 0.5, -1.0)); }
     else m = d.make();
     if (d.make) miniLoose(m);
     m.position.set(x, glY(ss), -ss);
-    if (d.hole || d.ramp) m.rotation.x = -Math.atan(0.28); // plat op de helling
+    if (d.hole || d.ramp || d.boost) m.rotation.x = -Math.atan(0.28); // plat op de helling
     st.world.add(m);
     st.obs.push({ type, d, m, x, s: ss, hit: false, vx: 0, vy: 0, fly: 0 });
   };
@@ -10655,8 +10701,10 @@ function glSpawn(s) {
   else if (roll < 0.34 + diff * 0.2) { const m = Math.max(0, w / 2 * GL_FLAT - 1.1); add('hek', cx + rand(-m, m)); }
   else if (roll < 0.42 + diff * 0.22) add('gat', lane());
   else if (roll < 0.48 + diff * 0.12 && s > 250) add('drerrie', lane());
-  else if (roll < 0.56) add('schans', lane());
-  else if (roll < 0.8) { const x = lane(); for (let i = 0; i < 5; i++) add('beker', x + Math.sin(i * 0.8) * 0.6, i * 2.2); }
+  else if (roll < 0.53) add('schans', lane());
+  else if (roll < 0.62) add('boost', lane());
+  else if (roll < 0.62 + 0.12 + diff * 0.08 && s > 120) add(pick(['docent', 'fietser', 'shane', 'boa', 'fietser']), lane());
+  else if (roll < 0.86) { const x = lane(); for (let i = 0; i < 5; i++) add('beker', x + Math.sin(i * 0.8) * 0.6, i * 2.2); }
   if (diff > 0.4 && Math.random() < diff * 0.5) add(pick(['kliko', 'kegel']), lane(), 4);
 }
 MINI.glijden = {
@@ -10701,17 +10749,20 @@ MINI.glijden = {
     let steer = (mini.keys.ArrowRight || mini.keys.d ? 1 : 0) - (mini.keys.ArrowLeft || mini.keys.a ? 1 : 0);
     if (mini.ptr && !steer) steer = clamp((mini.ptr.x - mini.ptr.x0) / (innerWidth * 0.12), -1, 1);
     if (!mini.over && !st.fall) {
-      st.speed = Math.min(34, st.speed + dt * (0.28 + st.s / 9000));
-      st.vx += steer * 26 * dt;
-      st.vx *= 1 - 1.3 * dt; // glad: je glijdt nog even door
-      st.vx = clamp(st.vx, -11, 11);
+      st.speed = Math.min(36, st.speed + dt * (0.32 + st.s / 8000));
+      const vNu = st.speed + (st.boost || 0) * 5;
+      st.vx += steer * 36 * dt;
+      st.vx *= 1 - 4.2 * dt; // stroef genoeg om goed te sturen, je glijdt nog net een beetje door
+      st.vx = clamp(st.vx, -9, 9);
+      st.boost = Math.max(0, (st.boost || 0) - dt);
       st.x += st.vx * dt;
-      st.s += st.speed * dt;
+      st.s += vNu * dt;
       st.dist = st.s;
-      mini.score = st.s + st.bekers * 50 + st.schans * 100 + st.near * 25;
+      $('#mini').classList.toggle('fast', vNu > 26);
+      mini.score = st.s + st.bekers * 50 + st.schans * 100 + st.near * 25 + (st.bonus || 0);
       // in de bak: hoe verder naar de rand, hoe harder hij je terugduwt; te hard = eroverheen
       const u = (st.x - glCx(st.s)) / (glW(st.s) / 2), au = Math.abs(u);
-      if (!st.air && au > GL_FLAT) st.vx -= Math.sign(u) * 46 * ((Math.min(1, au) - GL_FLAT) / (1 - GL_FLAT)) * dt;
+      if (!st.air && au > GL_FLAT) st.vx -= Math.sign(u) * 66 * ((Math.min(1, au) - GL_FLAT) / (1 - GL_FLAT)) * dt;
       st.u = u;
       const ground = glY(st.s) + glH(u);
       if (st.air) {
@@ -10725,11 +10776,15 @@ MINI.glijden = {
       for (const o of st.obs) {
         if (o.hit) continue;
         const dz = o.s - st.s, dx = o.x - st.x;
-        if (o.d.move) { o.s -= o.d.move * dt; o.m.position.z = -o.s; o.m.position.y = glY(o.s); pose(o.m.userData.person, 'bike', dt); }
+        if (o.d.move) { o.s -= o.d.move * dt; o.m.position.z = -o.s; o.m.position.y = glY(o.s); }
+        if (o.d.person || o.type === 'drerrie') pose(o.m.userData.p || o.m.userData.person, o.d.pose || 'bike', dt);
+        if (o.d.snd && !o.said && dz < 48) { o.said = true; o.d.snd(); miniMsg(o.d.line, 1.4); }
+        if (o.d.person && st.air && !o.jumped && Math.abs(dz) < 0.8 && Math.abs(dx) < 1.2 && st.y - glY(st.s) > 0.9) { o.jumped = true; st.bonus = (st.bonus || 0) + 250; popWorld('+250 EROVERHEEN!', _pv.set(o.x, glY(o.s) + 2.4, -o.s), mini.cam, 'good'); sfx.power(); }
         if (Math.abs(dz) > 1.1) { if (!o.passed && dz < -1.1 && !o.d.pickup && !o.d.ramp && Math.abs(dx) < o.d.r + 1.1) { o.passed = true; st.near++; } continue; }
         if (Math.abs(dx) > o.d.r + 0.45) continue;
-        if (o.d.pickup) { o.hit = true; o.m.visible = false; st.bekers++; sfx.beker(); continue; }
-        if (o.d.ramp) { if (!st.air) { o.hit = true; st.air = true; st.vy = 9; st.schans++; sfx.power(); miniMsg('🚀 SCHANS! +100', 1); } continue; }
+        if (o.d.pickup) { o.hit = true; o.m.visible = false; st.bekers++; const dn = fxDing(); popWorld('+50', _pv.set(o.x, st.y + 1.6, -o.s), mini.cam, dn > 3 ? 'good' : ''); continue; }
+        if (o.d.boost) { if (!st.air) { o.hit = true; st.boost = 2.2; sfx.power(); hype('⚡ BOOST!'); fxFlash('#7dff6a', 0.25); } continue; }
+        if (o.d.ramp) { if (!st.air) { o.hit = true; st.air = true; st.vy = 9; st.schans++; sfx.power(); popWorld('🚀 +100', _pv.set(st.x, st.y + 2.2, -st.s - 2), mini.cam, 'blue'); } continue; }
         if (o.d.hole) { if (!st.air) { o.hit = true; this.fall('gat'); } continue; }
         if (st.air && st.y - glY(st.s) > (o.d.flat ? 0.9 : 1.2)) continue;
         if (st.inv > 0) continue;
@@ -10738,7 +10793,8 @@ MINI.glijden = {
         sfx.stumble(); buzz(60);
         miniBurst(new THREE.Vector3(o.x, st.y + 0.6, -o.s), 14, 5, miniDustMats, 0.7);
         if (st.hits >= 3) { this.fall('kapot'); break; }
-        miniMsg(['💥 AU!', '💥 BOEM!', '💥 Kijk uit, Jens!'][st.hits - 1] || '💥', 0.9);
+        miniMsg(o.d.person ? pick(['💥 SORRY!', '💥 OEPS!', '💥 AAAH!']) : ['💥 AU!', '💥 BOEM!', '💥 Kijk uit, Jens!'][st.hits - 1] || '💥', 0.9);
+        fxFlash('#ff3b3b', 0.3); st.shake = 0.4;
       }
       this.hud();
     } else if (st.fall) {
@@ -10757,6 +10813,13 @@ MINI.glijden = {
       }
     }
     for (const o of st.obs) if (o.fly) { o.fly += dt; o.vy -= 18 * dt; o.m.position.x += o.vx * dt; o.m.position.y += o.vy * dt; o.m.rotation.x += dt * 6; if (o.fly > 2) o.m.visible = false; }
+    // af en toe vuurwerk boven de Waal
+    if (!mini.over && (st.fwT = (st.fwT ?? 12) - dt) <= 0) {
+      st.fwT = rand(14, 24);
+      miniSnd('cake', 0.35);
+      for (let i = 0; i < 6; i++) setTimeout(() => { if (mini.kind === 'glijden' && mini.s === st) miniBurst(new THREE.Vector3(glCx(st.s + 90) + rand(-30, 30), glY(st.s + 90) + rand(14, 26), -(st.s + 90 + rand(0, 30))), 26, 9, miniSparkMats, 1.4, 2); }, i * 380);
+    }
+    st.shake = Math.max(0, (st.shake || 0) - dt);
     // baan aanleggen en opruimen
     const k0 = Math.floor((st.s - 30) / (GL_CHUNK * GL_ROW)), k1 = Math.floor((st.s + 170) / (GL_CHUNK * GL_ROW));
     for (let k = Math.max(0, k0); k <= k1; k++) if (!st.chunks.has(k)) { const c = glChunk(k); st.world.add(c); st.chunks.set(k, c); }
@@ -10789,9 +10852,10 @@ MINI.glijden = {
     glWaterTex.offset.y = (glWaterTex.offset.y + dt * 0.02) % 1;
     const cam = mini.cam, camS = st.fall ? st.s - 8 : st.s - 6.5;
     const cx = st.fall ? st.x : damp(cam.position.x, st.x * 0.75 + glCx(camS) * 0.25, 6, dt || 1);
-    cam.position.set(cx, (st.fall ? glY(st.s) : st.y) + 3.4, -camS);
+    const sk = st.shake * 0.4;
+    cam.position.set(cx + rand(-sk, sk), (st.fall ? glY(st.s) : st.y) + 3.4 + rand(-sk, sk), -camS);
     cam.lookAt(st.x, (st.fall ? st.y : st.y) + 0.4, -(st.s + 7));
-    cam.fov = 64 + clamp((st.speed - 11) * 0.5, 0, 12); cam.updateProjectionMatrix();
+    cam.fov = damp(cam.fov, 64 + clamp((st.speed - 11) * 0.5, 0, 12) + (st.boost > 0 ? 12 : 0), 5, dt || 1); cam.updateProjectionMatrix();
   },
   fall(why) {
     const st = mini.s;
@@ -10821,6 +10885,7 @@ const VW_BLOCK = {
   beton: { w: 0.6, h: 2.2, hp: 6, c: '#8a8f94', pts: 100 },
   kliko: { w: 0.8, h: 1.1, hp: 3, c: '#2e7a35', pts: 60 },
   plank: { w: VW_PLANK, h: 0.24, hp: 1.2, c: '#7a5232', pts: 80 },
+  kist: { w: 0.9, h: 0.9, hp: 1, c: '#c8202b', pts: 100 }, // vuurwerkkist: ontploft mee
 };
 let vwKratTex = null;
 function vwBlockMesh(type) {
@@ -10830,6 +10895,7 @@ function vwBlockMesh(type) {
     return new THREE.Mesh(box(d.w, d.h, 0.9), new THREE.MeshLambertMaterial({ map: vwKratTex }));
   }
   const m = mesh(box(d.w, d.h, type === 'pallet' || type === 'plank' ? 1.2 : 0.8), M(d.c));
+  if (type === 'kist') { m.add(mesh(box(0.92, 0.2, 0.82), M('#ffd23f', { emissive: '#6a5000' }), 0, 0.15, 0)); m.add(mesh(box(0.05, 0.35, 0.05), M('#2a2a2a'), 0.2, 0.6, 0)); }
   if (type === 'kliko') m.add(mesh(box(0.86, 0.1, 0.86), M('#1f5a26'), 0, 0.58, 0));
   return m;
 }
@@ -10849,6 +10915,7 @@ function vwAddBody(kind, type, x, y, extra = {}) {
     p.root.rotation.y = Math.PI / 2; // kijkt naar Jens
     b = { kind, type: 'drerrie', w: 0.7, h: 1.85, hp: extra.role === 'builder' ? 1 : 2, p, m: p.root, pts: 500, ...extra };
   } else {
+    if (type === 'krat' && Math.random() < 0.24) type = 'kist';
     const d = VW_BLOCK[type];
     b = { kind, type, w: d.w, h: d.h, hp: d.hp, m: vwBlockMesh(type), pts: d.pts, ...extra };
   }
@@ -10881,6 +10948,11 @@ function vwLevel(n) {
     const [isl, off] = slots[i];
     const kinds = n === 1 ? ['hut', 'toren'] : Object.keys(prefabs);
     prefabs[kinds[(i + n) % kinds.length]](isl.x0 + off, isl.top);
+  }
+  // vanaf level 2: één bewaker is de Koning van Hatert (kroon, sterker, veel punten)
+  if (n >= 2) {
+    const g = pick(st.bodies.filter((b) => b.role === 'guard'));
+    if (g) { g.gold = true; g.hp = 3.5; g.pts = 1500; const kr = makeKroon(); kr.scale.setScalar(2.2); kr.position.y = 0.32; g.p.head.add(kr); }
   }
   // bouwers: één per eiland, ze lopen met planken naar het eind van de brug
   for (const side of [0, 1]) {
@@ -10956,7 +11028,8 @@ function vwFire(v) {
   vwHud();
 }
 function vwBoom(x, y, a, scale = 1) {
-  const st = mini.s, r = a.r * scale;
+  const st = mini.s, r = a.r * scale, voor = st.bodies.filter((b) => b.kind === 'drerrie' && b.dead).length;
+  st.light.position.set(x, y + 1, 3); st.light.intensity = 70 * scale;
   miniBurst(new THREE.Vector3(x, y, 0), Math.round(26 * scale) + 8, 9 * scale, miniSparkMats, 1.1, 4);
   miniBurst(new THREE.Vector3(x, y, 0), 8, 4, miniDustMats, 0.8);
   st.shake = Math.max(st.shake, 0.25 * scale);
@@ -10975,6 +11048,14 @@ function vwBoom(x, y, a, scale = 1) {
     }
     if (b.hp <= 0) vwKill(b, x, y);
   }
+  // meerdere drerries in één klap: bonus en even slow-motion
+  const n = st.bodies.filter((b) => b.kind === 'drerrie' && b.dead).length - voor;
+  if (n >= 2) {
+    const bonus = n * 300;
+    mini.score += bonus;
+    hype(`${n === 2 ? 'DUBBEL!' : n === 3 ? 'TRIPLE!' : 'MEGA-KNAL!'}<small>+${bonus}</small>`, n >= 3 ? 'mega' : '');
+    st.slow = 0.9; fxFlash('#ffd23f', 0.25);
+  }
 }
 function vwKill(b, fx, fy) {
   const st = mini.s;
@@ -10984,11 +11065,19 @@ function vwKill(b, fx, fy) {
   if (b.kind === 'drerrie') {
     b.fly = 0.01; b.vx = Math.sign(b.x - fx || 1) * rand(4, 8); b.vy = rand(7, 11);
     tone(520, 0.25, 'sawtooth', 0.08, 140);
-    miniMsg(pick(['🧢 Drerrie weggeblazen! +500', '💥 BOEM! Weg drerrie +500', '🧢 Petje kwijt! +500']), 1);
+    popWorld(`+${b.pts}`, _pv.set(b.x, b.y + 1.4, 0), mini.cam, b.gold ? 'big' : '');
+    if (b.gold) { hype('👑 KONING WEG!<small>+1500</small>', 'mega'); fxFlash('#ffd23f', 0.35); }
+    else miniMsg(pick(['🧢 Drerrie weggeblazen!', '💥 BOEM! Weg drerrie', '🧢 Petje kwijt!', '🧢 Daar vliegt ie!', '😂 Dag drerrie!']), 1);
   } else {
     st.world.remove(b.m);
     miniBurst(new THREE.Vector3(b.x, b.y, 0), 10, 5, b.type === 'beton' ? [M('#8a8f94'), M('#6a6f74')] : miniDustMats, 0.9);
     noise(0.12, 0.2);
+    if (b.type === 'kist') setTimeout(() => {
+      if (mini.kind !== 'vuurwerk' || mini.s !== st) return;
+      miniSnd('nitraat', 0.9);
+      popWorld('KETTINGREACTIE!', _pv.set(b.x, b.y + 1.5, 0), mini.cam, 'big');
+      vwBoom(b.x, b.y, { r: 3.2, dmg: 3, push: 13 }, 1);
+    }, 140);
   }
   if (b.anchor) {
     // alles verder op de brug valt mee in de Waal
@@ -11071,6 +11160,7 @@ MINI.vuurwerk = {
   start() {
     const sc = mini.scene = miniWorld('#0d1233', 60, 140, true);
     sc.add(new THREE.AmbientLight('#8090c0', 1.4)); // maanlicht: drerries moeten wel te zien zijn
+    const light = new THREE.PointLight('#ffb050', 0, 28, 1.6); sc.add(light);
     const world = new THREE.Group(); sc.add(world);
     // Waal, dijk, eilandjes en de skyline van Nijmegen in de verte
     const water = new THREE.Mesh(new THREE.PlaneGeometry(220, 90), new THREE.MeshLambertMaterial({ color: '#1d3346' }));
@@ -11097,7 +11187,7 @@ MINI.vuurwerk = {
     jp.root.position.set(VW_JENS.x, VW_JENS.y, 0); jp.root.rotation.y = -Math.PI / 2; world.add(jp.root);
     const dots = [];
     for (let i = 0; i < 16; i++) { const d = mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: i % 2 ? '#ffd23f' : '#ffffff', fog: false })); d.visible = false; d.scale.setScalar(1.6 - i * 0.05); world.add(d); dots.push(d); }
-    mini.s = { world, jens: jp, dots, bodies: [], planks: [[], []], shells: [], cakes: [], level: 1, ammo: {}, sel: 'nitraat', aim: null, shake: 0, camX: 6, jensT: 0, kbA: 0.7, kbP: 0.75 };
+    mini.s = { light, slow: 0, world, jens: jp, dots, bodies: [], planks: [[], []], shells: [], cakes: [], level: 1, ammo: {}, sel: 'nitraat', aim: null, shake: 0, camX: 6, jensT: 0, kbA: 0.7, kbP: 0.75 };
     vwLevel(1);
     this.update(0);
   },
@@ -11141,7 +11231,9 @@ MINI.vuurwerk = {
     // alles op en niks meer in de lucht: doorspoelen tot de brug af is (of er weer een nitraat is)
     const leeg = !st.cleared && !st.lostT && Object.values(st.ammo).every((a) => !a) && !st.shells.length && !st.cakes.length;
     if (leeg !== !!st.ff) { st.ff = leeg; $('#mini').classList.toggle('ff', leeg); if (leeg) miniMsg('⏩ OP! DOORSPOELEN…<small>Over een paar seconden krijg je weer een nitraat</small>', 2); }
-    dt *= leeg ? 6 : 1.3; // het spel loopt sowieso wat sneller
+    dt *= leeg ? 6 : 1.55; // het spel loopt sowieso een stuk sneller
+    if (st.slow > 0) { st.slow -= rdt; dt *= 0.35; }
+    st.light.intensity = Math.max(0, st.light.intensity - rdt * 160);
     // toetsenbord: hoek en kracht
     if (mini.keys.ArrowUp) st.kbA = Math.min(1.45, st.kbA + dt * 0.9);
     if (mini.keys.ArrowDown) st.kbA = Math.max(-0.3, st.kbA - dt * 0.9);
@@ -11310,7 +11402,7 @@ MINI.osso = {
     // first person: een eigen AK vast aan de camera
     const fpAk = osAk(); fpAk.position.set(0.22, -0.24, -0.48); fpAk.rotation.y = 0.05; fpAk.userData.flash.scale.setScalar(0.35); fpAk.userData.flash.position.z = -0.8;
     mini.cam.add(fpAk); sc.add(mini.cam);
-    mini.s = { world, jens: jp, ak, fpAk, tracer, view: save.ossoView || 'third', yaw: Math.PI, pitch: -0.06, look: null, x: 0, z: -9, hp: 100, huis: 100, wave: 0, toSpawn: 0, spawnT: 0, pauseT: 2.5, foes: [], balls: [], nades: [], pool: {},
+    mini.s = { drops: [], kist: [], streakN: 0, streakT: 0, rapid: 0, boem: 0, world, jens: jp, ak, fpAk, tracer, view: save.ossoView || 'third', yaw: Math.PI, pitch: -0.06, look: null, x: 0, z: -9, hp: 100, huis: 100, wave: 0, toSpawn: 0, spawnT: 0, pauseT: 2.5, foes: [], balls: [], nades: [], pool: {},
       mag: 30, reload: 0, fireT: 0, kaars: 3, nitraat: 2, kaarsQ: 0, kaarsT: 0, aim: new THREE.Vector3(0, 0, 0), aimDir: new THREE.Vector3(0, 0, 1), joy: null, kills: 0, hitT: 0, doorT: 0 };
     const touch = matchMedia('(pointer: coarse)').matches;
     miniButtons(`<button class="mini-btn view" data-hold="g">👁️<small>G</small></button><button class="mini-btn fire" data-hold="vuur">🔫<small>VUUR</small></button><button class="mini-btn kaars" data-hold="q">🕯️<small>KAARS</small></button><button class="mini-btn nade" data-hold="e">🧨<small>NITRAAT</small></button>`);
@@ -11321,7 +11413,7 @@ MINI.osso = {
   },
   hud() {
     const st = mini.s;
-    $('#miniInfo').innerHTML = `<span>Golf ${Math.max(1, st.wave)}</span><span class="mini-bar huis" title="Osso"><b>🏠</b><em><i style="width:${Math.max(0, st.huis)}%"></i></em></span><span class="mini-bar jens" title="Jens"><b>❤️</b><em><i style="width:${Math.max(0, st.hp)}%"></i></em></span><span>🔫 ${st.reload > 0 ? '…' : st.mag} · 🕯️${st.kaars} · 🧨${st.nitraat}</span>`;
+    $('#miniInfo').innerHTML = `<span>Golf ${Math.max(1, st.wave)}</span><span class="mini-bar huis" title="Osso"><b>🏠</b><em><i style="width:${Math.max(0, st.huis)}%"></i></em></span><span class="mini-bar jens" title="Jens"><b>❤️</b><em><i style="width:${Math.max(0, st.hp)}%"></i></em></span><span>🔫 ${st.rapid > 0 ? '∞' : st.reload > 0 ? '…' : st.mag} · 🕯️${st.kaars} · 🧨${st.nitraat}</span>${st.rapid > 0 ? `<span class="mini-pwr">⚡${Math.ceil(st.rapid)}</span>` : ''}${st.boem > 0 ? `<span class="mini-pwr">💥${Math.ceil(st.boem)}</span>` : ''}${st.streakN > 1 && st.streakT > 0 ? `<span class="mini-pwr">×${Math.min(6, st.streakN)}</span>` : ''}`;
   },
   key(k) {
     const st = mini.s;
@@ -11347,7 +11439,8 @@ MINI.osso = {
   wave() {
     const st = mini.s;
     st.wave++;
-    st.toSpawn = Math.min(34, 3 + st.wave * 2);
+    st.toSpawn = Math.min(44, 5 + st.wave * 3);
+    this.kisten();
     st.spawnT = 0.5;
     if (st.wave > 1) { st.kaars++; st.nitraat++; st.huis = Math.min(100, st.huis + 10); st.hp = Math.min(100, st.hp + 25); }
     if (st.wave % 5 === 0) { st.boss = true; miniMsg(`👑 GOLF ${st.wave}<small>De Koning van Hatert komt zelf!</small>`, 2.6); }
@@ -11380,16 +11473,68 @@ MINI.osso = {
     const dx = f.x - from.x, dz = f.z - from.z, l = Math.hypot(dx, dz) || 1;
     f.vx += (dx / l) * (f.d.boss ? 0.3 : 1.8) * dmg; f.vz += (dz / l) * (f.d.boss ? 0.3 : 1.8) * dmg;
     if (f.hp > 0) return;
-    f.dead = 0.01; f.vy = rand(5, 8); f.vx = (dx / l) * rand(5, 8); f.vz = (dz / l) * rand(5, 8);
+    f.dead = 0.01; f.vy = rand(7, 11); f.vx = (dx / l) * rand(7, 11); f.vz = (dz / l) * rand(7, 11); f.spin = rand(-12, 12);
     st.kills++;
-    mini.score += f.d.pts + st.wave * 10;
-    miniBurst(new THREE.Vector3(f.x, 1.2, f.z), 12, 5, miniSparkMats, 0.7);
+    // killstreak: binnen 2,5 s weer raak = hogere vermenigvuldiger
+    st.streakN = st.streakT > 0 ? st.streakN + 1 : 1; st.streakT = 2.5;
+    const mult = Math.min(6, st.streakN), pts = (f.d.pts + st.wave * 10) * mult;
+    mini.score += pts;
+    popWorld(`+${pts}${mult > 1 ? ' ×' + mult : ''}`, _pv.set(f.x, 2.2, f.z), mini.cam, mult > 2 ? 'big' : '');
+    const naam = { 2: 'DUBBEL!', 3: 'TRIPLE!', 5: 'MULTI-KILL!', 8: 'RAMPAGE!', 12: 'ONSTOPBAAR!', 18: 'GODLIKE JENS!' }[st.streakN];
+    if (naam) { hype(naam, st.streakN >= 8 ? 'mega' : ''); if (st.streakN >= 5) fxFlash('#ff8a3d', 0.2); }
+    miniBurst(new THREE.Vector3(f.x, 1.2, f.z), 18, 7, miniSparkMats, 0.8);
+    if (Math.random() < (f.d.boss ? 1 : 0.2)) this.drop(f.x, f.z, f.d.boss ? 'hp' : null);
     tone(f.d.boss ? 160 : 420, 0.3, 'sawtooth', 0.08, 90);
     if (f.d.boss) { miniMsg('👑 DE KONING IS VERSLAGEN! +3000', 2); miniSnd('groot', 0.8); }
   },
+  drop(x, z, type) {
+    const st = mini.s;
+    type ||= pick(['hp', 'hp', 'rapid', 'boem', 'kaars', 'nitraat']);
+    const kl = { hp: '#ff4d6a', rapid: '#ffd23f', boem: '#ff8a00', kaars: '#b18cff', nitraat: '#c8202b' }[type];
+    const m = new THREE.Group();
+    m.add(mesh(box(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({ color: kl, fog: false })));
+    m.add(mesh(box(0.62, 0.12, 0.62), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false })));
+    m.position.set(x, 0.8, z); st.world.add(m);
+    st.drops.push({ m, x, z, type, t: 0 });
+  },
+  pak(d) {
+    const st = mini.s;
+    const txt = { hp: '❤️ +40 LEVEN', rapid: '⚡ SNELVUUR!', boem: '💥 EXPLOSIEVE KOGELS!', kaars: '🕯️ +2 KAARSEN', nitraat: '🧨 +2 NITRAAT' }[d.type];
+    if (d.type === 'hp') { st.hp = Math.min(100, st.hp + 40); st.huis = Math.min(100, st.huis + 8); }
+    if (d.type === 'rapid') st.rapid = 8;
+    if (d.type === 'boem') st.boem = 8;
+    if (d.type === 'kaars') st.kaars += 2;
+    if (d.type === 'nitraat') st.nitraat += 2;
+    sfx.power(); fxFlash('#ffffff', 0.18);
+    if (d.type === 'rapid' || d.type === 'boem') hype(txt); else popWorld(txt, _pv.set(d.x, 2, d.z), mini.cam, 'good');
+    this.hud();
+  },
+  // rode vuurwerkkisten in de tuin: schiet ze kapot voor een flinke knal
+  kisten() {
+    const st = mini.s;
+    for (const k of st.kist) st.world.remove(k.m);
+    st.kist = [[-9, 3], [9, 3], [-5, 9], [6, 8.5]].map(([x, z]) => {
+      const m = new THREE.Group();
+      m.add(mesh(box(0.9, 0.8, 0.9), M('#c8202b'), 0, 0.4, 0));
+      m.add(mesh(box(0.92, 0.18, 0.92), M('#ffd23f'), 0, 0.62, 0));
+      m.add(mesh(box(0.06, 0.4, 0.06), M('#2a2a2a'), 0.2, 1.0, 0.2));
+      m.position.set(x + rand(-1, 1), 0, z + rand(-1, 1)); st.world.add(m);
+      return { m, x: m.position.x, z: m.position.z, hp: 3 };
+    });
+  },
+  kistBoem(k) {
+    const st = mini.s;
+    k.hp = 0; st.world.remove(k.m);
+    miniSnd('nitraat', 1);
+    this.boom(k.x, k.z, 4, 9);
+    miniBurst(new THREE.Vector3(k.x, 1.5, k.z), 40, 12, miniSparkMats, 1.4, 4);
+    fxFlash('#ffb050', 0.35); st.shake = 0.6;
+    popWorld('💥 KABOEM!', _pv.set(k.x, 2.5, k.z), mini.cam, 'big');
+  },
   shoot() {
     const st = mini.s, dir = st.aimDir;
-    st.mag--; st.fireT = 0.095;
+    if (st.rapid <= 0) st.mag--;
+    st.fireT = st.rapid > 0 ? 0.05 : 0.085;
     miniSnd('schot', 0.42, rand(0.94, 1.1)) || tone(160, 0.06, 'square', 0.12, 60);
     (st.view === 'first' ? st.fpAk : st.ak).userData.flash.visible = true; st.flashT = 0.04;
     // de kogel gaat van de camera door het vizier (in third person staat die achter Jens' schouder)
@@ -11408,7 +11553,22 @@ MINI.osso = {
     st.tracer.visible = st.view !== 'first'; st.tracerT = 0.04;
     st.tracer.position.set((gx + hx) / 2, 1.3, (gz + hz) / 2); st.tracer.scale.z = tl; st.tracer.rotation.y = Math.atan2(hx - gx, hz - gz);
     if (st.view === 'first') st.fpAk.position.z = -0.42; // terugslag
-    if (best) { this.hurt(best, 1, st); miniBurst(new THREE.Vector3(best.x, 1.3, best.z), 3, 3, miniSparkMats[1], 0.25); }
+    // vuurwerkkist dichterbij dan de indringer?
+    let kist = null;
+    for (const k of st.kist) {
+      if (k.hp <= 0) continue;
+      const rx = k.x - sx, rz = k.z - sz, t = rx * dx + rz * dz;
+      if (t < 0.5 || t > bt) continue;
+      if ((rx - dx * t) ** 2 + (rz - dz * t) ** 2 < 0.55 ** 2) { kist = k; bt = t; best = null; }
+    }
+    if (kist && --kist.hp <= 0) this.kistBoem(kist);
+    if (best) {
+      this.hurt(best, 1, st);
+      miniBurst(new THREE.Vector3(best.x, 1.3, best.z), 4, 3, miniSparkMats[1], 0.25);
+      tone(1900, 0.03, 'square', 0.04);
+      $('.mini-cross').classList.add('hit'); clearTimeout(st.hitTm); st.hitTm = setTimeout(() => $('.mini-cross').classList.remove('hit'), 90);
+      if (st.boem > 0) this.boom(best.x, best.z, 1.7, 1.2);
+    }
     if (st.mag <= 0) { st.reload = 1.5; tone(300, 0.08, 'square', 0.05, null, 0.2); }
     buzz(6);
   },
@@ -11496,19 +11656,27 @@ MINI.osso = {
       n.m.rotation.x += dt * 12;
       if (k >= 1) { st.world.remove(n.m); st.nades.splice(i, 1); miniSnd('nitraat', 1) || sfx.boem(); this.boom(n.tx, n.tz, 3.2, 7); buzz(80); }
     }
+    // drops oppakken, krachten aflopen
+    st.streakT -= dt; st.rapid = Math.max(0, st.rapid - dt); st.boem = Math.max(0, st.boem - dt);
+    for (let i = st.drops.length - 1; i >= 0; i--) {
+      const d = st.drops[i];
+      d.t += dt; d.m.rotation.y += dt * 3; d.m.position.y = 0.8 + Math.sin(d.t * 4) * 0.15;
+      if (Math.hypot(d.x - st.x, d.z - st.z) < 1.3) { this.pak(d); st.world.remove(d.m); st.drops.splice(i, 1); }
+      else if (d.t > 14) { st.world.remove(d.m); st.drops.splice(i, 1); }
+    }
     // golven
     if (!mini.over) {
       if (st.pauseT > 0) { st.pauseT -= dt; if (st.pauseT <= 0) this.wave(); }
       else if (st.toSpawn > 0) {
         st.spawnT -= dt;
         const alive = st.foes.filter((f) => !f.dead).length;
-        if (st.spawnT <= 0 && alive < (isIPod ? 7 : 12)) { this.spawn(); st.toSpawn--; st.spawnT = Math.max(0.45, 2.1 - st.wave * 0.14); }
+        if (st.spawnT <= 0 && alive < (isIPod ? 8 : 15)) { this.spawn(); st.toSpawn--; st.spawnT = Math.max(0.28, 1.4 - st.wave * 0.12); }
       } else if (!st.foes.some((f) => !f.dead)) {
         const bonus = st.wave * 500;
         mini.score += bonus;
         sfx.power();
         miniMsg(`✅ GOLF ${st.wave} AFGESLAGEN!<small>+${bonus.toLocaleString('nl-NL')} · osso een beetje opgeknapt</small>`, 2);
-        st.pauseT = 4;
+        st.pauseT = 2.2;
       }
     }
     // indringers
@@ -11519,8 +11687,8 @@ MINI.osso = {
         f.dead += dt; f.vy -= 18 * dt;
         f.x += f.vx * dt; f.z += f.vz * dt;
         f.root.position.set(f.x, Math.max(0, f.root.position.y + f.vy * dt), f.z);
-        f.root.rotation.x = Math.min(1.5, f.root.rotation.x + dt * 6);
-        if (f.dead > 1.6) { st.world.remove(f.root); (st.pool[f.type] ||= []).push({ root: f.root, p: f.p }); f.root.rotation.x = 0; st.foes.splice(i, 1); }
+        f.root.rotation.x += dt * 6; f.root.rotation.y += dt * (f.spin || 0);
+        if (f.dead > 1.8) { st.world.remove(f.root); (st.pool[f.type] ||= []).push({ root: f.root, p: f.p, base: f.base }); f.root.rotation.x = 0; st.foes.splice(i, 1); }
         continue;
       }
       const chaseJens = f.d.chase || (f.d.bike && f.type === 'drerrie' && Math.hypot(st.x - f.x, st.z - f.z) < 5);
@@ -11529,7 +11697,7 @@ MINI.osso = {
       const reach = chaseJens ? 1.1 : f.d.boss ? 1.6 : 1.0;
       f.vx *= 1 - 6 * dt; f.vz *= 1 - 6 * dt;
       if (l > reach) {
-        const sp = f.d.sp * (1 + st.wave * 0.03) * (mini.over ? 0.3 : 1);
+        const sp = f.d.sp * (1.25 + st.wave * 0.04) * (mini.over ? 0.3 : 1);
         f.x += (dx / l) * sp * dt + f.vx * dt; f.z += (dz / l) * sp * dt + f.vz * dt;
         pose(f.p, f.d.bike ? 'bike' : 'run', dt, f.d.sp / 3);
         f.atk = 0;

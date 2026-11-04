@@ -696,3 +696,20 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 #menu .mode.main b { font-size: 14px; }
 #menu .mode.main .ic { font-size: 28px; }
 @media (max-width: 700px) { #menu .mode.main { border-radius: 14px; padding-left: 10px; } #menu .mode.main .tag { font-size: 7px; } }
+/* ---------- effectjes ---------- */
+.fx { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+.fx-pop { position: absolute; transform: translate(-50%, -50%); font-family: var(--title); font-size: 16px; color: var(--yellow); text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; animation: fxPop .9s ease-out forwards; white-space: nowrap; }
+.fx-pop.big { font-size: 24px; color: #ff5a3a; }
+.fx-pop.good { color: #7dff6a; }
+.fx-pop.blue { color: #5ad1ff; }
+@keyframes fxPop { 0% { transform: translate(-50%, -50%) scale(.4); opacity: 0; } 15% { transform: translate(-50%, -70%) scale(1.35); opacity: 1; } 100% { transform: translate(-50%, -260%) scale(1); opacity: 0; } }
+.fx-hype { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(0); pointer-events: none; z-index: 5; font-family: var(--title); font-size: clamp(26px, 7vw, 54px); color: #fff; text-align: center; white-space: nowrap; text-shadow: 4px 4px 0 #c2410c, 8px 8px 0 #000; opacity: 0; }
+.fx-hype small { display: block; font-size: .38em; color: var(--yellow); margin-top: 10px; text-shadow: 2px 2px 0 #000; }
+.fx-hype.mega { color: var(--yellow); }
+.fx-hype.on { animation: fxHype 1.3s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+@keyframes fxHype { 0% { transform: translate(-50%, -50%) scale(0) rotate(-8deg); opacity: 1; } 20% { transform: translate(-50%, -50%) scale(1.15) rotate(3deg); opacity: 1; } 35% { transform: translate(-50%, -50%) scale(1) rotate(0); } 80% { opacity: 1; } 100% { transform: translate(-50%, -60%) scale(1.05); opacity: 0; } }
+.fx-flash { position: absolute; inset: 0; pointer-events: none; z-index: 3; opacity: 0; }
+.mini.fast::before { content: ''; position: absolute; inset: 0; background: repeating-conic-gradient(from 0deg at 50% 45%, rgba(255,255,255,.18) 0 1deg, transparent 1deg 9deg); -webkit-mask: radial-gradient(circle at 50% 45%, transparent 28%, #000 75%); mask: radial-gradient(circle at 50% 45%, transparent 28%, #000 75%); animation: fxSpeed .25s steps(2) infinite; }
+@keyframes fxSpeed { 50% { transform: rotate(2deg); } }
+.mini-cross.hit::before, .mini-cross.hit::after { background: #ff3b3b; }
+.mini-pwr { color: #7dff6a; }
