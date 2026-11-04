@@ -713,3 +713,12 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 @keyframes fxSpeed { 50% { transform: rotate(2deg); } }
 .mini-cross.hit::before, .mini-cross.hit::after { background: #ff3b3b; }
 .mini-pwr { color: #7dff6a; }
+/* Rennen: KOORTS, snelheidslijnen, score die opspringt */
+#hud.fast::before { content: ''; position: absolute; inset: 0; background: repeating-conic-gradient(from 0deg at 50% 45%, rgba(255,255,255,.16) 0 1deg, transparent 1deg 9deg); -webkit-mask: radial-gradient(circle at 50% 45%, transparent 30%, #000 78%); mask: radial-gradient(circle at 50% 45%, transparent 30%, #000 78%); animation: fxSpeed .25s steps(2) infinite; }
+#hud.fever::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(255,120,0,.55); animation: fever .5s ease-in-out infinite alternate; }
+@keyframes fever { to { box-shadow: inset 0 0 70px rgba(255,60,0,.75); } }
+#hud.fever #score { color: #ff8a00; }
+.combo .koorts { font-style: normal; display: block; font-family: var(--title); font-size: 11px; color: #ff8a00; margin-top: 4px; animation: blink .5s steps(1) infinite; }
+#score.bump { animation: scoreBump .35s ease-out; }
+@keyframes scoreBump { 40% { transform: scale(1.35); color: #fff; } }
+#score { transform-origin: left center; }
