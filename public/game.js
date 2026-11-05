@@ -1086,6 +1086,12 @@ function buildHair(group, style, color) {
       blob(0.19, 0.14, 0.1, 0, -0.03, 0.17, 0.2);              // achterkant
       break;
     }
+    case 'plat': {
+      // plat gekamd: strak over de schedel met een lage pony opzij
+      cap(Math.PI * 0.45, 0.38, 1.03).scale.y *= 0.96;
+      const f = mesh(box(0.34, 0.035, 0.09), hm, 0.02, 0.17, -0.19); f.rotation.set(0.5, 0, -0.12); group.add(f);
+      break;
+    }
     case 'kort':
       cap(Math.PI * 0.4, 0.45, 1.04);
       break;
@@ -1235,7 +1241,7 @@ function buildBril(group, style) {
 
 // ---------- persoon ----------
 // hoofdrolspelers krijgen alle details; figuranten een lichtere versie
-const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'boa', 'boa2', 'cameraman', 'ghost']);
+const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost']);
 function makePerson(o) {
   const root = new THREE.Group();
   root.userData.isPerson = true;
@@ -1344,6 +1350,7 @@ function pose(p, kind, dt, speedK = 1) {
     case 'grabbed': aL = aR = 2.9; eL = eR = 0.35; oL = oR = 0.45; break;
     case 'grab': runLegs(); aL = 1.4 + Math.sin(t * 17) * 0.15; aR = 1.4 + Math.cos(t * 17) * 0.15; eL = eR = 0.25; oL = oR = -0.1; bRX = -0.2; k = 30; break;
     case 'point': runLegs(); aL = -s * 0.75; eL = 1.35; aR = 1.6 + Math.sin(t * 9) * 0.1; eR = 0.05; bRX = -0.1; k = 30; break;
+    case 'wenk': aR = 2.7 + Math.sin(t * 9) * 0.3; eR = 0.35; oR = 0.3; aL = 0.05; bY = Math.sin(t * 2.5) * 0.01; k = 18; break;
     case 'reach': lL = s * 0.4; lR = -s * 0.4; kL = kR = -0.2; aL = aR = 1.5; eL = eR = 0.2; break;
     case 'cam': aR = 2.3; eR = 2.0; aL = 0.6; eL = 1.4; bY = Math.sin(t * 3) * 0.01; break;
     case 'seat': lL = lR = 1.5; kL = kR = -1.5; aL = 0.55 + Math.sin(t * 1.3) * 0.05; aR = 0.6; eL = eR = 0.95; bY = -0.43; bRX = 0.05; break;
@@ -2470,7 +2477,7 @@ function resetRun() {
   fietsT = 0;
   jensBike.visible = false;
   if (indoor) setIndoor(false);
-  schoolPhase = null; schoolBlock = null; nextSchoolDist = 700; schoolCount = 0; indoorDocent = null;
+  schoolPhase = null; schoolBlock = null; nextSchoolDist = 700; schoolCount = 0; jos.root.visible = false;
   if (boss) { scene.remove(boss.mesh); boss = null; }
   clearObjs();
   speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
@@ -3632,7 +3639,7 @@ function updateRun(dt) {
 
   // achtervolger roept dingen
   lineT -= dt;
-  if (lineT <= 0 && brommerT <= 0) {
+  if (lineT <= 0 && brommerT <= 0 && !indoor) {
     lineT = mode === 'telefoon' ? rand(40, 60) : rand(9, 15); // Shane zegt alleen af en toe iets als er niks gebeurt
     chaserSay(mode === 'telefoon' ? shaneLine() : pick(MODES[mode].lines), mode === 'terror' ? 'angry' : '', 1.6);
     if (mode === 'fiets' && Math.random() < 0.6) sfx.bel();
@@ -3642,7 +3649,7 @@ function updateRun(dt) {
   if (bekerT > 0 && Math.random() < dt * 0.15) bubble(cameraman.head, pick(['Live vanaf Nijmegen-Oost!', 'Jens, een reactie?', 'Daar gaat hij!']), '', 1.6);
 
   if (curLevel) storyUpdate(dt);
-  updateSchool(dt);
+  updateSchool(dt, m);
   updateBos();
   if (telefoon2At > 0 && runTime > telefoon2At && !voiceSrc) { telefoon2At = -1; playVoice('telefoon2'); }
   // wereld
@@ -5148,9 +5155,10 @@ function loadVoices() {
   loadClip('bio', 'audio/bio.mp3');
   for (const n of ['gonl', 'telefoon2', 'lent', 'telefoon3', 'telefoon4', 'telefoon5', 'brommer']) loadClip(n, `audio/${n}.mp3`);
   for (const i of FIETS_SET) loadClip('fiets' + i, `audio/fiets/${i}.mp3?v=2`);
+  JOS_VOICE.forEach((_, i) => loadClip('jos' + (i + 1), `audio/jos/${i + 1}.mp3`));
 }
 // spraakfragment uit een filmpje; de muziek gaat zolang zachter
-const VOICE_GAIN = { telefoon2: 0.47, telefoon: 0.9 };
+const VOICE_GAIN = { telefoon2: 0.47, telefoon: 0.9, jos1: 1, jos2: 1, jos3: 1, jos4: 1, jos5: 1 };
 function playVoice(name) {
   stopVoice();
   if (!ac || !save.sound || !clips[name]) return 0;
@@ -5196,7 +5204,7 @@ function stopFiets() {
 // =====================================================================
 //  MONTESSORI COLLEGE: afslag (of verplicht) door de school heen fietsen
 // =====================================================================
-let schoolPhase = null, indoorT = 0, nextSchoolDist = 700, schoolCount = 0, schoolBlock = null, indoorStep = 0, indoorDocent = null;
+let schoolPhase = null, indoorT = 0, nextSchoolDist = 700, schoolCount = 0, schoolBlock = null, indoorStep = 0;
 const streetBits = [];
 scene.traverse((o) => { if (o.isMesh && (o.material === walkMat || o.material === curbMat || (o.geometry.parameters?.width === 40 && o.position.y === 0.1))) streetBits.push(o); });
 
@@ -5295,6 +5303,12 @@ function scrollIndoor(m) {
   ceilTex.offset.y -= m / 6;
 }
 
+// het echte logo op een witte plaat
+const LOGO_URL = 'img/montessori-logo.png', LOGO_RATIO = 512 / 396;
+function logoBord(h, rotY = 0) {
+  const mat = cached('montessoriLogoMat', () => new THREE.MeshBasicMaterial({ map: psxTex(new THREE.TextureLoader().load(LOGO_URL)) }));
+  return new THREE.Mesh(new THREE.PlaneGeometry(h * LOGO_RATIO, h).rotateY(rotY), mat);
+}
 // gebouw langs de weg
 LANDMARKS.montessori = () => {
   const g = new THREE.Group();
@@ -5304,37 +5318,40 @@ LANDMARKS.montessori = () => {
       x.fillStyle = '#2b3946'; x.fillRect(12 + i * 62, 18 + r * 70, 50, 48);
       x.fillStyle = 'rgba(255,255,255,.15)'; x.fillRect(12 + i * 62, 18 + r * 70, 50, 10);
     }
-    x.fillStyle = '#e8762b'; for (let r = 0; r < 3; r++) x.fillRect(0, 68 + r * 70, 512, 6);
+    x.fillStyle = '#f7941d'; for (let r = 0; r < 3; r++) x.fillRect(0, 68 + r * 70, 512, 6);
     x.fillStyle = '#2b3946'; x.fillRect(220, 200, 72, 56);
   });
   const wit = M('#e8e6e0');
   g.add(new THREE.Mesh(new THREE.BoxGeometry(14, 12, 50, 2, 3, 6), [wit, new THREE.MeshLambertMaterial({ map: tex }), M('#6d6d6d'), wit, wit, wit]));
   g.children[0].position.set(7, 6, 0);
-  const bord = textPlane('MONTESSORI COLLEGE', 18, 1.8, '#ffffff', '#e8762b'); bord.position.set(-0.12, 10.2, 0); g.add(bord);
+  const gevel = logoBord(7.6, -Math.PI / 2); gevel.position.set(-0.12, 7.4, 0); g.add(gevel);
+  const kopse = logoBord(8); kopse.position.set(7, 7, 25.06); g.add(kopse);
   return { g, len: 54, name: 'Montessori College' };
 };
 function makeIngang(forced) {
   const g = new THREE.Group();
-  const oranje = M('#e8762b'), wit = M('#f4f4f4');
+  const oranje = M('#f7941d'), wit = M('#f4f4f4');
   if (forced) {
     // de hele weg loopt de school in
     const muur = new THREE.MeshLambertMaterial({ map: canvasTex(512, 128, (x) => {
       x.fillStyle = '#e8e6e0'; x.fillRect(0, 0, 512, 128);
       x.fillStyle = '#1b1b1b'; x.fillRect(96, 28, 320, 100);
-      x.fillStyle = '#e8762b'; x.fillRect(0, 0, 512, 24);
+      x.fillStyle = '#f7941d'; x.fillRect(0, 0, 512, 24);
       x.fillStyle = '#fff'; x.font = '20px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('MONTESSORI COLLEGE · IEDEREEN NAAR BINNEN', 256, 18);
     }) });
     const w = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 4, 6), muur); w.position.y = 3; g.add(w);
     for (const sx of [-1, 1]) g.add(mesh(box(2, 6, 1), M('#e8e6e0'), sx * (ROAD_W / 2 + 1), 3, 0.5));
+    const logo = logoBord(2.6); logo.position.set(0, 7.3, 0); g.add(logo);
   } else {
     // afslag in de rechterbaan
     for (const sx of [1.15, 3.25]) g.add(mesh(box(0.2, 3.2, 0.2), oranje, sx, 1.6, 0));
     g.add(mesh(box(2.4, 0.2, 0.2), oranje, 2.2, 3.2, 0));
     const bord = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.6), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (x) => {
-      x.fillStyle = '#e8762b'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#fff'; x.font = '30px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillStyle = '#f7941d'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#fff'; x.font = '30px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillText('➜ SCHOOL IN', 128, 34);
     }), side: THREE.DoubleSide }));
     bord.position.set(2.2, 3.7, 0); g.add(bord);
+    const logo = logoBord(1.3); logo.position.set(2.2, 4.68, 0); g.add(logo);
     for (let i = 1; i <= 4; i++) { const pijl = mesh(box(0.5, 0.02, 1.4), wit, 2.2, 0.03, i * 5); g.add(pijl); }
   }
   return g;
@@ -5377,22 +5394,32 @@ function exitSchool() {
   fade();
   schoolPhase = null;
   clearObjs();
-  indoorDocent = null;
+  jos.root.visible = false; // Jos blijft binnen
   spawnZ = -40;
   setIndoor(false);
   jensBike.visible = fietsT > 0;
   toast('🚪 Achteruitgang!<small>Weer buiten</small>', 1.4);
 }
-function makeRandomDocent() {
-  const skin = pick(['#f2d0b8', '#e8c3a6', '#c99468', '#a8714a', '#f0cbb0']);
-  const p = makePerson({ key: 'docent-rnd', skin, hair: pick(['#2a1d14', '#6b4a2e', '#c9a25b', '#8d8d8d', '#1a1410', '#a0522d', '#d8d8d8']),
-    hairStyle: pick(['kort', 'normaal', 'lang', 'knot', 'kaal', 'middenscheiding']),
-    shirt: { base: pick(['#6b5a48', '#2c3e66', '#7a2e3a', '#3c6e47', '#d9d2c2', '#5a5a5a', '#8a5a9a']), paint() {} },
-    pants: pick(['#2b2b3a', '#3b3f4a', '#5a4a3a', '#1f2a3a']), shoes: '#3a2a1e',
-    face: { skin, glasses: Math.random() < 0.5, stubble: Math.random() < 0.3 ? '#3a2a1e' : null, angry: Math.random() < 0.5 },
-    scale: [rand(0.95, 1.12), rand(0.95, 1.08), rand(0.95, 1.1)] });
-  p.root.rotation.y = Math.PI;
+// Jos: dunne docent met blond plat haar, geen baard of snor
+function makeJos() {
+  const skin = '#f0cdb4';
+  const p = makePerson({ key: 'jos', skin, hair: '#e2c675', hairStyle: 'plat', shirt: { base: '#8fa9c4', paint() {} }, pants: '#3b3f4a', shoes: '#3a2a1e',
+    face: { skin, brow: '#c4a55c' }, scale: [0.8, 1.04, 0.8] });
+  p.head.scale.set(0.56, 0.5, 0.56); // de romp is smal, het hoofd niet
   return p;
+}
+const jos = makeJos();
+jos.root.visible = false;
+scene.add(jos.root);
+// volgorde = audio/jos/1.mp3 t/m 5.mp3
+const JOS_VOICE = ['Jens ga je een briefje halen!', 'Jens je bent te laat, briefje!', 'Kom op Jens, effe briefje halen, anders sta je op afwezig', 'Hé Jens! Haal je even een briefje.', 'Jens, dit is al de derde keer deze week, ga je even een briefje halen?'];
+let josBag = [];
+function josPraat() {
+  if (!josBag.length) josBag = JOS_VOICE.map((_, i) => i).sort(() => Math.random() - 0.5);
+  const i = josBag.pop();
+  const len = playVoice('jos' + (i + 1)) || 2.5;
+  const parts = subChunks('Jos: ' + JOS_VOICE[i]);
+  parts.forEach((part, k) => setTimeout(() => { if (schoolPhase === 'inside') bubble(jos.head, part, '', len / parts.length + 0.25); }, (k * len * 1000) / parts.length));
 }
 function spawnIndoorRow(z) {
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
@@ -5428,16 +5455,6 @@ function makeKar() {
   for (const [x, z] of [[-0.3, -0.4], [0.3, -0.4], [-0.3, 0.4], [0.3, 0.4]]) { const w = wheel(0.08, 0.05, M('#1b1b1b')); w.position.set(x, 0.08, z); g.add(w); }
   return g;
 }
-function makeReceptie() {
-  const g = new THREE.Group();
-  g.add(mesh(box(1.1, 1.1, 3), M('#8a6a44'), 0, 0.55, 0));
-  g.add(mesh(box(1.2, 0.06, 3.1), M('#e8e2d2'), 0, 1.13, 0));
-  const bord = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (x) => {
-    x.fillStyle = '#1f6b3a'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#fff'; x.font = '34px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('RECEPTIE', 128, 34);
-  }), side: THREE.DoubleSide }));
-  bord.position.set(0.3, 2.4, 0); g.add(bord);
-  return g;
-}
 function makeUitgang() {
   const g = new THREE.Group();
   g.add(mesh(box(ROAD_W, 4.2, 0.2), M('#e8e2d2'), 0, 2.1, -0.2));
@@ -5448,9 +5465,9 @@ function makeUitgang() {
   bord.position.set(0, 3.6, 0.1); g.add(bord);
   return g;
 }
-// verloop binnen: bel, na 5 s de docent met het briefje, dan nog 15 s naar de achteruitgang
-const SCHOOL_TIME = 20;
-function updateSchool(dt) {
+// verloop binnen: bel, Jos wenkt en roept als je eraan komt, rent je na het passeren achterna tot de achteruitgang
+const SCHOOL_TIME = 15;
+function updateSchool(dt, m) {
   if (curLevel) return;
   // kans op de school na een stuk afstand; hoe vaker hij al kwam, hoe langer de pauze
   if (!schoolPhase && dist >= nextSchoolDist) {
@@ -5460,22 +5477,27 @@ function updateSchool(dt) {
   if (schoolPhase === 'approach' && !objs.some((o) => o.kind === 'ingang')) { schoolPhase = null; schoolBlock = null; }
   if (schoolPhase !== 'inside') return;
   indoorT += dt;
-  if (indoorStep === 0 && indoorT > 3) {
+  const jr = jos.root;
+  if (indoorStep === 0 && indoorT > 2) {
     indoorStep = 1;
-    const z = -Math.max(10, speed * 2);
-    addObj('deco', makeReceptie(), -ROAD_W / 2 + 0.7, z, 0, 0, 0);
-    const d = makeRandomDocent();
-    addObj('deco', d.root, -1.9, z + 1.2, 0, 0, 0);
-    indoorDocent = d;
+    const z = -Math.max(12, speed * 2);
+    jr.position.set(-ROAD_W / 2 + 0.7, 0, z);
+    jr.rotation.y = Math.PI;
+    jr.visible = true;
+    addObj('deco', logoBord(1.5, Math.PI / 2), -ROAD_W / 2 + 0.03, z, 0, 0, 0, { y: 2.9 });
   }
-  if (indoorDocent) pose(indoorDocent, 'point', dt, 0.0001);
-  if (indoorStep === 1 && indoorT > 5) {
-    indoorStep = 2;
-    const line = pick(['Jij daar! Eerst een briefje halen bij de receptie!', 'Te laat? Dan haal je eerst een briefje!', 'Ho! Zonder briefje kom je de les niet in!']);
-    if (indoorDocent) bubble(indoorDocent.head, '📝 BRIEFJE HALEN!', 'angry', 3);
-    toast(`📝 ${line}`, 3.2);
+  if (indoorStep === 1 || indoorStep === 2) {
+    jr.position.z += m;
+    pose(jos, 'wenk', dt);
+    if (indoorStep === 1 && jr.position.z > -speed) { indoorStep = 2; josPraat(); }
+    if (jr.position.z > 0) indoorStep = 3;
+  } else if (indoorStep >= 3) {
+    jr.rotation.y = damp(jr.rotation.y, 0, 8, dt);
+    jr.position.x = damp(jr.position.x, player.x, 3, dt);
+    jr.position.z = damp(jr.position.z, camera.aspect < 0.8 ? 3.4 : 2.9, 1.2, dt);
+    pose(jos, 'point', dt, clamp(speed / 12, 0.8, 1.6));
   }
-  if (indoorStep === 2 && indoorT > SCHOOL_TIME - 1.6) { indoorStep = 3; addObj('deco', makeUitgang(), 0, -Math.max(12, speed * 1.5), 0, 0, 0); }
+  if (indoorStep === 3 && indoorT > SCHOOL_TIME - 1.6) { indoorStep = 4; addObj('deco', makeUitgang(), 0, -Math.max(12, speed * 1.5), 0, 0, 0); }
   if (indoorT > SCHOOL_TIME) exitSchool();
 }
 
@@ -9454,15 +9476,9 @@ const KLAS_X = 40; // ligt los van het huis, je wordt erheen 'gebracht' door de 
 const klasPeople = [];
 let klasTalk = null, klasChatT = 8, klasGreeted = {};
 function montessoriSign() {
-  return canvasTex(256, 96, (x) => {
-    x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 96);
-    x.fillStyle = '#e8590c'; x.beginPath(); x.arc(46, 48, 30, 0, 7); x.fill();
-    x.fillStyle = '#ffffff'; x.beginPath(); x.arc(46, 48, 17, 0, 7); x.fill();
-    x.fillStyle = '#1d3f8f'; x.beginPath(); x.arc(46, 48, 9, 0, 7); x.fill();
-    x.fillStyle = '#1d3f8f'; x.font = 'bold 26px Arial'; x.textBaseline = 'middle';
-    x.fillText('Montessori', 88, 38, 160);
-    x.fillStyle = '#e8590c'; x.font = 'bold 20px Arial'; x.fillText('College', 88, 64, 160);
-  });
+  const t = canvasTex(512, 192, (x) => { x.fillStyle = '#ffffff'; x.fillRect(0, 0, 512, 192); });
+  loadImg(LOGO_URL).then((im) => { t.image.getContext('2d').drawImage(im, 256 - 96 * LOGO_RATIO, 0, 192 * LOGO_RATIO, 192); t.needsUpdate = true; }).catch(() => {});
+  return t;
 }
 function scribble(seed) {
   return canvasTex(64, 80, (x) => {
@@ -10434,10 +10450,10 @@ function warmUp() {
     makeAfzetting, makeBakfiets, makeBank, makeBoomstam, makeBooster, makeBotsauto, makeCar, makeCone, makeContainer, makeDeelscooter,
     () => makeDoekBord(1), makeDog, makeDranghek, () => makeDrerrie(false), () => makeDrerrie(true), makeDuif, makeSaar, () => makeFatbike(false), () => makeFatbike(true),
     makeFietswrak, makeForkSign, () => makeHole(2, 2), makeHooibaal, makeHooligan, () => makeIngang(false), () => makeIngang(true), makeKar, makeKerstboom, makeKliko, makeKoe,
-    () => makeKraam('#ff5fb8', 'SUIKERSPIN'), makeKroon, () => makeLabel('x', '#c8202b'), makeLeidinggevende, makeMarktkraam, makeNitraat, makePoort, makeReceptie, makeReporter,
+    () => makeKraam('#ff5fb8', 'SUIKERSPIN'), makeKroon, () => makeLabel('x', '#c8202b'), makeLeidinggevende, makeMarktkraam, makeNitraat, makePoort, makeReporter,
     makeRugzak, makeSchaap, makeSchip, makeScootmobiel, () => makeSign('Javastraat'), makeSjaalPower, makeSmallNitraat, makeSteward, makeStoel, makeTegenligger, makeTerras,
     makeTrekker, makeTrofee, makeTrolleybus, makeTruck, makeUitgang, makeViskrat, () => makeVriend('tim'), () => makeVriend('jesse'), () => makeVriend('patrick'), makeVrouw,
-    () => makeWandelaars(3), makeWinkelwagen, makeRandomDocent, () => makeClubFan(CLUBS[0]), () => makeCup(1.15), makeSteve,
+    () => makeWandelaars(3), makeWinkelwagen, makeJos, () => makeClubFan(CLUBS[0]), () => makeCup(1.15), makeSteve,
     ...['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets'].map((t) => () => makePower(t)),
     ...Object.keys(LANDMARKS).filter((k) => typeof LANDMARKS[k] === 'function').map((k) => () => LANDMARKS[k](k === 'stadion' ? ['X', '#c8202b', '#f4f4f4'] : 'WINKELCENTRUM')),
   ];
