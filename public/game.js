@@ -165,7 +165,7 @@ const owns = (slot, id) => SHOP[slot].items.find((i) => i.id === id)?.price === 
 // =====================================================================
 //  audio
 // =====================================================================
-let ac = null, master = null, engine = null, recDest = null;
+let ac = null, master = null, engine = null, recDest = null, voiceBus = null;
 function audioInit() {
   if (ac) {
     if (ac.state === 'suspended') ac.resume();
@@ -178,6 +178,12 @@ function audioInit() {
     master.connect(ac.destination);
     applyVolumes();
     try { recDest = ac.createMediaStreamDestination(); master.connect(recDest); } catch (e) { recDest = null; }
+    // alle stemmen via één kanaal: flink harder, de limiter voorkomt dat het kraakt
+    voiceBus = ac.createGain(); voiceBus.gain.value = 2.2;
+    const lim = ac.createDynamicsCompressor();
+    lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
+    voiceBus.connect(lim).connect(ac.destination);
+    if (recDest) lim.connect(recDest);
     loadClip('dbivo', 'audio/dbivo.mp3');
     loadClip('steve', 'audio/steve.mp3');
     for (let i = 1; i <= 6; i++) loadClip('shane' + i, `audio/shane/${i}.mp3`);
@@ -291,13 +297,15 @@ const sfx = {
 };
 // echte vuurwerkknal: scherpe klap + lage dreun + echo tussen de huizen (+ geknetter)
 let fwNoise = null;
+const FW_VOL = 0.25, FW_CLIPS = new Set(['groot', 'cake', 'nitraat']); // vuurwerk mag de stemmen niet overstemmen
 function fwBang(power = 1, delay = 0, crackle = false) {
   if (!ac || !save.sound) return;
   const t = ac.currentTime + delay, sr = ac.sampleRate;
   if (!fwNoise) { fwNoise = ac.createBuffer(1, sr * 2, sr); const d = fwNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
   const out = ac.createGain(), comp = ac.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 6; comp.attack.value = 0.001; comp.release.value = 0.15;
-  out.gain.value = 0.85 * power; out.connect(comp).connect(master);
+  const fwVol = ac.createGain(); fwVol.gain.value = FW_VOL;
+  out.gain.value = 0.85 * power; out.connect(comp).connect(fwVol).connect(master);
   const burstN = (at, dur, vol, type, freq, q = 0.7) => {
     const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
     s.buffer = fwNoise; s.playbackRate.value = rand(0.85, 1.15);
@@ -345,9 +353,10 @@ function playClip(name, force) {
   const t = ac.currentTime;
   if (!force && t < clipBusyUntil) return true;
   const s = ac.createBufferSource(), g = ac.createGain();
-  s.buffer = clips[name]; g.gain.value = 1.6;
-  s.connect(g).connect(master); s.start();
+  s.buffer = clips[name]; g.gain.value = 0.8 * save.set.voice / 100;
+  s.connect(g).connect(voiceBus); s.start();
   clipBusyUntil = t + clips[name].duration;
+  voiceDuck = 0.25; voiceUntil = Math.max(voiceUntil, clipBusyUntil);
   return true;
 }
 let singBusyUntil = 0;
@@ -5146,7 +5155,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 const FIETS_CLIPS = 38;
 let fietsDmg = 0;
-let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.35;
+let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.25;
 const jensBike = makeBike('#c8202b');
 jensBike.visible = false;
 jens.root.add(jensBike);
@@ -5158,17 +5167,16 @@ function loadVoices() {
   JOS_VOICE.forEach((_, i) => loadClip('jos' + (i + 1), `audio/jos/${i + 1}.mp3`));
 }
 // spraakfragment uit een filmpje; de muziek gaat zolang zachter
-const VOICE_GAIN = { telefoon2: 0.47, telefoon: 0.9, jos1: 1, jos2: 1, jos3: 1, jos4: 1, jos5: 1 };
+const VOICE_GAIN = { telefoon2: 0.63, telefoon: 1.2 };
 function playVoice(name) {
   stopVoice();
   if (!ac || !save.sound || !clips[name]) return 0;
   const src = ac.createBufferSource(), g = ac.createGain();
-  src.buffer = clips[name]; g.gain.value = (VOICE_GAIN[name] || 0.75) * save.set.voice / 100;
-  src.connect(g).connect(ac.destination);
-  if (recDest) g.connect(recDest);
+  src.buffer = clips[name]; g.gain.value = (VOICE_GAIN[name] || 1) * save.set.voice / 100;
+  src.connect(g).connect(voiceBus);
   src.start();
   voiceSrc = src;
-  voiceDuck = name.startsWith('jos') ? 0.12 : 0.35; // Jos moet er bovenuit komen
+  voiceDuck = name.startsWith('jos') ? 0.12 : 0.25; // Jos moet er bovenuit komen
   voiceUntil = ac.currentTime + clips[name].duration;
   src.onended = () => { if (voiceSrc === src) { voiceSrc = null; voiceUntil = 0; } };
   return clips[name].duration;
@@ -8876,8 +8884,7 @@ async function playUrl(url, vol) {
   if (!clips[url]) return;
   const s = ac.createBufferSource(), g = ac.createGain();
   s.buffer = clips[url]; g.gain.value = vol;
-  s.connect(g).connect(ac.destination);
-  if (recDest) g.connect(recDest);
+  s.connect(g).connect(voiceBus);
   s.start();
   verslagUntil = ac.currentTime + clips[url].duration;
 }
@@ -10540,7 +10547,7 @@ function miniWorld(sky, near, far, night) {
 function miniSnd(name, vol = 1, rate = 1) {
   if (!ac || !save.sound || !clips[name]) return false;
   const s = ac.createBufferSource(), g = ac.createGain();
-  s.buffer = clips[name]; s.playbackRate.value = rate; g.gain.value = vol * 1.6;
+  s.buffer = clips[name]; s.playbackRate.value = rate; g.gain.value = vol * 1.6 * (FW_CLIPS.has(name) ? FW_VOL : 1);
   s.connect(g).connect(master); s.start();
   return true;
 }
