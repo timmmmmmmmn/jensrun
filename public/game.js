@@ -431,7 +431,7 @@ function updateMusic(dt) {
   if (want === 'menu' && save.radio && save.radio !== 'menu') want = save.radio === 'uit' ? null : save.radio;
   const boost = want === 'game' ? musicBoost() : 0;
   for (const [k, a] of Object.entries(music)) {
-    const target = save.sound && want === k ? MUSIC_VOL * (save.set.music / 100) * (1 + 0.75 * boost) * (ac.currentTime < Math.max(voiceUntil, verslagUntil) ? 0.35 : 1) : 0;
+    const target = save.sound && want === k ? MUSIC_VOL * (save.set.music / 100) * (1 + 0.75 * boost) * (ac.currentTime < Math.max(voiceUntil, verslagUntil) ? voiceDuck : 1) : 0;
     const g = musicGain[k].gain;
     g.value = damp(g.value, target, target > g.value ? 2.5 : 5, dt);
     const rate = k === 'game' ? (1 + 0.5 * boost) * (slomoT > 0 ? 0.72 : 1) : 1;
@@ -5146,7 +5146,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 const FIETS_CLIPS = 38;
 let fietsDmg = 0;
-let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0;
+let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.35;
 const jensBike = makeBike('#c8202b');
 jensBike.visible = false;
 jens.root.add(jensBike);
@@ -5168,6 +5168,7 @@ function playVoice(name) {
   if (recDest) g.connect(recDest);
   src.start();
   voiceSrc = src;
+  voiceDuck = name.startsWith('jos') ? 0.12 : 0.35; // Jos moet er bovenuit komen
   voiceUntil = ac.currentTime + clips[name].duration;
   src.onended = () => { if (voiceSrc === src) { voiceSrc = null; voiceUntil = 0; } };
   return clips[name].duration;
