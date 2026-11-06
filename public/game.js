@@ -3297,7 +3297,7 @@ function collide() {
         missionEvent('bekers', n);
         const dn = fxDing();
         coinFly(_pv.set(player.x, player.y + 1.4, -0.3), camera);
-        if (dn >= 8) popWorld('+' + 10 * n * scoreMult(), _pv.set(player.x + 0.8, player.y + 2.3, -0.3), camera, 'good small');
+        if (dn >= 8) runPop('+' + 10 * n * scoreMult(), 'good small');
         bekerRun = bekerRunT > 0 ? bekerRun + 1 : 1; bekerRunT = 1.4;
         if (bekerRun === 10 || bekerRun === 25 || bekerRun === 50 || bekerRun === 100) { hype(`🏆 BEKERSTREAK ×${bekerRun}!`, bekerRun >= 50 ? 'mega' : ''); buzz(TRIL.streak); score += bekerRun * 10 * scoreMult(); }
         buzz(8);
@@ -7173,24 +7173,30 @@ function slomo(o) {
   fxFlash('#5ad1ff', 0.3); buzz(TRIL.slomo);
   tone(180, 0.5, 'sine', 0.18, 70); whoosh(0.18);
   const pts = 100 * scoreMult(); score += pts;
-  popWorld(`😮 SUPERRAKELINGS +${pts}`, _pv.set(o.x, 2.4, o.z || -1), camera, 'big');
+  runPop(`😮 SUPERRAKELINGS +${pts}`, 'big');
 }
 let combo = 0, comboT = 0, comboShown = -1, feverT = 0, nearRecord = false, hudK = 0, renHype = true;
 const comboMult = () => 1 + Math.min(8, Math.floor(combo / 4)) * 0.25; // tot ×3
 const COMBO_HYPE = { 10: 'COMBO 10!', 20: 'ON FIRE! 🔥', 30: 'NIET TE STOPPEN!', 50: 'LEGENDARISCH!', 75: 'JENS IS EEN GOD', 100: '100 COMBO?!' };
+// losse tekstjes tijdens het rennen: boven de horizon, nooit op de weg; op de telefoon alleen de grote
+const isPhone = () => innerWidth <= 700;
+function runPop(text, cls) {
+  if (isPhone() && !cls.includes('big')) return;
+  popAt(text, innerWidth / 2 + rand(-40, 40), innerHeight * 0.2, cls);
+}
 function comboHit(label) {
   const before = comboMult();
   combo++;
   comboT = 3.5;
   if (label) { whoosh(label === 'rakelings' ? 0.13 : 0.08); buzz(TRIL[label] || 10); }
-  if (label && (label !== 'ontweken' || combo % 3 === 0)) popWorld(label === 'over' ? (player.slideT > 0 ? 'ERONDERDOOR!' : 'EROVERHEEN!') : label === 'ontweken' ? 'ONTWEKEN!' : 'RAKELINGS!', _pv.set(player.x, player.y + 2.4, -0.5), camera, 'blue');
+  if (label && (label !== 'ontweken' || combo % 5 === 0)) runPop(label === 'over' ? (player.slideT > 0 ? 'ERONDERDOOR!' : 'EROVERHEEN!') : label === 'ontweken' ? 'ONTWEKEN!' : 'RAKELINGS!', 'blue');
   if (COMBO_HYPE[combo]) hype(COMBO_HYPE[combo], combo >= 30 ? 'mega' : '');
   // elke 15 combo: KOORTS, 8 seconden dubbele punten
   if (combo % 15 === 0) { feverT = 8; hype('🔥 KOORTS!<small>8 seconden dubbele punten</small>', 'mega'); fxFlash('#ff8a00', 0.35); buzz(TRIL.koorts); }
   recordStat('combo', 0, combo);
   if (combo === 10) verslaggever('combo');
   score += 15 * comboMult() * scoreMult();
-  if (comboMult() > before) { note(`🔥 Combo ×${comboMult().toFixed(2).replace(/\.?0+$/, '')}!`); buzz(25); tone(880 + combo * 20, 0.08, 'square', 0.05); }
+  if (comboMult() > before) { if (!isPhone()) note(`🔥 Combo ×${comboMult().toFixed(2).replace(/\.?0+$/, '')}!`); buzz(25); tone(880 + combo * 20, 0.08, 'square', 0.05); }
   else if (label) tone(660 + combo * 15, 0.05, 'square', 0.035);
 }
 function comboBreak() {
@@ -7258,7 +7264,8 @@ function seedPrecip(kind) {
     const c = kind === 'confetti' ? pick(conf) : new THREE.Color('#ffffff');
     precipCol.set([c.r, c.g, c.b], i * 3);
   }
-  flakes.material.size = kind === 'confetti' ? 4 : 3;
+  flakes.material.size = kind === 'confetti' ? 4 : 2;
+  flakeGeo.setDrawRange(0, kind === 'sneeuw' ? Math.floor(PRECIP * 0.3) : PRECIP);
   rainLines.geometry.attributes.position.needsUpdate = true;
   flakeGeo.attributes.position.needsUpdate = true;
   flakeGeo.attributes.color.needsUpdate = true;
@@ -10635,13 +10642,13 @@ function hype(html, cls = '', snd = cls === 'mega' ? 'fanfareUp' : 'fanfare') {
 function fxFlash(color = '#fff', a = 0.4) {
   const el = $('#fxFlash');
   el.style.background = `radial-gradient(ellipse at 50% 55%, transparent 45%, ${color} 120%)`;
-  el.style.transition = 'none'; el.style.opacity = Math.min(1, a * 2.2);
+  el.style.transition = 'none'; el.style.opacity = Math.min(1, a * (isPhone() ? 0.9 : 2.2));
   requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = 'opacity .45s'; el.style.opacity = 0; }));
 }
 // bekertje vliegt van Jens naar je teller rechtsboven
 let coinFlying = 0;
 function coinFly(pos, cam) {
-  if (coinFlying > 8) return;
+  if (isPhone() || coinFlying > 3) return; // de teller telt toch wel op
   const tgt = $('#bekerCount')?.getBoundingClientRect();
   if (!tgt) return;
   _pv.copy(pos).project(cam);
