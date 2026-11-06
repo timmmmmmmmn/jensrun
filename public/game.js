@@ -590,7 +590,7 @@ function speak(text) {
   C.project_vertex += affine + `
   {
     float psxA = projectionMatrix[1][1] / projectionMatrix[0][0];
-    vec2 psxGrid = psxA >= 1.0 ? vec2(100.0 * psxA, 100.0) : vec2(100.0, 100.0 / psxA);
+    vec2 psxGrid = psxA >= 1.0 ? vec2(150.0 * psxA, 150.0) : vec2(150.0, 150.0 / psxA);
     vec4 sp = gl_Position;
     if (sp.w > 0.0) { sp.xy = floor(sp.xy / sp.w * psxGrid + 0.5) / psxGrid * sp.w; gl_Position = sp; }
   }`;
@@ -598,7 +598,8 @@ function speak(text) {
 #ifdef PSX_PERSP
   vec4 sampledDiffuseColor = texture2D( map, vMapUv );
 #else
-  vec4 sampledDiffuseColor = texture2D( map, vPsxUv.xy / vPsxUv.z );
+  // een beetje scheef voor het PS1-gevoel, maar niet zo dat alles zwemt
+  vec4 sampledDiffuseColor = texture2D( map, mix( vMapUv, vPsxUv.xy / vPsxUv.z, 0.25 ) );
 #endif
   // weinig kleuren per texture, zoals de kleurtabellen van de PS1
   {
@@ -1980,6 +1981,7 @@ const roadTex = canvasTex(256, 256, (x) => {
 roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
 roadTex.repeat.set(1, 240 / ROAD_TILE);
 const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W, 240, 3, 40).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ map: roadTex }));
+road.material.defines = { PSX_PERSP: '' };
 road.position.z = -80;
 scene.add(road);
 
@@ -1991,6 +1993,7 @@ const walkTex = canvasTex(128, 128, (x) => {
 walkTex.wrapS = walkTex.wrapT = THREE.RepeatWrapping;
 walkTex.repeat.set(1, 240 / WALK_TILE);
 const walkMat = new THREE.MeshLambertMaterial({ map: walkTex });
+walkMat.defines = { PSX_PERSP: '' };
 const curbMat = M('#8f8b84');
 const grasTex = canvasTex(32, 32, (x) => {
   x.fillStyle = '#ffffff'; x.fillRect(0, 0, 32, 32);
@@ -1999,6 +2002,7 @@ const grasTex = canvasTex(32, 32, (x) => {
 });
 grasTex.wrapS = grasTex.wrapT = THREE.RepeatWrapping; grasTex.repeat.set(16, 96);
 const grasMat = new THREE.MeshLambertMaterial({ color: '#6f9a52', map: grasTex });
+grasMat.defines = { PSX_PERSP: '' };
 for (const side of [-1, 1]) {
   const w = new THREE.Mesh(new THREE.PlaneGeometry(4, 240, 1, 40).rotateX(-Math.PI / 2), walkMat);
   w.position.set(side * (ROAD_W / 2 + 2), 0.14, -80);
@@ -2237,7 +2241,7 @@ skyDome.renderOrder = -10;
 skyGroup.add(skyDome);
 // koepel en sterren reizen mee met de camera die op dat moment tekent (ook snap- en opnamecamera)
 scene.onBeforeRender = (r, sc, cam) => { skyGroup.position.copy(cam.position); };
-// wolken en een silhouet van de stad op de horizon: kleine, grove plaatjes op de koepel, zoals een PS1-skybox
+// wolken: een klein, grof plaatje op de koepel, zoals een PS1-skybox
 const cloudLayer = (() => {
   const t = canvasTex(128, 64, (x) => {
     x.clearRect(0, 0, 128, 64);
@@ -2254,32 +2258,6 @@ const cloudLayer = (() => {
   m.defines = { PSX_PERSP: '' };
   const c = new THREE.Mesh(new THREE.SphereGeometry(SKY_R - 1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.46), m);
   c.renderOrder = -9;
-  skyGroup.add(c);
-  return c;
-})();
-const skyline = (() => {
-  const t = canvasTex(512, 64, (x) => {
-    x.clearRect(0, 0, 512, 64);
-    x.fillStyle = '#ffffff';
-    let px = 0;
-    while (px < 512) {
-      const w = Math.floor(rand(10, 28)), h = Math.floor(rand(8, 24));
-      x.fillRect(px, 64 - h, w, h);
-      // af en toe een kerktoren of flat
-      if (Math.random() < 0.14) { x.fillRect(px + w / 2 - 2, 64 - h - 18, 4, 18); x.beginPath(); x.moveTo(px + w / 2 - 4, 64 - h - 18); x.lineTo(px + w / 2, 64 - h - 34); x.lineTo(px + w / 2 + 4, 64 - h - 18); x.fill(); }
-      else if (Math.random() < 0.1) x.fillRect(px + 2, 64 - h - 20, w - 4, 20);
-      px += w;
-    }
-    // de Waalbrug
-    x.strokeStyle = '#ffffff'; x.lineWidth = 3;
-    x.beginPath(); x.moveTo(300, 48); x.quadraticCurveTo(350, 2, 400, 48); x.stroke();
-    for (let i = 0; i < 9; i++) x.fillRect(308 + i * 10, 26 + Math.abs(i - 4) * 4, 2, 24);
-  });
-  t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1);
-  const m = new THREE.MeshBasicMaterial({ map: t, alphaTest: 0.5, depthWrite: false, side: THREE.BackSide, fog: false });
-  m.defines = { PSX_PERSP: '' };
-  const c = new THREE.Mesh(new THREE.CylinderGeometry(SKY_R - 2, SKY_R - 2, 15, 20, 1, true), m);
-  c.position.y = 2.5; c.renderOrder = -8;
   skyGroup.add(c);
   return c;
 })();
@@ -2303,9 +2281,9 @@ moon.visible = false;
 skyGroup.add(moon);
 let night = false;
 const LOOKS = {
-  dag: { top: '#2c6fc8', mid: '#7ab4e8', hor: '#cfd9d8', hs: '#cfdcf0', hg: '#5a4a3a', hi: 1.5, sc: '#fff0cc', si: 3.3, fog: [14, 58], win: 0, lan: 0, cl: '#ffffff', cla: 0.95, sl: '#7f8fa0' },
-  avond: { top: '#241c5e', mid: '#c8452e', hor: '#ff9a3a', hs: '#d88a78', hg: '#3a2028', hi: 1.15, sc: '#ff7a2c', si: 3.0, fog: [13, 56], win: 0.75, lan: 3, cl: '#ffb48a', cla: 0.85, sl: '#3a1c34' },
-  nacht: { top: '#01020c', mid: '#050a2c', hor: '#101a52', hs: '#4258b8', hg: '#0c0a20', hi: 0.8, sc: '#7f96ff', si: 0.7, fog: [10, 50], win: 1, lan: 8, cl: '#3a4a88', cla: 0.5, sl: '#060818' },
+  dag: { top: '#2c6fc8', mid: '#7ab4e8', hor: '#cfd9d8', hs: '#cfdcf0', hg: '#5a4a3a', hi: 1.5, sc: '#fff0cc', si: 3.3, fog: [14, 58], win: 0, lan: 0, cl: '#ffffff', cla: 0.95 },
+  avond: { top: '#241c5e', mid: '#c8452e', hor: '#ff9a3a', hs: '#d88a78', hg: '#3a2028', hi: 1.15, sc: '#ff7a2c', si: 3.0, fog: [13, 56], win: 0.75, lan: 3, cl: '#ffb48a', cla: 0.85 },
+  nacht: { top: '#01020c', mid: '#050a2c', hor: '#101a52', hs: '#4258b8', hg: '#0c0a20', hi: 0.8, sc: '#7f96ff', si: 0.7, fog: [10, 50], win: 1, lan: 8, cl: '#3a4a88', cla: 0.5 },
 };
 const PHASES = ['dag', 'avond', 'nacht'];
 let phaseT = 0, phaseGoal = 0; // 0 = dag, 1 = avond, 2 = nacht (ertussenin = overgang)
@@ -2332,7 +2310,6 @@ function applyLook(t) {
   for (const m of allFacadeMats) m.emissiveIntensity = num('win');
   lantern.intensity = num('lan');
   mixCol(cloudLayer.material.color, A.cl, B.cl, k); cloudLayer.material.opacity = num('cla');
-  mixCol(skyline.material.color, A.sl, B.sl, k);
   const lamps = t > 0.7;
   lampHeadMat.emissive.set(lamps ? '#ffe9a0' : '#ccb877');
   for (const g of lampGlows) g.visible = lamps;
@@ -5789,6 +5766,7 @@ const corridor = new THREE.Group();
   const zwart = new THREE.MeshBasicMaterial({ color: '#000000', fog: false });
   const ver = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 2, H2 + 2), zwart); ver.position.set(0, H2 / 2, -199);
   const dicht = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 2, H2 + 2).rotateY(Math.PI), zwart); dicht.position.set(0, H2 / 2, 39);
+  for (const v of [wl, wr, ul, ur, ceil]) v.material.defines = { PSX_PERSP: '' };
   corridor.add(wl, wr, ceil, ver, dicht);
   corridor.visible = false;
   scene.add(corridor);
