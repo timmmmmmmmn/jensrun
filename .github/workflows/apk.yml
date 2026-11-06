@@ -52,7 +52,7 @@ jobs:
         run: |
           cp app/build/outputs/apk/release/app-release.apk JensRun.apk
           printf '%s\n' "${COMMIT_MSG:-Handmatig gebouwd}" > notes.md
-          gh release create "v1.0.${{ github.run_number }}" JensRun.apk \
-            --title "Jens Run 1.0.${{ github.run_number }}" \
+          gh release create "v2.0.${{ github.run_number }}" JensRun.apk \
+            --title "Jens Run 2.0.${{ github.run_number }}" \
             --notes-file notes.md \
             --latest

@@ -10,7 +10,7 @@ object Bundel {
         "html" to "text/html", "js" to "text/javascript", "mjs" to "text/javascript", "css" to "text/css",
         "json" to "application/json", "webmanifest" to "application/manifest+json", "png" to "image/png",
         "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "svg" to "image/svg+xml", "ico" to "image/x-icon",
-        "mp3" to "audio/mpeg", "m4a" to "audio/mp4", "mp4" to "video/mp4", "wav" to "audio/wav", "txt" to "text/plain",
+        "woff2" to "font/woff2", "mp3" to "audio/mpeg", "m4a" to "audio/mp4", "mp4" to "video/mp4", "wav" to "audio/wav", "txt" to "text/plain",
     )
 
     fun serve(ctx: Context, path: String, range: String?): WebResourceResponse? {

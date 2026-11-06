@@ -119,6 +119,18 @@ async function api(req, env, url) {
     return json({ ok: true, rank: rank?.r ?? null });
   }
 
+  // nieuws in het hoofdmenu: alleen wat nog niet verlopen is
+  if (path === '/api/news' && req.method === 'GET') {
+    const { results } = await db.prepare('SELECT id, title, body, until, created, img IS NOT NULL AS has_img FROM news WHERE until > ? ORDER BY created DESC LIMIT 8').bind(Date.now()).all();
+    return json({ items: results.map((n) => ({ id: n.id, title: n.title, body: n.body, until: n.until, img: n.has_img ? `/api/news/img/${n.id}` : null })) });
+  }
+  const newsImg = path.match(/^\/api\/news\/img\/([a-f0-9]{16})$/);
+  if (newsImg && req.method === 'GET') {
+    const n = await db.prepare('SELECT img, img_type FROM news WHERE id = ?').bind(newsImg[1]).first();
+    if (!n?.img) return new Response('niet gevonden', { status: 404 });
+    return new Response(new Uint8Array(n.img), { headers: { 'content-type': n.img_type || 'image/jpeg', 'cache-control': 'public, max-age=86400' } });
+  }
+
   // dagelijkse krant: wat gebeurde er tussen from en to (ms)
   if (path === '/api/krant' && req.method === 'GET') {
     const from = Number(url.searchParams.get('from')), to = Number(url.searchParams.get('to'));
@@ -411,6 +423,31 @@ async function api(req, env, url) {
   // ---------- beheer ----------
   if (path.startsWith('/api/admin/')) {
     if (!isAdmin(req, env)) return json({ error: 'geen toegang' }, 401);
+    if (path === '/api/admin/news' && req.method === 'GET') {
+      const { results } = await db.prepare('SELECT id, title, body, until, created, img IS NOT NULL AS has_img FROM news ORDER BY created DESC LIMIT 50').all();
+      return json({ rows: results });
+    }
+    if (path === '/api/admin/news' && req.method === 'POST') {
+      const b = await body(req);
+      const title = String(b.title || '').trim().slice(0, 80), text = String(b.body || '').trim().slice(0, 2000), hours = Number(b.hours);
+      if (!title) return json({ error: 'Vul een titel in.' }, 400);
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24 * 366) return json({ error: 'Kies hoe lang het nieuws blijft staan.' }, 400);
+      let img = null, type = null;
+      if (b.image) {
+        const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(b.image));
+        if (!m) return json({ error: 'Dat plaatje snap ik niet.' }, 400);
+        if (m[2].length > 1400000) return json({ error: 'Plaatje is te groot.' }, 400);
+        img = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)); type = m[1];
+      }
+      const id = hex(crypto.getRandomValues(new Uint8Array(8))), now = Date.now();
+      await db.prepare('INSERT INTO news (id, title, body, img, img_type, until, created) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, title, text, img ? img.buffer : null, type, now + hours * 36e5, now).run();
+      return json({ ok: true, id });
+    }
+    if (path === '/api/admin/news/delete' && req.method === 'POST') {
+      const b = await body(req);
+      await db.prepare('DELETE FROM news WHERE id = ?').bind(String(b.id || '')).run();
+      return json({ ok: true });
+    }
     if (path === '/api/admin/players' && req.method === 'GET') {
       const { results } = await db.prepare(`SELECT p.id, p.name, p.created, (SELECT email FROM accounts a WHERE a.player_id = p.id) AS email,
         MAX(CASE WHEN s.mode = 'fiets' THEN s.score END) AS fiets,

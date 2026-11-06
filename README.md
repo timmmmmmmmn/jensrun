@@ -1,8 +1,9 @@
 # Jens Run
 
-Een PS1-achtige endless runner door Nijmegen. Speel hem op **https://jensrun.timvanbergen.nl**.
+Een endless runner door Nijmegen die eruitziet als een echte PS1-game. Speel hem op **https://jensrun.timvanbergen.nl**.
 
-- **Endless:** ren door Nijmegen-Oost, pak de bekers, ontwijk alles en laat je niet pakken (fiets-, telefoon-, terror- en schoolmodus).
+- **Endless:** ren door Nijmegen-Oost, pak de KNVB-bekers, ontwijk alles en laat je niet pakken. Met een beetje geluk staat de lerarenkamer in het Montessori open.
+- **Asbest, Vuurwerk en Mijn Osso:** eigen spellen met een eigen wereld.
 - **Verhaal:** *Terroriseer Nijmegen* (8 wijken, eindbaas in Hatert) en *Terroriseer Nederland* (10 levels, finale in de Johan Cruijff ArenA).
 - **Winkel, opdrachten, ranglijst en Wall of Fame.**
 
@@ -22,3 +23,10 @@ Een PS1-achtige endless runner door Nijmegen. Speel hem op **https://jensrun.tim
 | `.github/workflows/apk.yml` | Bouwt bij elke wijziging aan `android/` een ondertekende APK als release |
 
 Lokaal draaien: `npx wrangler dev`. Live zetten: `npx wrangler deploy`.
+
+## Met dank aan
+
+- 3D-model van de KNVB-beker: stresvogel (gebruikt met toestemming, teruggebracht tot PS1-formaat in `public/beker-model.js`)
+- Iconen: [game-icons.net](https://game-icons.net) (CC BY 3.0), vlaggen: [flag-icons](https://github.com/lipis/flag-icons) (MIT)
+- Lettertypen: Anton en Barlow Semi Condensed (OFL)
+- Nieuws in het hoofdmenu zet je via `/beheer` (met plaatje en einddatum)

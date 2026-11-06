@@ -1,5 +1,92 @@
 import * as THREE from './three.module.min.js';
 import { Muxer, ArrayBufferTarget } from './mp4-muxer.mjs';
+import { BEKER, BEKER_TEX } from './beker-model.js';
+import { ICONS, ICON_CS, ICON_COLS, ICON_ROWS } from './iconen.js';
+
+// =====================================================================
+//  geen emoji meer: elke emoji die ergens in beeld komt wordt een plaatje uit het iconenvel.
+//  Zo werkt het ook voor oude meldingen uit de database en voor namen en muurteksten van spelers.
+//  Gewone tekstsymbolen (✓, →, ★) blijven tekst.
+// =====================================================================
+const EMOJI_RE = /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?|\p{Emoji_Modifier})*/gu;
+const EMOJI_PRES = /\p{Emoji_Presentation}|\uFE0F/u;
+const iconKey = (m) => (ICONS[m] ? m : ICONS[[...m][0]] ? [...m][0] : null);
+const ICON_SKIP = new Set(['SCRIPT', 'STYLE', 'OPTION', 'TEXTAREA', 'TITLE', 'INPUT']);
+function emojiParts(str) {
+  const out = [];
+  let last = 0;
+  for (const m of str.matchAll(EMOJI_RE)) {
+    const k = iconKey(m[0]);
+    if (!k && !EMOJI_PRES.test(m[0])) continue; // gewoon tekstsymbool
+    if (m.index > last) out.push(str.slice(last, m.index));
+    if (k) out.push({ icon: k });
+    last = m.index + m[0].length;
+  }
+  if (!out.length) return null;
+  if (last < str.length) out.push(str.slice(last));
+  return out;
+}
+const stripEmoji = (t) => { const p = emojiParts(String(t)); return p ? p.filter((x) => typeof x === 'string').join('').replace(/\s{2,}/g, ' ').trim() : String(t); };
+function iconEl(k) {
+  const el = document.createElement('j-i'), [cx, cy] = ICONS[k];
+  el.className = 'ei';
+  el.style.backgroundSize = `${ICON_COLS * 100}% ${ICON_ROWS * 100}%`;
+  el.style.backgroundPosition = `${(cx / (ICON_COLS - 1)) * 100}% ${(cy / (ICON_ROWS - 1)) * 100}%`;
+  return el;
+}
+function iconizeText(n) {
+  if (!n.parentNode || ICON_SKIP.has(n.parentNode.nodeName)) return;
+  const parts = emojiParts(n.nodeValue);
+  if (!parts) return;
+  const f = document.createDocumentFragment();
+  for (const x of parts) f.append(typeof x === 'string' ? document.createTextNode(x) : iconEl(x.icon));
+  n.parentNode.replaceChild(f, n);
+}
+function iconize(n) {
+  if (n.nodeType === 3) { iconizeText(n); return; }
+  if (n.nodeType !== 1 || ICON_SKIP.has(n.nodeName)) return;
+  const w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT), list = [];
+  while (w.nextNode()) list.push(w.currentNode);
+  list.forEach(iconizeText);
+}
+new MutationObserver((recs) => {
+  for (const r of recs) {
+    if (r.type === 'characterData') iconizeText(r.target);
+    else r.addedNodes.forEach(iconize);
+  }
+}).observe(document.body, { childList: true, characterData: true, subtree: true });
+iconize(document.body);
+// in canvas-tekst (borden, filmpjes, arcade) tekenen we het plaatje midden in de regel
+const iconSheet = new Image();
+iconSheet.src = 'img/iconen.png';
+{
+  const P = CanvasRenderingContext2D.prototype, fill = P.fillText, stroke = P.strokeText, measure = P.measureText;
+  P.fillText = function (t, x, y, mw) {
+    const parts = typeof t === 'string' ? emojiParts(t) : null;
+    if (!parts) return mw === undefined ? fill.call(this, t, x, y) : fill.call(this, t, x, y, mw);
+    const size = parseFloat(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1] || 16), iw = size * 1.15;
+    const width = parts.reduce((n, q) => n + (typeof q === 'string' ? measure.call(this, q).width : iw), 0);
+    const k = mw && width > mw ? mw / width : 1, al = this.textAlign;
+    let cx = al === 'center' ? x - (width * k) / 2 : al === 'right' || al === 'end' ? x - width * k : x;
+    const top = this.textBaseline === 'middle' ? y - iw / 2 : this.textBaseline === 'top' ? y : y - iw * 0.82;
+    this.textAlign = 'left';
+    for (const q of parts) {
+      if (typeof q === 'string') { const w = measure.call(this, q).width * k; fill.call(this, q, cx, y, w || undefined); cx += w; }
+      else {
+        const [c, r] = ICONS[q.icon];
+        if (iconSheet.complete && iconSheet.naturalWidth) this.drawImage(iconSheet, c * ICON_CS, r * ICON_CS, ICON_CS, ICON_CS, cx, top, iw * k, iw);
+        cx += iw * k;
+      }
+    }
+    this.textAlign = al;
+  };
+  P.strokeText = function (t, x, y, mw) { const c = typeof t === 'string' ? stripEmoji(t) : t; return mw === undefined ? stroke.call(this, c, x, y) : stroke.call(this, c, x, y, mw); };
+}
+// lettertypen en iconen moeten klaar zijn voordat de borden en texturen getekend worden
+await Promise.race([
+  Promise.all([iconSheet.decode().catch(() => {}), document.fonts.load('40px Anton').catch(() => {}), document.fonts.load('700 16px "Barlow J"').catch(() => {})]),
+  new Promise((r) => setTimeout(r, 2500)),
+]);
 
 // =====================================================================
 //  helpers
@@ -68,7 +155,7 @@ const MODES = {
     catchLine: 'Nablijven. Een week lang.',
   },
   // eigen minigames met een eigen wereld (zie MINIGAMES verderop)
-  glijden: { mini: true, label: 'Glijden', icon: '🛷', play: 'GLIJDEN!', desc: 'Jens glijdt op een asbestplaat over een eindeloze baan hoog boven de Waal. Stuur vrij, ontwijk alles en val er niet af.' },
+  glijden: { mini: true, label: 'Asbest', icon: '⛰️', desc: 'Op een asbestplaat van een gigantische berg af. Je gaat steeds harder, dus stuur op tijd en ontwijk alles.' },
   vuurwerk: { mini: true, label: 'Vuurwerk', icon: '🎆', play: 'AFSTEKEN!', desc: 'Drerries bouwen een brug tussen twee eilandjes. Trek terug, laat los en blaas ze op voordat de brug af is.' },
   osso: { mini: true, label: 'Mijn Osso', icon: '🏠', play: 'VERDEDIGEN!', desc: 'Iedereen die ooit achter Jens aan zat valt tegelijk z\'n osso binnen. Hou ze tegen met een AK-47, romeinse kaarsen en nitraat.' },
 };
@@ -465,8 +552,10 @@ function speak(text) {
 // =====================================================================
 //  renderer / scene
 // =====================================================================
-// PS1-look: vertices springen naar een grof raster, textures worden affiene (scheef) getekend
-// en de kleuren gaan terug naar 15 bit met een bayer-dither. Het beeld rendert op ~240p.
+// PS1-look: 240 lijnen, vertices springen naar hele pixels, textures worden affiene (scheef) getekend,
+// licht wordt per hoekpunt berekend (Gouraud, zoals de GTE van de PS1), de kleuren gaan terug naar
+// 15 bit met een bayer-dither en de mist loopt in banden. Grote vlakken die je scheef ziet (gevels)
+// krijgen PSX_PERSP: daar wordt de texture wel recht getekend, anders zwemmen de ramen over de gevel.
 {
   const C = THREE.ShaderChunk;
   const affine = `
@@ -477,26 +566,95 @@ function speak(text) {
   C.uv_pars_fragment += '\nvarying vec3 vPsxUv;\n';
   C.project_vertex += affine + `
   {
-    vec2 psxGrid = vec2(320.0, 240.0);
+    float psxA = projectionMatrix[1][1] / projectionMatrix[0][0];
+    vec2 psxGrid = psxA >= 1.0 ? vec2(120.0 * psxA, 120.0) : vec2(120.0, 120.0 / psxA);
     vec4 sp = gl_Position;
     if (sp.w > 0.0) { sp.xy = floor(sp.xy / sp.w * psxGrid + 0.5) / psxGrid * sp.w; gl_Position = sp; }
   }`;
-  C.map_fragment = C.map_fragment.replace('texture2D( map, vMapUv )', 'texture2D( map, vPsxUv.xy / vPsxUv.z )');
+  C.map_fragment = C.map_fragment.replace('vec4 sampledDiffuseColor = texture2D( map, vMapUv );', `
+#ifdef PSX_PERSP
+  vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+#else
+  vec4 sampledDiffuseColor = texture2D( map, vPsxUv.xy / vPsxUv.z );
+#endif`);
+  const bayer = `const float psxB[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+    ivec2 psxP = ivec2(mod(gl_FragCoord.xy, 4.0));
+    float psxD = (psxB[psxP.y * 4 + psxP.x] + 0.5) / 16.0;`;
+  // mist in banden, met dither ertussen
+  C.fog_fragment = `
+#ifdef USE_FOG
+  {
+    ${bayer}
+    float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
+    fogFactor = floor( fogFactor * 14.0 + psxD ) / 14.0;
+    gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+  }
+#endif`;
+  // kleurgrading: voller en harder (diepe schaduwen), dan terug naar 15 bit
   const dither = `
   {
-    const float bayer[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
-    ivec2 bp = ivec2(mod(gl_FragCoord.xy, 4.0));
-    float bd = (bayer[bp.y * 4 + bp.x] + 0.5) / 16.0;
-    gl_FragColor.rgb = floor(gl_FragColor.rgb * 31.0 + bd) / 31.0;
+    ${bayer}
+    vec3 c = gl_FragColor.rgb;
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = clamp(mix(vec3(l), c, 1.22), 0.0, 1.0);
+    c = mix(c, c * c * (3.0 - 2.0 * c), 0.55);
+    gl_FragColor.rgb = floor(c * 31.0 + psxD) / 31.0;
   }`;
   C.dithering_fragment += dither;
   const sp = THREE.ShaderLib.sprite;
   sp.vertexShader = sp.vertexShader.replace('#include <logdepthbuf_vertex>', affine + '\n#include <logdepthbuf_vertex>');
   sp.fragmentShader = sp.fragmentShader.replace('#include <fog_fragment>', '#include <fog_fragment>' + dither);
+  // Gouraud: al het licht in de vertex shader, plus 'gebakken' schaduw onderaan muren en mensen
+  const L = THREE.ShaderLib.lambert;
+  L.vertexShader = L.vertexShader
+    .replace('#include <common>', '#include <common>\n#include <lights_pars_begin>\nvarying vec3 vPsxLight;')
+    .replace('#include <fog_vertex>', `#include <fog_vertex>
+  {
+    vec3 n = normalize(transformedNormal), li = ambientLightColor;
+    float up = 0.0;
+    #if NUM_HEMI_LIGHTS > 0
+      for (int i = 0; i < NUM_HEMI_LIGHTS; i++) { li += getHemisphereLightIrradiance(hemisphereLights[i], n); up = dot(n, hemisphereLights[i].direction); }
+    #endif
+    #if NUM_DIR_LIGHTS > 0
+      for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+        float d = dot(n, directionalLights[i].direction);
+        #ifdef DOUBLE_SIDED
+          d = abs(d);
+        #endif
+        li += saturate(d) * directionalLights[i].color;
+      }
+    #endif
+    #if NUM_POINT_LIGHTS > 0
+      for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
+        vec3 v = pointLights[i].position - mvPosition.xyz;
+        float r = length(v), d = dot(n, v / r);
+        #ifdef DOUBLE_SIDED
+          d = abs(d);
+        #endif
+        li += saturate(d * 0.7 + 0.3) * pointLights[i].color * getDistanceAttenuation(r, pointLights[i].distance, pointLights[i].decay);
+      }
+    #endif
+    vec4 wp = vec4(transformed, 1.0);
+    #ifdef USE_INSTANCING
+      wp = instanceMatrix * wp;
+    #endif
+    float wy = (modelMatrix * wp).y;
+    float ao = wy < -0.5 ? 1.0 : mix(0.58, 1.0, smoothstep(0.0, 1.9, wy));
+    vPsxLight = li * RECIPROCAL_PI * mix(ao, 1.0, saturate(up));
+  }`);
+  const a = '#include <normal_fragment_begin>', b = 'vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;';
+  const fs = L.fragmentShader, i0 = fs.indexOf(a), i1 = fs.indexOf(b) + b.length, oud = fs.slice(i0, i1);
+  const em = '#include <emissivemap_fragment>';
+  L.fragmentShader = (fs.slice(0, i0) + `#ifdef FLAT_SHADED
+  ${oud}
+#else
+  ${em}
+  vec3 outgoingLight = diffuseColor.rgb * vPsxLight + totalEmissiveRadiance;
+#endif` + fs.slice(i1)).replace('#include <common>', '#include <common>\nvarying vec3 vPsxLight;');
 }
-const QUALITY = { ps1: 280, normaal: 400, scherp: 620 };
+const QUALITY = { ps1: 240, normaal: 320, scherp: 480 };
 if (!save.set.quality || save.set.quality === 'normaal') save.set.quality = 'auto';
-const AUTO_STEPS = [240, 280, 330, 400];
+const AUTO_STEPS = [200, 220, 240, 240];
 // zwakke apparaten (weinig kernen of geheugen) beginnen lager
 const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 8) <= 4;
 let autoIdx = weakDevice || isIPod ? 0 : 3;
@@ -506,17 +664,21 @@ let lowFx = autoIdx <= 1;
 const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(1);
-renderer.debug.checkShaderErrors = false;
+renderer.debug.checkShaderErrors = /[?&]debug/.test(location.search);
 const scene = new THREE.Scene();
 const SKY = new THREE.Color('#bfe3ff');
 scene.background = SKY;
 scene.fog = new THREE.Fog(SKY, 30, isIPod ? 70 : 95);
-const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 110); // voorbij de mist hoeft niets getekend te worden
+const camera = new THREE.PerspectiveCamera(60, 1, 0.2, 110); // voorbij de mist hoeft niets getekend te worden
 const hemi = new THREE.HemisphereLight('#e6f2ff', '#7a6a58', 2.2);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff3dc', 2.4);
-sun.position.set(-6, 12, -2);
+sun.position.set(-7, 10, 5);
 scene.add(sun);
+// 's avonds hangt er een warme vlek licht om Jens heen: per hoekpunt, dus met de echte PS1-verlopen over de vlakken
+const lantern = new THREE.PointLight('#fff4e6', 0, 26, 1.3);
+lantern.position.set(0, 2.6, 1.5);
+scene.add(lantern);
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -667,14 +829,20 @@ function M(color, extra) {
 function psxTex(t) {
   t.colorSpace = THREE.SRGBColorSpace;
   t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false;
+  // geen wazige overgangen, maar op afstand ook geen geflikker
+  t.minFilter = THREE.NearestMipmapNearestFilter;
+  t.generateMipmaps = true;
   return t;
 }
-function canvasTex(w, h, draw) {
+// PS1-textures zijn klein: de tekenaar blijft in de oude maat werken, het canvas zelf is kleiner.
+// Langwerpige (borden met tekst) mogen iets meer pixels houden.
+function canvasTex(w, h, draw, cap = Math.max(w, h) / Math.min(w, h) >= 2.5 ? 256 : 128) {
   const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
+  const k = Math.min(1, cap / Math.max(w, h));
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  const x = c.getContext('2d');
+  x.scale(k, k);
+  draw(x, w, h);
   const t = new THREE.CanvasTexture(c);
   psxTex(t);
   return t;
@@ -710,7 +878,7 @@ function mesh(geo, mat, x = 0, y = 0, z = 0) {
   m.position.set(x, y, z);
   return m;
 }
-function text(x, str, color, size, y, font = 'Lilita One, Impact, sans-serif', w = 128) {
+function text(x, str, color, size, y, font = 'Anton, Impact, sans-serif', w = 128) {
   x.fillStyle = color;
   x.font = `${size}px ${font}`;
   x.textAlign = 'center';
@@ -753,7 +921,7 @@ const SHIRTS = {
   } },
   wit: { base: '#e9e7e1', paint() {} },
   vierdaagse: { base: '#1f8f4e', paint(x, side) {
-    if (side === 'front') { text(x, '4DAAGSE', '#fff', 26, 50); text(x, 'NIJMEGEN', '#bff0cf', 15, 76, 'Nunito, sans-serif'); }
+    if (side === 'front') { text(x, '4DAAGSE', '#fff', 26, 50); text(x, 'NIJMEGEN', '#bff0cf', 15, 76, 'Anton, sans-serif'); }
     else { text(x, 'JENS', '#fff', 30, 40); text(x, '4', '#fff', 56, 88); }
   } },
   oranje: { base: '#ff7b00', paint(x, side) {
@@ -787,7 +955,7 @@ const SHIRTS = {
       x.fillStyle = '#f4f4f4'; for (let y = 40; y < 128; y += 20) { x.beginPath(); x.arc(64, y, 2.5, 0, 7); x.fill(); }
       x.fillStyle = '#1f7a3a'; x.fillRect(72, 26, 34, 32); // borstzakje
       x.fillStyle = '#e2231a'; star(x, 89, 35, 5);
-      x.fillStyle = '#ffffff'; x.font = 'bold 8px Nunito, sans-serif'; x.textAlign = 'center'; x.fillText('Heineken', 89, 52);
+      x.fillStyle = '#ffffff'; x.font = 'bold 8px Anton, sans-serif'; x.textAlign = 'center'; x.fillText('Heineken', 89, 52);
     }
   } },
   rammstein: { base: '#1a1a1a', img: 'img/shirt-rammstein.png', paint(x, side) {
@@ -833,7 +1001,7 @@ function paintFabric(x, w, h, base, o = {}) {
   grain(x, w, h, o.grain ?? 22);
 }
 function grain(x, w, h, amt) {
-  const img = x.getImageData(0, 0, w, h), d = img.data;
+  const img = x.getImageData(0, 0, x.canvas.width, x.canvas.height), d = img.data;
   for (let i = 0; i < d.length; i += 4) {
     const n = (Math.random() - 0.5) * amt;
     d[i] += n; d[i + 1] += n; d[i + 2] += n;
@@ -996,7 +1164,7 @@ function faceMat(key, o) {
   return faceMatNew(key, o);
 }
 function faceMatNew(key, o) {
-  const tex = canvasTex(512, 256, (x) => drawHead(x, o, null, o.hair));
+  const tex = canvasTex(512, 256, (x) => drawHead(x, o, null, o.hair), 256);
   const m = new THREE.MeshLambertMaterial({ map: tex });
   m.userData.hair = o.hair;
   m.userData.setHair = (hair) => {
@@ -1361,6 +1529,7 @@ function pose(p, kind, dt, speedK = 1) {
     case 'point': runLegs(); aL = -s * 0.75; eL = 1.35; aR = 1.6 + Math.sin(t * 9) * 0.1; eR = 0.05; bRX = -0.1; k = 30; break;
     case 'wenk': aR = 2.7 + Math.sin(t * 9) * 0.3; eR = 0.35; oR = 0.3; aL = 0.05; bY = Math.sin(t * 2.5) * 0.01; k = 18; break;
     case 'reach': lL = s * 0.4; lR = -s * 0.4; kL = kR = -0.2; aL = aR = 1.5; eL = eR = 0.2; break;
+    case 'camrun': runLegs(); aR = 2.3; eR = 2.0; aL = 0.6; eL = 1.4; k = 30; break;
     case 'cam': aR = 2.3; eR = 2.0; aL = 0.6; eL = 1.4; bY = Math.sin(t * 3) * 0.01; break;
     case 'seat': lL = lR = 1.5; kL = kR = -1.5; aL = 0.55 + Math.sin(t * 1.3) * 0.05; aR = 0.6; eL = eR = 0.95; bY = -0.43; bRX = 0.05; break;
     case 'read': lL = lR = 1.5; kL = kR = -1.5; aL = 0.45; aR = 0.75; eL = 0.75; eR = 1.55; oL = 0.06; oR = 0.12; bY = -0.43; bRX = 0.12; break;
@@ -1382,7 +1551,7 @@ function pose(p, kind, dt, speedK = 1) {
 
 function makeLabel(str, bg) {
   const tex = canvasTex(512, 128, (x) => {
-    x.font = '76px Lilita One, Impact, sans-serif';
+    x.font = '76px Anton, Impact, sans-serif';
     const w = Math.min(500, x.measureText(str).width + 64);
     x.fillStyle = bg;
     x.beginPath(); x.roundRect(256 - w / 2, 10, w, 108, 54); x.fill();
@@ -1476,7 +1645,7 @@ function makeVan() {
     x.fillStyle = '#f7f7f7'; x.fillRect(0, 0, 256, 128);
     x.fillStyle = '#e2001a'; x.fillRect(0, 84, 256, 18);
     x.fillStyle = '#0a4ea2'; x.fillRect(0, 102, 256, 10);
-    x.fillStyle = '#e2001a'; x.font = '34px Lilita One, Impact, sans-serif'; x.textAlign = 'center';
+    x.fillStyle = '#e2001a'; x.font = '34px Anton, Impact, sans-serif'; x.textAlign = 'center';
     x.fillText('OMROEP', 128, 38); x.fillStyle = '#0a4ea2'; x.fillText('GELDERLAND', 128, 72);
     if (back) { x.fillStyle = '#333'; x.fillRect(118, 0, 3, 84); }
   });
@@ -1666,6 +1835,24 @@ for (const [mode, p] of Object.entries(chasers)) {
   p.root.visible = false;
   scene.add(p.root);
 }
+// platform onder Jens in het hoofdmenu: een ring licht, een lichtzuil van onderen
+const menuDisc = new THREE.Group();
+{
+  const ringTex = canvasTex(64, 64, (x) => {
+    x.clearRect(0, 0, 64, 64);
+    const g = x.createRadialGradient(32, 32, 4, 32, 32, 31);
+    g.addColorStop(0, 'rgba(255,190,90,.95)'); g.addColorStop(0.7, 'rgba(255,120,20,.9)'); g.addColorStop(0.86, 'rgba(255,245,200,1)'); g.addColorStop(1, 'rgba(255,120,20,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  });
+  const plat = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.9).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: ringTex, transparent: true, depthWrite: false, fog: false }));
+  plat.position.y = 0.04; plat.renderOrder = 2;
+  const zuilTex = canvasTex(8, 32, (x) => { const g = x.createLinearGradient(0, 0, 0, 32); g.addColorStop(0, 'rgba(255,170,70,0)'); g.addColorStop(1, 'rgba(255,170,70,.2)'); x.fillStyle = g; x.fillRect(0, 0, 8, 32); });
+  const zuil = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.86, 2.3, 16, 1, true), new THREE.MeshBasicMaterial({ map: zuilTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }));
+  zuil.position.y = 1.15; zuil.renderOrder = 2;
+  menuDisc.add(plat, zuil);
+  menuDisc.visible = false;
+  scene.add(menuDisc);
+}
 // Omroep Gelderland
 const van = makeVan();
 const cameraman = makePerson({ key: 'cameraman', skin: '#e9bf9a', hair: '#777', hairStyle: 'kort', shirt: { base: '#0a4ea2', paint() {} }, pants: '#333', shoes: '#222',
@@ -1678,6 +1865,7 @@ const cameraman = makePerson({ key: 'cameraman', skin: '#e9bf9a', hair: '#777', 
   cam.position.set(0.24, 1.6, -0.05);
   cameraman.body.add(cam);
   cameraman.root.position.set(0, 2.3, 0.6);
+  cameraman.root.rotation.y = Math.PI; // filmt achteruit, op Jens
   cameraman.shadow.visible = false;
   van.add(cameraman.root);
   const lab = makeLabel('LIVE', '#e2001a');
@@ -1687,6 +1875,27 @@ const cameraman = makePerson({ key: 'cameraman', skin: '#e9bf9a', hair: '#777', 
 }
 van.visible = false;
 scene.add(van);
+// verslaggever met microfoon en een cameraman: rennen naast Jens en willen een reactie
+const OG_SHIRT = { base: '#0a4ea2', paint(x) { x.fillStyle = '#e2001a'; x.fillRect(0, 40, 128, 18); x.fillStyle = '#ffffff'; x.fillRect(0, 58, 128, 6); } };
+const omReporter = makePerson({ key: 'omreporter', skin: '#e9bf9a', hair: '#3a2a1a', hairStyle: 'kort', shirt: OG_SHIRT, pants: '#222', shoes: '#111', face: { skin: '#e9bf9a', brow: '#3a2a1a' } });
+const omCamera = makePerson({ key: 'omcamera', skin: '#f1cdb2', hair: '#777', hairStyle: 'kort', shirt: OG_SHIRT, pants: '#333', shoes: '#222', face: { skin: '#f1cdb2' } });
+{
+  const mic = new THREE.Group();
+  mic.add(mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.22, 6), M('#1b1b1b'), 0, -0.08, -0.03));
+  mic.add(mesh(box(0.1, 0.1, 0.1), M('#e2001a'), 0, 0.02, -0.03));
+  mic.add(mesh(new THREE.SphereGeometry(0.05, 6, 4), M('#222'), 0, 0.09, -0.03));
+  mic.position.set(0, -0.08, -0.06);
+  omReporter.handR.add(mic);
+  const cam = new THREE.Group();
+  cam.add(mesh(box(0.22, 0.26, 0.55), M('#1b1b1b')));
+  cam.add(mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.2, 8).rotateX(Math.PI / 2), M('#333'), 0, 0, -0.35));
+  cam.add(mesh(box(0.05, 0.05, 0.05), M('#ff2a2a', { emissive: '#ff0000' }), 0.08, 0.15, -0.2));
+  cam.position.set(0.24, 1.6, -0.05);
+  omCamera.body.add(cam);
+  for (const p of [omReporter, omCamera]) { p.root.visible = false; scene.add(p.root); }
+}
+const OM_LINES = ['Omroep Gelderland! Een reactie?', 'Jens, één vraagje maar!', 'Jens! Hoe voelt dit?', 'Wij zijn live, Jens!', 'Is de beker echt van ons?', 'Jens, wacht nou even!', 'Kijkers willen het weten!', 'Eén reactie voor de camera!'];
+let omroepT = 0, omroepNext = 40, omroepK = 0, omroepSide = 1, omroepSay = 0;
 
 // =====================================================================
 //  world: road, sidewalks, houses, trees
@@ -1719,12 +1928,19 @@ walkTex.wrapS = walkTex.wrapT = THREE.RepeatWrapping;
 walkTex.repeat.set(1, 240 / WALK_TILE);
 const walkMat = new THREE.MeshLambertMaterial({ map: walkTex });
 const curbMat = M('#8f8b84');
+const grasTex = canvasTex(32, 32, (x) => {
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 32, 32);
+  for (let i = 0; i < 150; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,.2)' : 'rgba(255,255,255,.2)'; x.fillRect(Math.floor(Math.random() * 32), Math.floor(Math.random() * 32), 1, 2); }
+  for (let i = 0; i < 60; i++) { x.fillStyle = 'rgba(0,0,0,.14)'; x.fillRect(Math.floor(Math.random() * 32), Math.floor(Math.random() * 32), 1, 1); }
+});
+grasTex.wrapS = grasTex.wrapT = THREE.RepeatWrapping; grasTex.repeat.set(16, 96);
+const grasMat = new THREE.MeshLambertMaterial({ color: '#6f9a52', map: grasTex });
 for (const side of [-1, 1]) {
   const w = new THREE.Mesh(new THREE.PlaneGeometry(4, 240, 2, 80).rotateX(-Math.PI / 2), walkMat);
   w.position.set(side * (ROAD_W / 2 + 2), 0.14, -80);
   scene.add(w);
   scene.add(mesh(box(0.25, 0.15, 240), curbMat, side * (ROAD_W / 2 + 0.1), 0.07, -80));
-  const g = new THREE.Mesh(new THREE.PlaneGeometry(40, 240, 6, 40).rotateX(-Math.PI / 2), M('#6f9a52'));
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(40, 240, 6, 40).rotateX(-Math.PI / 2), grasMat);
   g.position.set(side * 30, 0.1, -80);
   scene.add(g);
 }
@@ -1768,7 +1984,7 @@ const facades = BRICKS.map((brick, bi) => canvasTex(256, 320, (x) => {
   x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(40, 232, 46, 18);
 }));
 let curTheme = null;
-const facadeMats = facades.map((t, i) => new THREE.MeshLambertMaterial({ map: t, emissiveMap: psxTex(new THREE.CanvasTexture(lit[i])), emissive: '#ffffff', emissiveIntensity: 0 }));
+const facadeMats = facades.map((t, i) => { const m = new THREE.MeshLambertMaterial({ map: t, emissiveMap: psxTex(new THREE.CanvasTexture(lit[i])), emissive: '#ffffff', emissiveIntensity: 0 }); m.defines = { PSX_PERSP: '' }; return m; });
 const allFacadeMats = [...facadeMats];
 const roofMats = ['#3d3f45', '#6b3427', '#4a3b33', '#2e3238'].map((c) => M(c));
 const wallMat = M('#7d4a3a');
@@ -1777,20 +1993,23 @@ const HOUSE_GEO = (() => {
   const depth = 6, shape = new THREE.Shape([new THREE.Vector2(-depth / 2 - 0.25, 0), new THREE.Vector2(depth / 2 + 0.25, 0), new THREE.Vector2(0, 2.6)]);
   return {
     body: new THREE.BoxGeometry(depth, 1, 1),
-    frontL: new THREE.PlaneGeometry(1, 1, 3, 4).rotateY(Math.PI / 2),
-    frontR: new THREE.PlaneGeometry(1, 1, 3, 4).rotateY(-Math.PI / 2),
+    frontL: new THREE.PlaneGeometry(1, 1, 4, 5).rotateY(Math.PI / 2),
+    frontR: new THREE.PlaneGeometry(1, 1, 4, 5).rotateY(-Math.PI / 2),
     roof: new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5),
     dormer: new THREE.BoxGeometry(1.4, 1.1, 1.6),
   };
 })();
+let houseSeq = 0;
 function makeHouse(side, width) {
   const g = new THREE.Group();
   const depth = 6;
   // blok met één materiaal + een losse voorgevel richting de weg (2 tekenopdrachten in plaats van 6)
   // vormen zijn gedeeld (breedte zit in de schaal), zodat alle huizen samen getekend kunnen worden
   const body = new THREE.Mesh(HOUSE_GEO.body, wallMat); body.scale.z = width;
-  const front = new THREE.Mesh(side < 0 ? HOUSE_GEO.frontL : HOUSE_GEO.frontR, wallMat); front.scale.z = width;
-  front.position.x = side < 0 ? depth / 2 + 0.01 : -depth / 2 - 0.01;
+  const front = new THREE.Mesh(side < 0 ? HOUSE_GEO.frontL : HOUSE_GEO.frontR, wallMat); front.scale.z = width + 0.08;
+  // ruim voor het blok (de hoekpunten springen, dus 1 cm gaf z-fighting) en buren om en om iets verspringend
+  houseSeq++;
+  front.position.x = (side < 0 ? 1 : -1) * (depth / 2 + 0.14 + (houseSeq % 2) * 0.05);
   const roof = new THREE.Mesh(HOUSE_GEO.roof, roofMats[0]); roof.scale.z = width;
   const dormer = new THREE.Mesh(HOUSE_GEO.dormer, wallMat);
   const h = { g, body, front, roof, dormer, side, width, depth, z: 0, parts: [body, front, roof, dormer] };
@@ -1834,7 +2053,12 @@ for (const side of [-1, 1]) {
 const decor = [];
 const trunkGeo = new THREE.CylinderGeometry(0.12, 0.17, 2.4, 6);
 const crownGeo = new THREE.IcosahedronGeometry(1.35, 0);
-const crownMats = ['#4f8f3a', '#3f7d33', '#5c9a40', '#6aa34a'].map((c) => M(c, { flatShading: true }));
+const leafTex = canvasTex(32, 32, (x) => {
+  x.fillStyle = '#c8c8c8'; x.fillRect(0, 0, 32, 32);
+  for (let i = 0; i < 90; i++) { x.fillStyle = pick(['#ffffff', '#8c8c8c', '#5c5c5c', '#e8e8e8']); x.fillRect(Math.floor(Math.random() * 32), Math.floor(Math.random() * 32), 2, 2); }
+});
+leafTex.wrapS = leafTex.wrapT = THREE.RepeatWrapping; leafTex.repeat.set(4, 4);
+const crownMats = ['#4f8f3a', '#3f7d33', '#5c9a40', '#6aa34a'].map((c) => M(c, { flatShading: true, map: leafTex }));
 function makeTree() {
   const g = new THREE.Group();
   g.add(mesh(trunkGeo, M('#6b4a2e'), 0, 1.2, 0));
@@ -1917,6 +2141,52 @@ skyDome.renderOrder = -10;
 skyGroup.add(skyDome);
 // koepel en sterren reizen mee met de camera die op dat moment tekent (ook snap- en opnamecamera)
 scene.onBeforeRender = (r, sc, cam) => { skyGroup.position.copy(cam.position); };
+// wolken en een silhouet van de stad op de horizon: kleine, grove plaatjes op de koepel, zoals een PS1-skybox
+const cloudLayer = (() => {
+  const t = canvasTex(128, 64, (x) => {
+    x.clearRect(0, 0, 128, 64);
+    for (let i = 0; i < 16; i++) {
+      const cx = rand(0, 128), cy = rand(6, 46), n = 3 + Math.floor(rand(0, 6));
+      for (let k = 0; k < n; k++) for (const ox of [0, -128, 128]) {
+        x.fillStyle = k % 2 ? '#ffffff' : '#d9e2ee';
+        x.fillRect(Math.floor(cx + ox + rand(-16, 16)), Math.floor(cy + rand(-3, 3)), Math.floor(rand(8, 22)), Math.floor(rand(2, 5)));
+      }
+    }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);
+  const m = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, side: THREE.BackSide, fog: false });
+  m.defines = { PSX_PERSP: '' };
+  const c = new THREE.Mesh(new THREE.SphereGeometry(SKY_R - 1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.46), m);
+  c.renderOrder = -9;
+  skyGroup.add(c);
+  return c;
+})();
+const skyline = (() => {
+  const t = canvasTex(512, 64, (x) => {
+    x.clearRect(0, 0, 512, 64);
+    x.fillStyle = '#ffffff';
+    let px = 0;
+    while (px < 512) {
+      const w = Math.floor(rand(10, 28)), h = Math.floor(rand(8, 24));
+      x.fillRect(px, 64 - h, w, h);
+      // af en toe een kerktoren of flat
+      if (Math.random() < 0.14) { x.fillRect(px + w / 2 - 2, 64 - h - 18, 4, 18); x.beginPath(); x.moveTo(px + w / 2 - 4, 64 - h - 18); x.lineTo(px + w / 2, 64 - h - 34); x.lineTo(px + w / 2 + 4, 64 - h - 18); x.fill(); }
+      else if (Math.random() < 0.1) x.fillRect(px + 2, 64 - h - 20, w - 4, 20);
+      px += w;
+    }
+    // de Waalbrug
+    x.strokeStyle = '#ffffff'; x.lineWidth = 3;
+    x.beginPath(); x.moveTo(300, 48); x.quadraticCurveTo(350, 2, 400, 48); x.stroke();
+    for (let i = 0; i < 9; i++) x.fillRect(308 + i * 10, 26 + Math.abs(i - 4) * 4, 2, 24);
+  });
+  t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1);
+  const m = new THREE.MeshBasicMaterial({ map: t, alphaTest: 0.5, depthWrite: false, side: THREE.BackSide, fog: false });
+  m.defines = { PSX_PERSP: '' };
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(SKY_R - 2, SKY_R - 2, 22, 28, 1, true), m);
+  c.position.y = 5; c.renderOrder = -8;
+  skyGroup.add(c);
+  return c;
+})();
 const stars = (() => {
   const pos = [];
   for (let i = 0; i < 420; i++) {
@@ -1937,9 +2207,9 @@ moon.visible = false;
 skyGroup.add(moon);
 let night = false;
 const LOOKS = {
-  dag: { top: '#4f9de6', mid: '#93c9f4', hor: '#cfe9ff', hs: '#e6f2ff', hg: '#7a6a58', hi: 2.2, sc: '#fff3dc', si: 2.4, fog: [30, 95], win: 0 },
-  avond: { top: '#2e2a6a', mid: '#d9603a', hor: '#ffad4a', hs: '#ffc49a', hg: '#5a3a32', hi: 1.6, sc: '#ff8a3c', si: 1.8, fog: [26, 90], win: 0.55 },
-  nacht: { top: '#02051a', mid: '#071244', hor: '#13226a', hs: '#5a70c8', hg: '#1a1830', hi: 1.0, sc: '#a8baff', si: 0.45, fog: [20, 84], win: 0.9 },
+  dag: { top: '#2c6fc8', mid: '#7ab4e8', hor: '#cfd9d8', hs: '#cfdcf0', hg: '#5a4a3a', hi: 1.55, sc: '#fff0cc', si: 3.3, fog: [22, 82], win: 0, lan: 0, cl: '#ffffff', cla: 0.95, sl: '#7f8fa0' },
+  avond: { top: '#241c5e', mid: '#c8452e', hor: '#ff9a3a', hs: '#d88a78', hg: '#3a2028', hi: 1.15, sc: '#ff7a2c', si: 3.0, fog: [20, 78], win: 0.75, lan: 3, cl: '#ffb48a', cla: 0.85, sl: '#3a1c34' },
+  nacht: { top: '#01020c', mid: '#050a2c', hor: '#101a52', hs: '#4258b8', hg: '#0c0a20', hi: 0.8, sc: '#7f96ff', si: 0.7, fog: [16, 70], win: 1, lan: 8, cl: '#3a4a88', cla: 0.5, sl: '#060818' },
 };
 const PHASES = ['dag', 'avond', 'nacht'];
 let phaseT = 0, phaseGoal = 0; // 0 = dag, 1 = avond, 2 = nacht (ertussenin = overgang)
@@ -1964,6 +2234,9 @@ function applyLook(t) {
   mixCol(hemi.color, A.hs, B.hs, k); mixCol(hemi.groundColor, A.hg, B.hg, k); hemi.intensity = num('hi');
   mixCol(sun.color, A.sc, B.sc, k); sun.intensity = num('si');
   for (const m of allFacadeMats) m.emissiveIntensity = num('win');
+  lantern.intensity = num('lan');
+  mixCol(cloudLayer.material.color, A.cl, B.cl, k); cloudLayer.material.opacity = num('cla');
+  mixCol(skyline.material.color, A.sl, B.sl, k);
   const lamps = t > 0.7;
   lampHeadMat.emissive.set(lamps ? '#ffe9a0' : '#ccb877');
   for (const g of lampGlows) g.visible = lamps;
@@ -2044,7 +2317,7 @@ function makeSign(name) {
   const tex = canvasTex(512, 128, (x) => {
     x.fillStyle = '#ffffff'; x.fillRect(0, 0, 512, 128);
     x.fillStyle = '#1b3f8f'; x.fillRect(8, 8, 496, 112);
-    x.fillStyle = '#fff'; x.font = '58px Nunito, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#fff'; x.font = '58px Anton, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText(name, 256, 66, 470);
   });
   const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
@@ -2143,7 +2416,7 @@ function makeAfzetting() {
   }
   g.add(mesh(box(ROAD_W, 0.42, 0.12), stripeMat, 0, 1.28, 0));
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.5), new THREE.MeshBasicMaterial({ map: canvasTex(256, 48, (x) => {
-    x.fillStyle = '#ffd23f'; x.fillRect(0, 0, 256, 48); x.fillStyle = '#111'; x.font = '30px Lilita One, Impact, sans-serif';
+    x.fillStyle = '#ffd23f'; x.fillRect(0, 0, 256, 48); x.fillStyle = '#111'; x.font = '30px Anton, Impact, sans-serif';
     x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('WERK IN UITVOERING', 128, 26, 240);
   }) }));
   sign.position.set(0, 1.78, 0.02);
@@ -2151,24 +2424,37 @@ function makeAfzetting() {
   return g;
 }
 
-// beker (het muntje)
-const cupGeo = new THREE.LatheGeometry([
-  [0, 0], [0.2, 0], [0.2, 0.05], [0.07, 0.08], [0.05, 0.24], [0.08, 0.28], [0.21, 0.34], [0.25, 0.6], [0.23, 0.62], [0.19, 0.38], [0.0, 0.34],
-].map(([x, y]) => new THREE.Vector2(x, y)), 14);
-const handleGeo = new THREE.TorusGeometry(0.1, 0.028, 6, 12, Math.PI);
-const goldMat = new THREE.MeshLambertMaterial({ color: '#ffc928', emissive: '#7a4f00' });
-let cupMerged = null;
-function makeCup(scale = 1, mat = goldMat) {
-  if (!cupMerged) {
-    const t = new THREE.Group(), inner = new THREE.Group();
-    inner.add(new THREE.Mesh(cupGeo, goldMat));
-    const h1 = new THREE.Mesh(handleGeo, goldMat); h1.position.set(-0.25, 0.48, 0); h1.rotation.z = Math.PI / 2;
-    const h2 = new THREE.Mesh(handleGeo, goldMat); h2.position.set(0.25, 0.48, 0); h2.rotation.z = -Math.PI / 2;
-    inner.add(h1, h2); inner.position.y = -0.3; t.add(inner);
-    cupMerged = mergeStatic(t).children[0].geometry;
+// beker (het muntje): de echte KNVB-beker, even hoog als de oude bekers (0,62 m, midden op de oorsprong)
+const CUP_H = 0.62;
+function bekerGeo(lod) {
+  const d = BEKER[lod], bin = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0)).buffer;
+  const q = new Int16Array(bin(d.p)), pos = new Float32Array(q.length);
+  for (let i = 0; i < q.length; i++) pos[i] = (q[i] / 32767) * d.s[i % 3];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(new THREE.BufferAttribute(new Uint16Array(bin(d.i)), 1));
+  g.computeVertexNormals();
+  const out = g.toNonIndexed(), p = out.attributes.position, uv = new Float32Array(p.count * 2);
+  // reliëf: cilinderprojectie, zonder naad in driehoeken die over de achterkant lopen
+  for (let t = 0; t < p.count; t += 3) {
+    const us = [0, 1, 2].map((k) => (Math.atan2(p.getZ(t + k), p.getX(t + k)) / (2 * Math.PI) + 0.5) % 1);
+    const fix = Math.max(...us) - Math.min(...us) > 0.5;
+    us.forEach((u, k) => { uv[(t + k) * 2] = fix && u < 0.5 ? u + 1 : u; uv[(t + k) * 2 + 1] = p.getY(t + k); });
   }
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.scale(CUP_H, CUP_H, CUP_H);
+  out.translate(0, -0.3, 0);
+  g.dispose();
+  return markShared(out);
+}
+const goldMat = new THREE.MeshLambertMaterial({ color: '#ffc928', emissive: '#7a4f00' });
+const bekerTex = psxTex(new THREE.TextureLoader().load(BEKER_TEX));
+bekerTex.wrapS = THREE.RepeatWrapping;
+const bekerMat = new THREE.MeshLambertMaterial({ map: bekerTex, emissive: '#ffffff', emissiveMap: bekerTex, emissiveIntensity: 0.28 });
+const cupGeos = {};
+function makeCup(scale = 1, mat = bekerMat, lod = 'low') {
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(cupMerged, mat));
+  g.add(new THREE.Mesh(cupGeos[lod] ||= bekerGeo(lod), mat));
   g.scale.setScalar(scale);
   return g;
 }
@@ -2220,7 +2506,7 @@ function makePower(type) {
     bundle.scale.setScalar(1.6);
     g.add(bundle);
   } else {
-    g.add(makeCup(1.6, new THREE.MeshLambertMaterial({ color: '#ffe066', emissive: '#a35d00' })));
+    g.add(makeCup(1.6, bekerMat, 'high'));
   }
   const lab = makeLabel(look.label, look.bg);
   lab.position.y = 1.05;
@@ -2338,7 +2624,7 @@ function makeSchool() {
   g.add(body);
   const signTex = canvasTex(512, 64, (x) => {
     x.fillStyle = '#ffffff'; x.fillRect(0, 0, 512, 64);
-    x.fillStyle = '#1f7a3a'; x.font = '44px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#1f7a3a'; x.font = '44px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText('NSG GROENEWOUD', 256, 35, 490);
   });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(14, 1.75, 4, 1).rotateY(Math.PI / 2), new THREE.MeshLambertMaterial({ map: signTex }));
@@ -2501,7 +2787,7 @@ function resetRun() {
   else if (boss) { scene.remove(boss.mesh); boss = null; }
   applyTheme(curLevel ? THEMES[curLevel.theme] : THEMES.oost);
   spawnZ = -42; nextSign = 380; nextPower = rand(85, 130); nextRegen = 260; firstPower = true; streetIdx = Math.floor(Math.random() * STREETS.length);
-  nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 30;
+  nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 34; omroepT = 0; omroepNext = rand(25, 50); omroepK = 0; runUp = {}; wkT = 0; thunderT = 3; lkKans = false; plakMaatje.root.visible = false;
   deathT = 0; shakeT = 0; runTime = 0; lineT = mode === 'telefoon' ? rand(30, 45) : rand(6, 9); toetT = rand(4, 7);
   nitraten = 0;
   for (const sh of shots) scene.remove(sh.mesh);
@@ -2678,6 +2964,8 @@ let hudNitro = -1;
 $('#nitroBtn').addEventListener('click', throwNitraat);
 $('#nitroBtn').addEventListener('touchstart', (e) => { e.preventDefault(); throwNitraat(); }, { passive: false });
 let hudScore = -1, hudMeters = -1, hudPowers = '';
+let hudSecs = -1, hudAway = '';
+const awayName = () => (curLevel ? 'BOA' : String(MODES[mode]?.chaser || 'JENS').replace(/^de /, '').toUpperCase());
 function updateHud() {
   updateStoryHud();
   if (hudNitro !== nitraten) {
@@ -2695,14 +2983,19 @@ function updateHud() {
     const best = save.best[mode] || 0;
     if (state === 'run' && !nearRecord && best > 1500 && sc > best * 0.9 && sc < best) { nearRecord = true; note(`😬 Nog ${(best - sc).toLocaleString('nl-NL')} tot je record!`); tone(660, 0.1, 'square', 0.05); tone(880, 0.12, 'square', 0.05, null, 0.12); }
   }
-  if (mk !== hudMeters) { hudMeters = mk; $('#meters').textContent = Math.floor(dist) + ' m' + (bekerT > 0 ? '  ·  2× PUNTEN' : ''); }
+  if (mk !== hudMeters) { hudMeters = mk; $('#meters').textContent = Math.floor(dist) + ' m'; }
   if (hudBekers !== runBekers) {
     hudBekers = runBekers;
     const el = $('#bekerCount');
     el.querySelector('span').textContent = runBekers;
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   }
+  const secs = Math.floor(runTime);
+  if (secs !== hudSecs) { hudSecs = secs; $('#bugTime').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`; }
+  const away = awayName();
+  if (away !== hudAway) { hudAway = away; $('#bugAway').textContent = away; }
   let html = '';
+  if (wkT > 0) html += `<div class="power wk"><span>🏆 De WK beker: 2× bekers</span><div class="bar"><i style="width:${Math.round((wkT / 10) * 100)}%"></i></div></div>`;
   if (sjaalT > 0) html += `<div class="power"><span>🧣 NEC-sjaal – bekermagneet</span><div class="bar"><i style="width:${Math.round((sjaalT / SJAAL_TIME) * 100)}%"></i></div></div>`;
   if (fietsT > 0) html += `<div class="power"><span>🚲 Fiets – 2× snel, halve schade</span><div class="bar"><i style="width:${Math.round((fietsT / fietsMax) * 100)}%"></i></div></div>`;
   if (brommerT > 0) html += `<div class="power"><span>🛵 Brommer – onaantastbaar</span><div class="bar"><i style="width:${Math.round((brommerT / BROMMER_TIME) * 100)}%"></i></div></div>`;
@@ -2983,6 +3276,7 @@ function finishRun() {
   $('#overTitle').textContent = title;
   $('#overText').textContent = txt;
   $('#overScore').textContent = s.toLocaleString('nl-NL');
+  $('#obScore').textContent = s.toLocaleString('nl-NL'); $('#obBekers').textContent = runBekers; $('#obAway').textContent = awayName();
   $('#overBekers').textContent = '+' + runBekers;
   $('#overBest').textContent = Math.max(s, best).toLocaleString('nl-NL');
   $('#newBest').classList.toggle('hidden', !isBest || s === 0);
@@ -3116,7 +3410,7 @@ function updateShots(dt) {
 function explode(x, z) {
   buzz(90);
   fxFlash('#ffb050', 0.3);
-  if (!miniSnd('nitraat', 1)) sfx.boem();
+  if (!miniSnd('nitraat', 1.4)) sfx.boem();
   shakeT = 0.5;
   flash(false);
   burst(new THREE.Vector3(x, 1, z), 60, 9, fireMats, 1.3);
@@ -3290,7 +3584,7 @@ function collide() {
     if (o.kind === 'beker') {
       if (Math.abs(px - o.x) < 0.9 && dz < 0.9 && Math.abs(py + 0.9 - o.y) < 1.15) {
         o.dead = true;
-        const n = bekerT > 0 ? 2 : 1;
+        const n = (bekerT > 0 ? 2 : 1) * (wkT > 0 ? 2 : 1);
         runBekers += n;
         save.bekers += n;
         score += 10 * n * scoreMult();
@@ -3314,6 +3608,7 @@ function collide() {
     if (o.kind === 'kaart') { if (Math.abs(px - o.x) < 1.0 && dz < 1.0) collectKaart(o); continue; }
     if (o.kind === 'fork') continue;
     if (o.kind === 'deco' || o.kind === 'sign' || o.kind === 'landmark') continue;
+    if (o.kind === 'lkdeur') { if (!o.used && dz < 0.8) { o.used = true; if (Math.abs(px - LANES[2]) < 1.1) { enterLk(); return; } } continue; }
     if (o.kind === 'ingang') { if (!o.used && dz < 0.8) { o.used = true; if (o.forced || Math.abs(px - LANES[2]) < 1.1) { enterSchool(); return; } } continue; }
     if (o.kind === 'checkpoint' || o.kind === 'finish') { storyCollide(o, px, py); if (state !== 'run') return; continue; }
     if (o.kind === 'vrouw') {
@@ -3441,8 +3736,12 @@ const camPos = new THREE.Vector3(3, 2.2, -5), camLook = new THREE.Vector3(0, 1.1
 const camTargetPos = new THREE.Vector3(), camTargetLook = new THREE.Vector3();
 
 function updateCamera(dt) {
+  const vanVoren = camera.position.z < -0.5;
+  sun.position.z = vanVoren ? -6 : 5;
+  lantern.position.set(player.x, 2.6, vanVoren ? -2.6 : 1.2);
   if (state === 'photo') { photoCamera(); return; }
   if (state === 'kamer') { kamerCamera(); return; }
+  if (state === 'lkamer') { lkCamera(); return; }
   if (state === 'cutscene' || state === 'aanloop') return;
   if (state === 'replay') return;
   const portrait = camera.aspect < 0.8;
@@ -3475,10 +3774,10 @@ function updateCamera(dt) {
       camTargetPos.set(off, y + (portrait ? 0.15 : 0.05), shirt ? -1.75 : -0.95);
       camTargetLook.set(off, y - (portrait ? (shirt ? 0.55 : 0.32) : 0), 0);
     } else if (state === 'menu') {
-      if (portrait && innerWidth <= 700) { camTargetPos.set(px + 1.1, 2.5, -6.4); camTargetLook.set(px + 0.25, 0.15, 1.6); } // mobiel menu: Jens in het midden
+      if (portrait) { camTargetPos.set(px + 0.7, 1.75, -4.7); camTargetLook.set(px + 0.05, 0.62, 1.6); } // mobiel menu: Jens in het midden
       else {
-        camTargetPos.set(px + (wide ? 2.3 : 1.2), portrait ? 2.3 : 1.75, portrait ? -4.6 : -3.4);
-        camTargetLook.set(px + (wide ? 1.35 : 0.1), portrait ? -2.4 : 1.2, 1.6);
+        camTargetPos.set(px + (wide ? 0.5 : 0.8), portrait ? 2.3 : 1.45, portrait ? -4.6 : -3.9);
+        camTargetLook.set(px, portrait ? -2.4 : 1.02, 1.6);
       }
     } else if (deathFly) {
       const jp = jens.root.position;
@@ -3497,6 +3796,8 @@ function updateCamera(dt) {
   camLook.y = damp(camLook.y, camTargetLook.y, k, dt);
   camLook.z = damp(camLook.z, camTargetLook.z, k, dt);
   camera.position.copy(camPos);
+  menuDisc.visible = state === 'menu';
+  if (menuDisc.visible) menuDisc.rotation.y += dt * 0.5;
   if (shakeT > 0) {
     shakeT -= dt;
     camShakeV.set(rand(-1, 1), rand(-1, 1), 0).multiplyScalar(shakeT * 0.6);
@@ -3526,13 +3827,35 @@ function updateChaser(dt, moving) {
   pose(c, kind, dt, moving ? clamp(speed / 12, 0.8, 1.6) : (c.style === 'bike' ? 0.1 : 1));
   if (c.vehicle) for (const w of c.vehicle.userData.wheels) w.rotation.x -= (moving ? speed : 0) * dt / 0.34;
 
-  // Omroep Gelderland
-  const vanTarget = bekerT > 0 ? 3.4 : 34;
-  vanZ = damp(vanZ, vanTarget, 2, dt);
-  van.visible = vanZ < 30;
+  // Omroep Gelderland: tijdens 'de beker is van ons' en af en toe zomaar. De bus rijdt vóór Jens zodat je
+  // hem ook op een smal scherm ziet, de verslaggever en de cameraman rennen vlak naast hem.
+  const run = state === 'run' || state === 'paused';
+  if (state === 'run' && !curLevel && !indoor && !seg?.active) {
+    if (omroepT > 0) omroepT -= dt;
+    else if ((omroepNext -= dt) <= 0) { omroepT = 10; omroepNext = rand(45, 90); }
+  }
+  const omOn = run && !indoor && !seg?.active && (bekerT > 0 || omroepT > 0);
+  const wasOff = omroepK < 0.02;
+  omroepK = damp(omroepK, omOn ? 1 : 0, omOn ? 1.8 : 2.6, dt);
+  const vanTarget = omOn ? (camera.aspect < 0.8 ? -10 : -7) : 34;
+  vanZ = damp(vanZ, vanTarget, 1.1, dt);
+  van.visible = vanZ < 30 && run;
   if (player.lane === 2) vanSide = -1;
   else if (player.lane === 0) vanSide = 1;
-  van.position.set(damp(van.position.x, vanSide * 3.5, 3, dt), 0, vanZ);
+  van.position.set(damp(van.position.x, vanSide * 3.5, 2, dt), 0, vanZ);
+  const omZie = omroepK > 0.03 && run;
+  omReporter.root.visible = omCamera.root.visible = omZie;
+  if (omZie) {
+    if (player.lane === 2) omroepSide = -1; else if (player.lane === 0) omroepSide = 1;
+    const narrow = camera.aspect < 0.8, inv = 1 - omroepK;
+    const rx = player.x + omroepSide * (narrow ? 0.95 : 1.15), cx = player.x + omroepSide * (narrow ? 1.75 : 2.3);
+    omReporter.root.position.set(wasOff ? rx : damp(omReporter.root.position.x, rx, 4, dt), 0, 0.75 + inv * 8);
+    omCamera.root.position.set(wasOff ? cx : damp(omCamera.root.position.x, cx, 3.2, dt), 0, 1.5 + inv * 9);
+    omReporter.root.rotation.y = -omroepSide * 0.5; // draait naar Jens toe, microfoon vooruit
+    pose(omReporter, 'point', dt, clamp(speed / 12, 0.8, 1.6));
+    pose(omCamera, 'camrun', dt, clamp(speed / 12, 0.8, 1.6));
+    if (omOn && state === 'run' && (omroepSay -= dt) <= 0) { omroepSay = 2.6; bubble(omReporter.head, pick(OM_LINES), 'shout', 2.1, 0.5); }
+  }
   for (const o of van.children) if (o.isMesh && o.geometry.type === 'CylinderGeometry' && o.position.y < 0.5) o.rotation.x -= (state === 'run' ? speed : 0) * dt / 0.38;
   pose(cameraman, 'cam', dt);
 }
@@ -3621,7 +3944,7 @@ function updateRun(dt) {
   if (seg?.active && seg.type !== 'kermis') {
     pose(jens, seg.type === 'waal' ? 'swim' : seg.type === 'achtbaan' ? 'sit' : 'slide', dt);
   } else if (brommerT > 0) {
-    brommerT -= dt;
+    brommerT -= dt / (runUp.brommer ? 1.7 : 1);
     pose(jens, 'sit', dt);
     updatePatrickRijder(dt);
     for (const w of moped.userData.wheels) w.rotation.x -= m / 0.3;
@@ -3642,7 +3965,8 @@ function updateRun(dt) {
     pose(jens, player.slideT > 0 ? 'slide' : !player.grounded ? 'jump' : sticker.t > 0 ? 'reach' : mode === 'telefoon' ? 'phone' : 'run', dt, clamp(speed / 12, 0.9, 1.7));
   }
   if (bekerT > 0) bekerT -= dt;
-  if (invulnT > 0) invulnT -= dt;
+  if (invulnT > 0) invulnT -= dt / (runUp.brommer ? 2.5 : 1);
+  updateUpgrades(dt);
   if (nearT > 0) nearT -= dt;
   jens.root.visible = invulnT > 0 && brommerT <= 0 && fietsT <= 0 ? Math.floor(now() * 14) % 2 === 0 : true;
 
@@ -3791,27 +4115,87 @@ let curScreen = null;
 function showScreen(sel) {
   if (newsJob && sel !== '#over') newsCancel();
   curScreen = sel;
-  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade']) $(s).classList.toggle('hidden', s !== sel);
-  if (sel === '#menu') renderWall();
-  if (sel === '#menu') { $('#mMore').classList.add('hidden'); $('#xPop').classList.add('hidden'); $('#menuBekers').textContent = $('#mBekers').textContent = save.bekers.toLocaleString('nl-NL'); $('#mMult').textContent = `×${save.mult}`; $('#mBell').dataset.n = $('#socialBtn').dataset.n || ''; renderModes(); renderMissions(); renderFeesten(); renderChallenge(); }
+  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer']) $(s).classList.toggle('hidden', s !== sel);
+  for (const f of ['#fmModes', '#fmArt']) $(f).classList.add('hidden');
+  if (sel === '#menu') { renderWall(); renderFm(); }
+  if (sel === '#menu') { $('#mMore').classList.add('hidden'); $('#xPop').classList.add('hidden'); $('#menuBekers').textContent = $('#mBekers').textContent = save.bekers.toLocaleString('nl-NL'); $('#mMult').textContent = `×${save.mult}`; $('#fmBell').dataset.n = $('#mBell').dataset.n = $('#socialBtn').dataset.n || ''; renderModes(); renderMissions(); renderFeesten(); renderChallenge(); }
   if (sel === '#over') renderMissions('#overMissions');
 }
+const MODE_IMG = (k) => `img/mode/${k}.jpg`;
 function renderModes() {
   const el = $('#modes');
   el.innerHTML = Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => modeOpen(k)
-    ? `<button class="mode ${k === mode ? 'sel' : ''} ${k === 'telefoon' ? 'main' : ''}" data-mode="${k}"><span class="ic">${m.icon}</span><b>${m.label}</b>${k === 'telefoon' ? '<i class="tag">HOOFDMODUS</i>' : ''}<small>🏅 ${(save.best[k] || 0).toLocaleString('nl-NL')}</small></button>`
-    : `<button class="mode locked" data-mode="${k}"><span class="ic">🔒</span><b>${m.label}</b><small>${(MODE_UNLOCK[k] / 1000).toLocaleString('nl-NL')}k in 1 run</small></button>`).join('');
-  let d = $('#modeDesc');
-  if (!d) { d = document.createElement('div'); d.id = 'modeDesc'; d.className = 'mode-desc'; el.after(d); }
-  d.textContent = MODES[mode]?.desc || '';
-  $('#playBtn').textContent = MODES[mode]?.play || 'RENNEN!';
+    ? `<button class="mode ${k === mode ? 'sel' : ''}" data-mode="${k}"><span class="ic" style="background-image:url(${MODE_IMG(k)})"></span><span class="mode-t"><b>${m.label}</b><small class="desc">${m.desc || ''}</small><small class="best">🏅 Record ${(save.best[k] || 0).toLocaleString('nl-NL')}</small></span></button>`
+    : `<button class="mode locked" data-mode="${k}"><span class="ic">🔒</span><span class="mode-t"><b>${m.label}</b><small>${(MODE_UNLOCK[k] / 1000).toLocaleString('nl-NL')}k in 1 run</small></span></button>`).join('');
+  const m = MODES[mode];
+  if (!m) return;
+  $('#fmModeName').textContent = m.label;
+  $('#fmModeImg').style.backgroundImage = `url(${MODE_IMG(mode)})`;
 }
+// ---------- hoofdmenu: seizoen linksboven, nieuws rechts, zwevende vensters ----------
+const FM_NEWS_BASIS = [{ id: 'v2', title: 'Jens Run 2.0 is er!', body: 'Echte PS1-graphics, de KNVB-beker om te verzamelen, Asbest-modus, de lerarenkamer, nieuwe spullen voor De Hub en Omroep Gelderland die je overal achterna rent.\n\nVeel plezier en laat je niet pakken.', img: 'icons/icon-512.png' }];
+let fmNews = FM_NEWS_BASIS, fmNewsI = 0, fmNewsT = null;
+function renderFm() {
+  const p = passState(), lvl = Math.min(PASS_TIERS, Math.floor(p.xp / PASS_XP));
+  const open = Array.from({ length: lvl }, (_, i) => i).filter((i) => !p.claimed[i]).length;
+  $('#fmSeasonH').textContent = `Seizoen ${new Date().toLocaleString('nl-NL', { month: 'long' })}`;
+  $('#fmSeasonLv').textContent = `TREDE ${lvl}`;
+  $('#fmSeasonBar').style.width = `${lvl >= PASS_TIERS ? 100 : ((p.xp % PASS_XP) / PASS_XP) * 100}%`;
+  const cta = $('#fmSeasonCta');
+  cta.textContent = open ? `${open} BELONING${open > 1 ? 'EN' : ''} KLAAR` : lvl >= PASS_TIERS ? 'Hele pas gehaald' : `Nog ${PASS_XP - (p.xp % PASS_XP)} XP tot trede ${lvl + 1}`;
+  cta.classList.toggle('claim', !!open);
+  renderFmNews();
+  loadNews();
+}
+function renderFmNews() {
+  const el = $('#fmNews'), n = fmNews[fmNewsI % fmNews.length];
+  el.innerHTML = '';
+  const card = document.createElement('button');
+  card.className = 'fm-ncard';
+  card.style.backgroundImage = n.img ? `url("${n.img}")` : '';
+  card.style.setProperty('--nimg', n.img ? `url("${n.img}")` : 'none');
+  const t = document.createElement('span'); t.textContent = n.title; card.append(t);
+  card.addEventListener('click', () => openArticle(n));
+  el.append(card);
+  if (fmNews.length > 1) {
+    const dots = document.createElement('div'); dots.className = 'fm-ndots';
+    fmNews.forEach((_, i) => { const d = document.createElement('i'); if (i === fmNewsI % fmNews.length) d.className = 'on'; d.addEventListener('click', () => { fmNewsI = i; renderFmNews(); }); dots.append(d); });
+    el.append(dots);
+  }
+  clearTimeout(fmNewsT);
+  if (fmNews.length > 1) fmNewsT = setTimeout(() => { if (curScreen === '#menu') { fmNewsI++; renderFmNews(); } }, 7000);
+}
+function openArticle(n) {
+  audioInit();
+  $('#fmArtH').textContent = n.title;
+  const im = $('#fmArtImg');
+  if (n.img) im.src = n.img; else im.removeAttribute('src');
+  $('#fmArtBody').textContent = n.body || '';
+  $('#fmArtFoot').textContent = n.until ? `Staat hier nog tot ${new Date(n.until).toLocaleString('nl-NL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}` : '';
+  $('#fmArt').classList.remove('hidden');
+}
+let newsLoaded = 0;
+async function loadNews() {
+  if (Date.now() - newsLoaded < 120000) return;
+  newsLoaded = Date.now();
+  try {
+    const r = await fetch('/api/news').then((x) => x.json());
+    const items = (r.items || []).filter((n) => n && n.title);
+    fmNews = items.length ? items : FM_NEWS_BASIS;
+    fmNewsI = 0;
+    if (curScreen === '#menu') renderFmNews();
+  } catch (e) { /* offline: de ingebouwde blijft staan */ }
+}
+$('#fmMode').addEventListener('click', () => { audioInit(); renderModes(); $('#fmModes').classList.remove('hidden'); });
+for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => $(b.dataset.close).classList.add('hidden'));
+for (const f of ['#fmModes', '#fmArt']) $(f).addEventListener('click', (e) => { if (e.target.id === f.slice(1)) e.currentTarget.classList.add('hidden'); });
 $('#modes').addEventListener('click', (e) => {
   const b = e.target.closest('[data-mode]');
   if (!b) return;
   audioInit();
   if (!modeOpen(b.dataset.mode)) { note(`🔒 Haal ${MODE_UNLOCK[b.dataset.mode].toLocaleString('nl-NL')} punten in één run om ${MODES[b.dataset.mode].label} vrij te spelen`); tone(180, 0.15, 'square', 0.06); return; }
   setMode(b.dataset.mode);
+  $('#fmModes').classList.add('hidden');
   if (MODES[mode].mini) { sfx.power(); return; }
   chaserSay(mode === 'telefoon' ? shaneLine() : MODES[mode].lines[0], mode === 'terror' ? 'angry' : '', 1.6);
   if (mode === 'fiets') sfx.bel(); else if (mode === 'telefoon') sfx.ring(); else sfx.toet();
@@ -4005,6 +4389,7 @@ function makeFacadeMat(draw) {
   };
   const map = canvasTex(256, 320, (x) => { draw(x, lightWin); grain(x, 256, 320, 12); });
   const m = new THREE.MeshLambertMaterial({ map, emissiveMap: psxTex(new THREE.CanvasTexture(glow)), emissive: '#ffffff', emissiveIntensity: night ? 0.9 : 0 });
+  m.defines = { PSX_PERSP: '' };
   allFacadeMats.push(m);
   return m;
 }
@@ -4238,7 +4623,7 @@ function makeDrerrie(boss) {
 
 // ---------- bezienswaardigheden ----------
 // gebouwd met de voorgevel op x = 0, het gebouw ligt richting +x (rechterkant van de weg)
-function textPlane(str, w, h, color, bg, font = 'Lilita One, Impact, sans-serif') {
+function textPlane(str, w, h, color, bg, font = 'Anton, Impact, sans-serif') {
   const t = canvasTex(512, Math.round(512 * h / w), (x, W, H) => {
     if (bg) { x.fillStyle = bg; x.fillRect(0, 0, W, H); }
     x.fillStyle = color; x.font = `${Math.round(H * 0.72)}px ${font}`; x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -4304,7 +4689,7 @@ const LANDMARKS = {
     const tex = canvasTex(256, 128, (x) => {
       const kl = ['#c8202b', '#1f7a3a', '#141414'];
       for (let i = 0; i < 8; i++) { x.fillStyle = kl[i % 3]; x.fillRect(0, i * 16, 256, 16); }
-      x.fillStyle = '#f4f1ea'; x.font = '44px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('GOFFERT', 128, 82);
+      x.fillStyle = '#f4f1ea'; x.font = '44px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('GOFFERT', 128, 82);
     });
     const beton = M('#a8a49c');
     g.add(new THREE.Mesh(new THREE.BoxGeometry(26, 15, 56, 2, 2, 6), [beton, new THREE.MeshLambertMaterial({ map: tex }), M('#5a5f66'), beton, beton, beton]));
@@ -4681,7 +5066,7 @@ function makeTruck() {
   truckSignTex ||= canvasTex(256, 64, (x) => {
     x.fillStyle = '#121212'; x.fillRect(0, 0, 256, 64);
     x.fillStyle = '#ff5a14'; for (let i = 0; i < 32; i++) x.fillRect(i * 8, 52 - (i % 3) * 3, 6, 12 + (i % 3) * 3);
-    x.fillStyle = '#ffd23f'; x.font = '30px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#ffd23f'; x.font = '30px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText("KWALITY TROEK'I", 128, 26, 240);
   });
   const bord = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: truckSignTex }));
@@ -4809,7 +5194,7 @@ function spawnFinish(z) {
   for (const sx of [-1, 1]) g.add(mesh(box(0.25, 5, 0.25), M('#f4f4f4'), sx * (ROAD_W / 2 + 0.2), 2.5, 0));
   const vlag = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 0.6, 1.4), new THREE.MeshBasicMaterial({ map: canvasTex(256, 48, (x) => {
     for (let i = 0; i < 32; i++) for (let j = 0; j < 6; j++) { x.fillStyle = (i + j) % 2 ? '#111' : '#f4f4f4'; x.fillRect(i * 8, j * 8, 8, 8); }
-    x.fillStyle = '#ffd23f'; x.font = '30px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#ffd23f'; x.font = '30px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.strokeStyle = '#000'; x.lineWidth = 5; x.strokeText('WIJK GETERRORISEERD', 128, 25); x.fillText('WIJK GETERRORISEERD', 128, 25);
   }), side: THREE.DoubleSide }));
   vlag.position.y = 4.4; g.add(vlag);
@@ -5153,7 +5538,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 //  FIETS (power-up): Jens fietst zo lang als het filmpje duurt
 // =====================================================================
-const FIETS_CLIPS = 38;
+const FIETS_CLIPS = 41;
 let fietsDmg = 0;
 let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.25;
 const jensBike = makeBike('#c8202b');
@@ -5246,7 +5631,7 @@ const wallTexL = canvasTex(256, 128, (x) => {
   }
   x.fillStyle = '#4a2e16'; x.fillRect(150, 30, 46, 98); // klaslokaaldeur
   x.fillStyle = '#9fc4dc'; x.fillRect(160, 42, 26, 30);
-  x.fillStyle = '#ffffff'; x.fillRect(206, 30, 40, 26); x.fillStyle = '#e8762b'; x.font = '12px Nunito, sans-serif'; x.fillText('LOKAAL', 208, 47);
+  x.fillStyle = '#ffffff'; x.fillRect(206, 30, 40, 26); x.fillStyle = '#e8762b'; x.font = '12px Anton, sans-serif'; x.fillText('LOKAAL', 208, 47);
   x.fillStyle = '#5a3a1e'; x.fillRect(0, 18, 256, 4); // lijst
   x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(0, 124, 256, 4);
   grain(x, 256, 128, 10);
@@ -5296,7 +5681,7 @@ function setIndoor(on) {
     // buiten de gang is alles zwart: geen doorkijkje naar de lege wereld
     SKY.set('#000000'); scene.background = SKY; scene.fog.color.set('#000000'); scene.fog.near = 26; scene.fog.far = 80;
     document.body.style.background = '#000';
-    hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9080'); hemi.intensity = 2.0; sun.intensity = 0.8;
+    hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9080'); hemi.intensity = 2.0; sun.intensity = 0.8; lantern.intensity = 0;
     for (const g of lampGlows) g.visible = false;
     stars.visible = false; moon.visible = false; skyGroup.visible = false;
   } else applyLook(phaseT);
@@ -5346,7 +5731,7 @@ function makeIngang(forced) {
       x.fillStyle = '#e8e6e0'; x.fillRect(0, 0, 512, 128);
       x.fillStyle = '#1b1b1b'; x.fillRect(96, 28, 320, 100);
       x.fillStyle = '#f7941d'; x.fillRect(0, 0, 512, 24);
-      x.fillStyle = '#fff'; x.font = '20px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('MONTESSORI COLLEGE · IEDEREEN NAAR BINNEN', 256, 18);
+      x.fillStyle = '#fff'; x.font = '20px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('MONTESSORI COLLEGE · IEDEREEN NAAR BINNEN', 256, 18);
     }) });
     const w = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 4, 6), muur); w.position.y = 3; g.add(w);
     for (const sx of [-1, 1]) g.add(mesh(box(2, 6, 1), M('#e8e6e0'), sx * (ROAD_W / 2 + 1), 3, 0.5));
@@ -5356,7 +5741,7 @@ function makeIngang(forced) {
     for (const sx of [1.15, 3.25]) g.add(mesh(box(0.2, 3.2, 0.2), oranje, sx, 1.6, 0));
     g.add(mesh(box(2.4, 0.2, 0.2), oranje, 2.2, 3.2, 0));
     const bord = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.6), new THREE.MeshBasicMaterial({ map: canvasTex(256, 64, (x) => {
-      x.fillStyle = '#f7941d'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#fff'; x.font = '30px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillStyle = '#f7941d'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#fff'; x.font = '30px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillText('➜ SCHOOL IN', 128, 34);
     }), side: THREE.DoubleSide }));
     bord.position.set(2.2, 3.7, 0); g.add(bord);
@@ -5397,6 +5782,7 @@ function enterSchool() {
   nearT = 0;
   sfx.schoolbel();
   toast('🏫 Montessori College', 1.6);
+  lkKans = !curLevel && mode === 'telefoon' && Math.random() < 0.25;
 }
 function exitSchool() {
   nextSchoolDist = Math.max(nextSchoolDist, dist + 800);
@@ -5469,7 +5855,7 @@ function makeUitgang() {
   g.add(mesh(box(ROAD_W, 4.2, 0.2), M('#e8e2d2'), 0, 2.1, -0.2));
   g.add(mesh(box(3.4, 3.2, 0.1), new THREE.MeshBasicMaterial({ color: '#ffffff' }), 0, 1.6, -0.05));
   const bord = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.5), new THREE.MeshBasicMaterial({ map: canvasTex(256, 80, (x) => {
-    x.fillStyle = '#1f9a4a'; x.fillRect(0, 0, 256, 80); x.fillStyle = '#fff'; x.font = '36px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('🏃 UITGANG', 128, 42);
+    x.fillStyle = '#1f9a4a'; x.fillRect(0, 0, 256, 80); x.fillStyle = '#fff'; x.font = '36px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('🏃 UITGANG', 128, 42);
   }) }));
   bord.position.set(0, 3.6, 0.1); g.add(bord);
   return g;
@@ -5507,7 +5893,180 @@ function updateSchool(dt, m) {
     pose(jos, 'point', dt, clamp(speed / 12, 0.8, 1.6));
   }
   if (indoorStep === 3 && indoorT > SCHOOL_TIME - 1.6) { indoorStep = 4; addObj('deco', makeUitgang(), 0, -Math.max(12, speed * 1.5), 0, 0, 0); }
+  // soms staat de deur van de lerarenkamer open
+  if (lkKans && indoorT > 3.5) {
+    lkKans = false;
+    const z = -Math.max(34, speed * 3.2);
+    for (const o of objs) if (o.z > z - 10 && o.z < z + 10 && Math.abs(o.x - LANES[2]) < 1) o.dead = true;
+    addObj('lkdeur', makeLkDeur(), 0, z, 0, 0, 0);
+    toast('🚪 De lerarenkamer staat open!<small>Hou rechts aan om naar binnen te rennen</small>', 2.6);
+    bubble(jens.head, 'Hé, die deur is open!', 'shout', 1.6, 0.5);
+  }
   if (indoorT > SCHOOL_TIME) exitSchool();
+}
+// ---------- de lerarenkamer: exclusieve upgrades voor de rest van de run ----------
+const LK_ITEMS = [
+  { id: 'brommer', icon: '🛵', name: "Lev's schakelbrommer", price: 300, text: 'Langer onaantastbaar: de brommer duurt 1,7× zo lang en na een klap ben je 2,5× zo lang veilig.' },
+  { id: 'thunder', icon: '🎆', name: 'De Thunderking', price: 450, text: 'Schiet om de 7 seconden vuurwerk op alle drie de banen.' },
+  { id: 'plakker', icon: '🧑', name: 'Plakmaatje', price: 350, text: 'Een blonde vriend rent met je mee en plakt op elke paal een sticker. Meer punten.' },
+  { id: 'wk', icon: '🏆', name: 'De WK beker', price: 200, text: '2× bekers voor 10 seconden, zodra je de gang weer in rent.' },
+];
+let runUp = {}, wkT = 0, thunderT = 3, lkKans = false, lkRoom = null, lkPrev = 0;
+const LK_X = 700;
+// blond, strak achterovergekamd haar, geen naam
+const plakMaatje = makePerson({ key: 'plakmaatje', skin: '#f2d3bb', hair: '#e8cf7a', hairStyle: 'plat', shirt: { base: '#20242c', paint() {} }, pants: '#3a3f4a', shoes: '#eeeeee', face: { skin: '#f2d3bb', brow: '#c4a55c' }, scale: [0.92, 1, 0.92] });
+{
+  // het haar glad naar achteren: een lage kap die in de nek doorloopt
+  const kam = M('#e8cf7a');
+  plakMaatje.head.add(mesh(box(0.72, 0.16, 0.86), kam, 0, 0.3, 0.05));
+  plakMaatje.head.add(mesh(box(0.66, 0.24, 0.2), kam, 0, 0.14, 0.42));
+  plakMaatje.root.visible = false;
+  scene.add(plakMaatje.root);
+}
+function makeLkDeur() {
+  const g = new THREE.Group(), x = ROAD_W / 2 - 0.06;
+  const paneel = mesh(box(0.12, 3.1, 2.6), M('#5a3a1e'), x, 1.55, 0);
+  g.add(paneel);
+  g.add(mesh(box(0.08, 2.9, 2.2), new THREE.MeshBasicMaterial({ color: '#fff3c4' }), x - 0.05, 1.45, 0)); // licht uit de open deur
+  // poort over de rechterbaan: het bord staat recht naar je toe, de deur in de muur zie je pas laat
+  for (const px of [LANES[2] - 1.1, LANES[2] + 1.1]) g.add(mesh(box(0.2, 3.1, 0.2), M('#c8202b'), px, 1.55, 0));
+  const bord = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.7), new THREE.MeshBasicMaterial({ map: canvasTex(256, 52, (c) => {
+    c.fillStyle = '#c8202b'; c.fillRect(0, 0, 256, 52); c.fillStyle = '#fff'; c.font = '34px Anton, Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('LERARENKAMER', 128, 28);
+  }) }));
+  bord.position.set(LANES[2], 3.4, 0); g.add(bord);
+  for (let i = 1; i <= 4; i++) g.add(mesh(box(0.7, 0.02, 1.4), M('#fff3c4', { emissive: '#c9a640' }), LANES[2], 0.03, i * 5));
+  return g;
+}
+function buildLkRoom() {
+  const g = new THREE.Group(), muur = M('#d6d0bf'), vloer = M('#7a5a3a');
+  g.position.x = LK_X;
+  g.add(mesh(box(9, 0.1, 8), vloer, 0, -0.05, 0));
+  g.add(mesh(box(9, 3.2, 0.2), muur, 0, 1.6, 3.2));
+  g.add(mesh(box(0.2, 3.2, 8), muur, -4.2, 1.6, 0));
+  g.add(mesh(box(0.2, 3.2, 8), muur, 4.2, 1.6, 0));
+  g.add(mesh(box(9, 0.1, 8), M('#efeadd'), 0, 3.2, 0));
+  g.add(mesh(box(1.6, 0.05, 0.9), new THREE.MeshBasicMaterial({ color: '#fff6d8' }), 0, 3.14, 0));
+  // whiteboard
+  const wb = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.3).rotateY(Math.PI), new THREE.MeshBasicMaterial({ map: canvasTex(192, 84, (c) => {
+    c.fillStyle = '#f4f4f0'; c.fillRect(0, 0, 192, 84); c.fillStyle = '#c8202b'; c.font = '20px Anton, Impact, sans-serif'; c.textAlign = 'center'; c.fillText('NIET VOOR LEERLINGEN', 96, 28);
+    c.fillStyle = '#1f4fa8'; c.font = '13px Anton, Impact, sans-serif'; c.fillText('JENS: 14× TE LAAT', 96, 52); c.fillText('KOFFIE IS OP', 96, 70);
+  }) }));
+  wb.position.set(-0.9, 1.9, 3.08); g.add(wb);
+  // tafel, koffie, kluisjes
+  g.add(mesh(box(2.4, 0.08, 1.1), M('#8a6a44'), 1.5, 0.78, 1.2));
+  for (const [x, z] of [[0.45, 0.75], [2.55, 0.75], [0.45, 1.65], [2.55, 1.65]]) g.add(mesh(box(0.08, 0.78, 0.08), M('#5a4630'), x, 0.39, z));
+  g.add(mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.1, 6), M('#ffffff'), 1.1, 0.87, 1.0));
+  g.add(mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.1, 6), M('#c8202b'), 1.9, 0.87, 1.4));
+  g.add(mesh(box(0.7, 1.6, 0.6), M('#2a2a2e'), -3.5, 0.8, 2.6));
+  g.add(mesh(box(0.5, 0.4, 0.05), new THREE.MeshBasicMaterial({ color: '#ffb340' }), -3.5, 1.2, 2.28));
+  for (let i = 0; i < 4; i++) g.add(mesh(box(0.55, 2, 0.5), M(i % 2 ? '#e8762b' : '#d4661f'), 3.8, 1, 2.8 - i * 0.6));
+  // de spullen liggen op de tafel
+  const c = makeCup(0.5, bekerMat, 'high'); c.position.set(1.5, 0.98, 1.0); g.add(c);
+  // twee docenten aan de koffie
+  for (const [x, z, key] of [[0.2, 1.2, 'lkdocent1'], [2.9, 1.2, 'lkdocent2']]) {
+    const p = makePerson({ key, skin: '#e9bf9a', hair: x < 1 ? '#555' : '#8a5a32', hairStyle: 'kort', shirt: { base: x < 1 ? '#8fa9c4' : '#a0653a', paint() {} }, pants: '#333', shoes: '#222', face: { skin: '#e9bf9a' } });
+    p.root.position.set(x, 0, z); p.root.rotation.y = x < 1 ? -Math.PI / 2 : Math.PI / 2;
+    pose(p, 'seat', 1);
+    g.add(p.root);
+  }
+  scene.add(g);
+  return g;
+}
+function renderLk() {
+  $('#lkBekers').textContent = save.bekers.toLocaleString('nl-NL');
+  $('#lkList').innerHTML = LK_ITEMS.map((it) => `<button class="lk-item ${runUp[it.id] ? 'got' : save.bekers < it.price ? 'cant' : ''}" data-lk="${it.id}"><i>${it.icon}</i><b>${it.name}</b><em>${runUp[it.id] ? '✓ Gekocht' : `🏆 ${it.price}`}</em><small>${it.text}</small></button>`).join('');
+}
+function enterLk() {
+  fade();
+  lkRoom ||= buildLkRoom();
+  lkRoom.visible = true;
+  lkPrev = state;
+  state = 'lkamer';
+  $('#hud').classList.add('hidden');
+  hemi.color.set('#fff1d8'); hemi.intensity = 2.4; sun.intensity = 1.4;
+  jens.root.position.set(LK_X - 1.3, 0, 0);
+  jens.root.rotation.set(0, 0, 0);
+  jensBike.visible = false;
+  showScreen('#lkamer');
+  renderLk();
+  sfx.schoolbel();
+}
+function lkCamera() {
+  camera.position.set(LK_X - 0.2, 1.55, -3.9);
+  camera.lookAt(camera.aspect < 0.8 ? LK_X - 1.3 : LK_X - 0.1, camera.aspect < 0.8 ? 0.2 : 1.15, 2);
+  pose(jens, 'idle', 0.03);
+}
+$('#lkList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lk]');
+  if (!b) return;
+  const it = LK_ITEMS.find((x) => x.id === b.dataset.lk);
+  if (runUp[it.id]) return;
+  if (save.bekers < it.price) { note(`Je mist nog ${it.price - save.bekers} bekers`); tone(180, 0.15, 'square', 0.06); return; }
+  save.bekers -= it.price; persist();
+  runUp[it.id] = true;
+  sfx.power();
+  renderLk();
+});
+$('#lkBack').addEventListener('click', () => {
+  fade();
+  lkRoom.visible = false;
+  showScreen(null);
+  $('#hud').classList.remove('hidden');
+  jensBike.visible = true;
+  jens.root.position.set(player.x, player.y, 0);
+  hemi.color.set('#ffffff'); hemi.groundColor.set('#9a9080'); hemi.intensity = 2.0; sun.intensity = 0.8;
+  state = 'run';
+  invulnT = Math.max(invulnT, 1);
+  if (runUp.wk && !runUp.wkUsed) { runUp.wkUsed = true; wkT = 10; }
+  if (runUp.plakker) { plakMaatje.root.visible = true; plakMaatje.root.position.set(player.x + 1, 0, 4); }
+  if (runUp.thunder) thunderT = 2;
+});
+// volley op alle drie de banen
+function thunderVolley() {
+  LANES.forEach((lx, i) => setTimeout(() => {
+    if (state !== 'run') return;
+    let target = null;
+    for (const o of objs) {
+      if (!(SLOOPBAAR.has(o.kind) || o.gen) || o.hit || o.kind === 'deco') continue;
+      if (o.z > -1.5 || o.z < -55 || Math.abs(o.x - lx) > o.w / 2 + 0.7) continue;
+      if (!target || o.z > target.z) target = o;
+    }
+    const m = makeNitraat();
+    m.position.set(lx, 1.3, -0.4);
+    scene.add(m);
+    shots.push({ mesh: m, x: lx, z: -0.4, t: 0, target, startZ: -0.4 });
+    sfx.sis();
+  }, i * 110));
+}
+// het plakmaatje rent naar de eerstvolgende paal en plakt er een sticker op
+function updateUpgrades(dt) {
+  if (wkT > 0) wkT -= dt;
+  if (runUp.thunder && !indoor && (thunderT -= dt) <= 0) { thunderT = 7; thunderVolley(); }
+  if (!runUp.plakker) return;
+  const pm = plakMaatje.root;
+  pm.visible = !indoor && !seg?.active;
+  if (!pm.visible) return;
+  let next = null;
+  for (const d of decor) if (d.kind === 'makeLamp') for (const it of d.items) {
+    if (it.userData.sticker || it.position.z > 1.2 || it.position.z < -40) continue;
+    if (!next || it.position.z > next.position.z) next = it;
+  }
+  const tx = next ? Math.sign(next.position.x) * (ROAD_W / 2 + 0.05) : player.x + 1.4;
+  pm.position.x = damp(pm.position.x, tx, next && next.position.z > -14 ? 2.6 : 1.1, dt);
+  pm.position.z = damp(pm.position.z, 0.3, 2, dt);
+  pose(plakMaatje, 'run', dt, clamp(speed / 12, 0.8, 1.6));
+  if (next && next.position.z > -1.1) {
+    const side = Math.sign(next.position.x);
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.34).rotateY(side < 0 ? Math.PI / 2 : -Math.PI / 2), stickerMat);
+    pl.position.set(-side * 0.1, 1.45, 0);
+    next.add(pl);
+    next.userData.sticker = pl;
+    const pts = 60 * (bekerT > 0 ? 2 : 1) * scoreMult();
+    score += pts;
+    missionEvent('sticker');
+    tone(240, 0.08, 'square', 0.05);
+    runPop('+' + pts, 'good small');
+  }
 }
 
 // =====================================================================
@@ -6146,7 +6705,7 @@ function segArch(text, color) {
   for (const sx of [-1, 1]) g.add(mesh(box(0.35, 6, 0.35), M(color), sx * (ROAD_W / 2 + 0.6), 3, 0));
   const t = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 1.6, 1.3), new THREE.MeshBasicMaterial({ map: canvasTex(512, 84, (x) => {
     x.fillStyle = color; x.fillRect(0, 0, 512, 84); x.fillStyle = '#ffd23f'; for (let i = 0; i < 512; i += 24) { x.beginPath(); x.arc(i + 12, 8, 5, 0, 7); x.fill(); x.beginPath(); x.arc(i + 12, 76, 5, 0, 7); x.fill(); }
-    x.fillStyle = '#fff'; x.font = '44px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 44, 490);
+    x.fillStyle = '#fff'; x.font = '44px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 44, 490);
   }), side: THREE.DoubleSide }));
   t.position.y = 6.2; g.add(t);
   return g;
@@ -7021,7 +7580,7 @@ Object.assign(CUTS, {
       cutGround(true);
       const gf = LANDMARKS.goffert(); gf.g.position.set(9, 0, -14); cutStage.add(gf.g);
       const j = cutJens(); j.root.position.set(0, 0, 0); j.root.rotation.y = 0.2; cutStage.add(j.root);
-      const cup = makeCup(1.4, new THREE.MeshLambertMaterial({ color: '#e8e8ec', emissive: '#4a4a55' })); cup.position.set(0, 2.55, -0.05); j.root.add(cup);
+      const cup = makeCup(1.4, new THREE.MeshLambertMaterial({ color: '#e8e8ec', emissive: '#4a4a55' }), 'high'); cup.position.set(0, 2.55, -0.05); j.root.add(cup);
       return { j, cup };
     },
     shots: [
@@ -7222,7 +7781,7 @@ function updateCombo(dt) {
   if (key >= 0) el.innerHTML = `🔥 ${combo} <b>×${comboMult().toFixed(2).replace(/\.?0+$/, '')}</b>${feverT > 0 ? ` <i class="koorts">KOORTS ×2 · ${Math.ceil(feverT)}s</i>` : ''}`;
 }
 // een obstakel passeert Jens (z gaat door 0): rakelings, eroverheen of eronderdoor?
-const NO_COMBO = new Set(['beker', 'power', 'deco', 'sign', 'landmark', 'checkpoint', 'finish', 'ingang', 'schat', 'kaart', 'fork']);
+const NO_COMBO = new Set(['beker', 'power', 'deco', 'sign', 'landmark', 'checkpoint', 'finish', 'ingang', 'lkdeur', 'schat', 'kaart', 'fork']);
 function comboPass(o) {
   if (state !== 'run' || o.hit || o.dead || NO_COMBO.has(o.kind) || !o.w) return;
   const edge = Math.abs(player.x - o.x) - o.w / 2;
@@ -7380,7 +7939,7 @@ function makeSpandoek(f) {
   const tex = canvasTex(512, 64, (x) => {
     for (let i = 0; i < 16; i++) { x.fillStyle = f.colors[i % f.colors.length]; x.fillRect(i * 32, 0, 32, 8); x.fillRect(i * 32, 56, 32, 8); }
     x.fillStyle = '#141414'; x.fillRect(0, 8, 512, 48);
-    x.fillStyle = '#ffffff'; x.font = '36px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#ffffff'; x.font = '36px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText(`${f.icon} ${f.banner} ${f.icon}`, 256, 34, 496);
   });
   const p = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 0.6, 1.0), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
@@ -7425,7 +7984,7 @@ function makeTrofee() {
   const g = new THREE.Group();
   const kl = ['#c8202b', '#1f7a3a', '#141414'];
   for (let i = 0; i < 3; i++) g.add(mesh(box(0.9, 0.6, 0.9), M(kl[i]), 0, 0.3 + i * 0.6, 0));
-  const cup = makeCup(2.6, new THREE.MeshLambertMaterial({ color: '#ffd23f', emissive: '#7a4f00' }));
+  const cup = makeCup(2.6, bekerMat, 'high');
   cup.position.y = 2.6; g.add(cup);
   return g;
 }
@@ -7653,8 +8212,8 @@ async function shareChallenge() {
   const url = `${location.origin}/daag?m=${lastRun.mode}&s=${lastRun.score}&n=${encodeURIComponent(save.name || 'Iemand')}${feest ? `&f=${feest}` : ''}`;
   const text = `Ik haalde ${lastRun.score.toLocaleString('nl-NL')} punten in Jens Run (${MODES[lastRun.mode].label}). Versla me dan!`;
   try {
-    if (navigator.share) await navigator.share({ title: 'Jens Run', text, url });
-    else { await navigator.clipboard.writeText(`${text} ${url}`); note('📋 Link gekopieerd, plak hem in de groepsapp!'); }
+    if (navigator.share) await navigator.share({ title: 'Jens Run', text: stripEmoji(text), url });
+    else { await navigator.clipboard.writeText(`${stripEmoji(text)} ${url}`); note('📋 Link gekopieerd, plak hem in de groepsapp!'); }
   } catch (e) { /* geannuleerd */ }
 }
 $('#shareBtn').addEventListener('click', shareChallenge);
@@ -9003,9 +9562,9 @@ function makeForkSign() {
   for (const sx of [-1, 1]) g.add(mesh(box(0.15, 5, 0.15), M('#8a8f96'), sx * (ROAD_W / 2 + 0.3), 2.5, 0));
   const tex = canvasTex(512, 96, (x) => {
     x.fillStyle = '#1f6b3a'; x.fillRect(0, 0, 256, 96); x.fillStyle = '#1b3f8f'; x.fillRect(256, 0, 256, 96);
-    x.fillStyle = '#fff'; x.font = '34px Lilita One, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#fff'; x.font = '34px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText('◀ PARK', 128, 34); x.fillText('STRAAT ▶', 384, 34);
-    x.font = '18px Nunito, sans-serif'; x.fillText('meer bekers, meer obstakels', 128, 70); x.fillText('rustig doorrennen', 384, 70);
+    x.font = '18px Anton, sans-serif'; x.fillText('meer bekers, meer obstakels', 128, 70); x.fillText('rustig doorrennen', 384, 70);
   });
   const p = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W + 0.6, 1.3), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
   p.position.y = 4.7; g.add(p);
@@ -9034,7 +9593,7 @@ function updatePath() {
 let nextSchat = 700;
 function spawnSchat(lane, z) {
   spawnObstacle('kliko', lane, z);
-  const cup = makeCup(2.2, new THREE.MeshLambertMaterial({ color: '#ffe24a', emissive: '#a86b00' }));
+  const cup = makeCup(2.2, bekerMat, 'high');
   addObj('schat', cup, LANES[lane], z, 0, 0, 0, { y: 2.55, upd(o) { o.mesh.rotation.y += 0.08; if (Math.random() < 0.3) burst(new THREE.Vector3(o.x + rand(-0.4, 0.4), o.y + rand(-0.3, 0.5), o.z), 1, 0.5, fwMats[1], 0.4); } });
 }
 function collectSchat(o) {
@@ -9352,7 +9911,7 @@ function buildKamer() {
   for (let i = 0; i < n; i++) { const c = makeCup(0.35); c.position.set(-0.8 + i * 0.25, 1.86, -4.2); kamer.add(c); }
   use(0.6, 1.9, -4.2, 0.8, () => `Prijzenkast (${Object.keys(save.ach || {}).length}/${ACH.length})`, () => ossoTo(() => $('#achBtn').click()));
   if (save.story?.hatert?.cleared || save.story?.arena?.cleared) {
-    const c = makeCup(1.1, new THREE.MeshLambertMaterial({ color: '#ffe24a', emissive: '#a86b00' })); c.position.set(-3.2, 0.45, -1); kamer.add(c); col(-3.6, -1.4, -2.8, -0.6);
+    const c = makeCup(1.1, bekerMat, 'high'); c.position.set(-3.2, 0.45, -1); kamer.add(c); col(-3.6, -1.4, -2.8, -0.6);
     use(-3.2, 1, -1, 0.6, () => 'De echte beker', () => { if (!playClip('dbivo', true)) speak('Die beker is van ons!'); noteOsso('🏆 DIE BEKER IS VAN ONS!'); });
   }
   // plakboek op het bureau
@@ -9704,11 +10263,22 @@ const OSSO_ITEMS = [
   { id: 'snoep', icon: '🍬', name: 'Snoepautomaat', price: 900 },
   { id: 'kerstboom', icon: '🎄', name: 'Kerstboom', price: 600 },
   { id: 'goudwc', icon: '🚽', name: 'Gouden wc', price: 2400 },
+  { id: 'boombox', icon: '📻', name: 'JBL Boombox 5', price: 1500 },
+  { id: 'flip', icon: '🔊', name: 'JBL Flip 5', price: 500 },
+  { id: 'ps4', icon: '🎮', name: 'PS4', price: 1100 },
+  { id: 'dvd', icon: '📀', name: 'Rammstein dvd-collectie', price: 420 },
+  { id: 'jensfiets', icon: '🚲', name: 'Jens zijn fiets', price: 800 },
+  { id: 'vouwfiets', icon: '🚲', name: 'Witte vouwfiets', price: 650 },
+  { id: 'vwdoos', icon: '📦', name: 'Vuurwerkdoos', price: 380 },
+  { id: 'cakes', icon: '🎆', name: 'Cakeboxen', price: 700 },
+  { id: 'lawine', icon: '🚀', name: 'Lawinepijlen', price: 550 },
+  { id: 'munitie', icon: '🧨', name: 'Munitiekist met rotjes', price: 480 },
 ];
 const ossoHas = (id) => !!save.ossoItems?.[id];
 let disco = null;
 function buildOssoItems(col, solid, use) {
   disco = null;
+  buildOssoItems2(col, solid, use);
   if (ossoHas('gamekast')) {
     const scr = canvasTex(64, 48, (x) => { x.fillStyle = '#05070c'; x.fillRect(0, 0, 64, 48); x.fillStyle = '#ff8a00'; x.font = 'bold 11px monospace'; x.fillText('JENS', 16, 18); x.fillText('RUN', 20, 32); x.fillStyle = '#ffd23f'; x.fillRect(8, 40, 48, 2); });
     solid(0.9, 1.8, 0.8, M('#1f4fa8'), -3.4, 0.9, 9.3);
@@ -9751,6 +10321,74 @@ function buildOssoItems(col, solid, use) {
     kamer.add(mesh(new THREE.ConeGeometry(0.7, 1.9, 8), M('#2e6b35'), -3.3, 1.15, 3.4)); col(-3.9, 2.8, -2.7, 4.0);
     kamer.add(mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.3, 8), M('#6b4a2e'), -3.3, 0.15, 3.4));
     for (let i = 0; i < 9; i++) { const a = i * 2.3, h = 0.4 + (i / 9) * 1.4, r = 0.65 * (1 - (h - 0.2) / 1.9); kamer.add(mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshBasicMaterial({ color: pick(['#ffd23f', '#e8203a', '#4dd2ff']) }), -3.3 + Math.cos(a) * r, h + 0.2, 3.4 + Math.sin(a) * r)); }
+  }
+}
+function buildOssoItems2(col, solid, use) {
+  const rood = M('#c8202b'), zwart = M('#141416'), wit = M('#f2f2f2');
+  const labelTex = (w, h, bg, fg, txt, sz) => canvasTex(w, h, (x) => { x.fillStyle = bg; x.fillRect(0, 0, w, h); x.fillStyle = fg; x.font = `${sz}px Anton, Impact, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, w / 2, h / 2 + 1, w - 4); });
+  const jbl = (w, h) => new THREE.MeshBasicMaterial({ map: labelTex(64, 32, '#e8641b', '#fff', 'JBL', 22) });
+  const speel = (msg) => { tone(82, 0.2, 'sine', 0.2); tone(110, 0.2, 'sine', 0.18, null, 0.22); tone(82, 0.3, 'sine', 0.2, null, 0.44); noteOsso(msg); };
+  if (ossoHas('boombox')) {
+    // grote zwarte draagbare speaker met handvat op de vloer
+    solid(0.95, 0.42, 0.42, zwart, -3.3, 0.21, 4.75);
+    kamer.add(mesh(box(0.8, 0.05, 0.05), M('#333'), -3.3, 0.62, 4.75), mesh(box(0.05, 0.2, 0.05), M('#333'), -3.68, 0.52, 4.75), mesh(box(0.05, 0.2, 0.05), M('#333'), -2.92, 0.52, 4.75));
+    for (const sx of [-0.28, 0.28]) { const c = mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 10).rotateX(Math.PI / 2), M('#34343a'), -3.3 + sx, 0.21, 4.53); kamer.add(c); }
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1).rotateY(Math.PI), jbl()); b.position.set(-3.3, 0.21, 4.51); kamer.add(b);
+    use(-3.3, 0.4, 4.75, 0.7, () => 'JBL Boombox 5 aanzetten', () => speel('📻 De hele straat kan meegenieten.'));
+  }
+  if (ossoHas('flip')) {
+    kamer.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 8).rotateZ(Math.PI / 2), M('#1f4fa8'), -1.7, 0.46, 6.0));
+    use(-1.7, 0.5, 6.0, 0.5, () => 'JBL Flip 5 aanzetten', () => speel('🔊 Klein, maar hard genoeg voor de buren.'));
+  }
+  if (ossoHas('ps4')) {
+    kamer.add(mesh(box(0.28, 0.05, 0.4), zwart, -3.6, 0.73, 7.05));
+    kamer.add(mesh(box(0.3, 0.01, 0.42), M('#26262c'), -3.6, 0.76, 7.05));
+    kamer.add(mesh(box(0.02, 0.01, 0.2), new THREE.MeshBasicMaterial({ color: '#4dc2ff' }), -3.44, 0.73, 7.05));
+    kamer.add(mesh(box(0.16, 0.03, 0.09), zwart, -1.7, 0.42, 6.9));
+    use(-3.6, 0.8, 7.05, 0.6, () => 'PS4 aanzetten', () => { tone(330, 0.5, 'sine', 0.08); tone(495, 0.7, 'sine', 0.07, null, 0.2); noteOsso(`🎮 ${pick(['FIFA, even tegen je broertje.', 'Nog één potje dan.', 'Updaten: nog 47 minuten.'])}`); });
+  }
+  if (ossoHas('dvd')) {
+    // stapel dvd's met het logo op de voorste
+    for (let i = 0; i < 7; i++) kamer.add(mesh(box(0.14, 0.02, 0.19), M(i % 2 ? '#20242a' : '#2c2c2c'), -1.42, 0.41 + i * 0.022, 7.0));
+    const t = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.18).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: labelTex(32, 44, '#111', '#ff5a14', 'RAMMSTEIN', 8) })); t.position.set(-1.42, 0.569, 7.0); kamer.add(t);
+    use(-1.42, 0.55, 7.0, 0.45, () => 'Rammstein dvd opzetten', () => { fp.tv = true; noise(0.1, 0.1); noteOsso('📀 Jens kijkt Live aus Berlin. Voor de negende keer.'); });
+  }
+  if (ossoHas('jensfiets')) {
+    const f = mergeStatic(makeBike('#c8202b'));
+    f.position.set(2.2, 0, 4.45); f.rotation.y = Math.PI / 2; kamer.add(f);
+    use(2.2, 0.7, 4.45, 0.9, () => 'Jens zijn fiets', () => { sfx.bel(); noteOsso('🚲 Op deze fiets zijn de beste filmpjes gemaakt.'); });
+  }
+  if (ossoHas('vouwfiets')) {
+    // ingeklapt: twee kleine wielen naast elkaar, wit frame ertussen
+    for (const z of [-0.1, 0.1]) { const w = wheel(0.2, 0.04, zwart); w.position.set(5.6, 0.2, 5.2 + z); kamer.add(w); }
+    kamer.add(mesh(box(0.42, 0.06, 0.05), wit, 5.6, 0.3, 5.2), mesh(box(0.05, 0.62, 0.05), wit, 5.72, 0.42, 5.2), mesh(box(0.05, 0.42, 0.05), wit, 5.46, 0.42, 5.28), mesh(box(0.2, 0.05, 0.1), wit, 5.46, 0.64, 5.28), mesh(box(0.24, 0.04, 0.04), wit, 5.72, 0.74, 5.2));
+    use(5.6, 0.5, 5.2, 0.6, () => 'Witte vouwfiets', () => { noise(0.1, 0.1); noteOsso('🚲 Inklappen duurt langer dan ernaartoe lopen.'); });
+  }
+  if (ossoHas('vwdoos')) {
+    const t = new THREE.MeshLambertMaterial({ map: labelTex(64, 40, '#b8863f', '#c8202b', 'VUURWERK', 12) });
+    solid(0.6, 0.42, 0.45, t, 0.5, 0.21, 9.45);
+    use(0.5, 0.4, 9.45, 0.6, () => 'Vuurwerkdoos bekijken', () => { noise(0.08, 0.08); noteOsso('📦 Alles nog in de doos. Tot het 31 december is.'); });
+  }
+  if (ossoHas('cakes')) {
+    const t = new THREE.MeshLambertMaterial({ map: labelTex(48, 48, '#23345e', '#ffd23f', 'CAKE', 15) });
+    const t2 = new THREE.MeshLambertMaterial({ map: labelTex(48, 48, '#7a1c24', '#ffffff', '100 SH', 12) });
+    solid(0.5, 0.4, 0.5, t, 1.5, 0.2, 9.45); kamer.add(mesh(box(0.42, 0.36, 0.42), t2, 1.5, 0.58, 9.45), mesh(box(0.42, 0.36, 0.42), t, 1.5, 0.94, 9.45));
+    use(1.5, 0.7, 9.45, 0.6, () => 'Cakeboxen tellen', () => noteOsso('🎆 Drie cakes. Dat is niet genoeg.'));
+  }
+  if (ossoHas('lawine')) {
+    // bundel pijlen in een emmer
+    kamer.add(mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.3, 8), M('#5a5e64'), -3.5, 0.15, 3.0 + (ossoHas('kerstboom') ? -4.2 : 0)));
+    const z0 = 3.0 + (ossoHas('kerstboom') ? -4.2 : 0);
+    for (let i = 0; i < 6; i++) { const a = i * 1.05, st = mesh(box(0.012, 0.95, 0.012), M('#c9a874'), -3.5 + Math.cos(a) * 0.06, 0.62, z0 + Math.sin(a) * 0.06); st.rotation.set(Math.sin(a) * 0.1, 0, Math.cos(a) * 0.1); kamer.add(st); kamer.add(mesh(new THREE.ConeGeometry(0.03, 0.12, 5), M(i % 2 ? '#c8202b' : '#1f4fa8'), -3.5 + Math.cos(a) * 0.1, 1.12, z0 + Math.sin(a) * 0.1)); }
+    use(-3.5, 0.7, z0, 0.6, () => 'Lawinepijlen', () => { tone(1400, 0.4, 'sine', 0.05, 2400); noteOsso('🚀 Er zit "lawine" in de naam. Dat is geen grapje.'); });
+  }
+  if (ossoHas('munitie')) {
+    // legergroene kist, open, met rode en bruine rotjes
+    solid(0.7, 0.32, 0.42, M('#3f4a2a'), -0.6, 0.16, 9.45);
+    kamer.add(mesh(box(0.62, 0.02, 0.34), M('#22281a'), -0.6, 0.325, 9.45));
+    for (let i = 0; i < 18; i++) kamer.add(mesh(box(0.03, 0.015, 0.09), M(i % 2 ? '#c8202b' : '#6b4226'), -0.86 + (i % 6) * 0.1, 0.34, 9.33 + Math.floor(i / 6) * 0.11));
+    kamer.add(mesh(box(0.72, 0.03, 0.44), M('#4a5632'), -0.6, 0.55, 9.65));
+    use(-0.6, 0.4, 9.45, 0.6, () => 'Munitiekist', () => { noise(0.05, 0.25); noise(0.05, 0.25, 0.09); noteOsso('🧨 Rode voor buiten, bruine voor de echte liefhebber.'); });
   }
 }
 function renderOssoShop() {
@@ -9947,7 +10585,7 @@ function takePhotoNow() {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
   x.drawImage(canvas, 0, 0, W, H);
-  x.font = `${Math.round(H * 0.045)}px "Press Start 2P", monospace`; x.fillStyle = '#ffe14a'; x.textAlign = 'right';
+  x.font = `${Math.round(H * 0.045)}px Anton, Impact, sans-serif`; x.fillStyle = '#ffe14a'; x.textAlign = 'right';
   x.strokeStyle = '#000'; x.lineWidth = 8; x.strokeText('JENS RUN', W - 24, H - 24); x.fillText('JENS RUN', W - 24, H - 24);
   c.toBlob(async (blob) => {
     if (!blob) return;
@@ -10164,7 +10802,7 @@ $('#socialBtn').addEventListener('click', () => openSocial());
 
 // meldingen: elke minuut kijken (ook de Android-app laat ze als telefoonmelding zien)
 let unread = 0;
-function updateBell() { $('#socialBtn').dataset.n = $('#mBell').dataset.n = $('#samenBtn').dataset.n = $('#mSamen').dataset.n = unread || ''; }
+function updateBell() { $('#socialBtn').dataset.n = $('#fmBell').dataset.n = $('#mBell').dataset.n = $('#samenBtn').dataset.n = $('#mSamen').dataset.n = unread || ''; }
 async function pollNotifs() {
   if (!save.name) return;
   try {
@@ -10532,7 +11170,7 @@ if (location.hash === '#autostart') setTimeout(() => { leaveStart(); startRun();
 updateCamera(1);
 // debug hook voor tests
 // =====================================================================
-//  MINIGAMES: Glijden, Vuurwerk en Mijn Osso. Elk een eigen scène en camera,
+//  MINIGAMES: Asbest, Vuurwerk en Mijn Osso. Elk een eigen scène en camera,
 //  de straat van het rennen blijft gewoon staan voor het menu.
 // =====================================================================
 const MINI_MODES = ['glijden', 'vuurwerk', 'osso'];
@@ -10806,105 +11444,97 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && state === 'mini' && mini.kind === 'osso' && !mini.over) miniPause(true); });
 
 // =====================================================================
-//  GLIJDEN: op een asbestplaat over een eindeloze glijbaan boven de Waal
+//  ASBEST: op een asbestplaat van een gigantische berg af, steeds harder
 // =====================================================================
-const GL_CHUNK = 30, GL_ROW = 2; // rijen per stuk baan, meter per rij
-const glCx = (s) => Math.sin(s * 0.011) * 9 + Math.sin(s * 0.029 + 1.3) * 4 * clamp(s / 500, 0.25, 1.6);
-const glY = (s) => -s * 0.28 + Math.sin(s * 0.045) * 0.8;
-const glW = (s) => Math.max(3.4, 6.6 - s / 700);
-// dwarsdoorsnede van de glijbaan: vlakke bodem, opstaande ronde randen (u = -1 … 1 over de breedte)
-const GL_FLAT = 0.58, GL_RIM = 0.7;
+const GL_CHUNK = 18, GL_ROW = 4; // rijen per stuk berg, meter per rij
+const glCx = (s) => Math.sin(s * 0.0035) * 16 + Math.sin(s * 0.0091 + 1.3) * 7;
+const glY = (s) => -s * 0.42 + Math.sin(s * 0.018) * 2.2;
+const glW = () => 46; // veel breder dan de oude glijbaan
+// dwarsdoorsnede: brede vlakte, aan de randen rijst de berg steil op (u = -1 … 1 over de breedte)
+const GL_FLAT = 0.84, GL_RIM = 13;
 const glH = (u) => { const a = Math.min(1, Math.abs(u)); return a <= GL_FLAT ? 0 : GL_RIM * ((a - GL_FLAT) / (1 - GL_FLAT)) ** 2; };
 const glDH = (u) => { const a = Math.abs(u); return a <= GL_FLAT || a > 1 ? 0 : Math.sign(u) * 2 * GL_RIM * (a - GL_FLAT) / (1 - GL_FLAT) ** 2; };
-const GL_US = [-1, -0.93, -0.86, -0.79, -0.72, -0.65, -GL_FLAT, GL_FLAT, 0.65, 0.72, 0.79, 0.86, 0.93, 1];
-let glPlaatTex = null, glWaterTex = null, glBaanTex = null;
+const GL_US = [-1, -0.96, -0.92, -0.88, -GL_FLAT, -0.64, -0.42, -0.21, 0, 0.21, 0.42, 0.64, GL_FLAT, 0.88, 0.92, 0.96, 1];
+// kleine hobbels voor de vorm (Jens glijdt er gewoon overheen), zodat het licht per hoekpunt mooi verloopt
+const glBump = (u, s) => (Math.sin(u * 19 + s * 0.13) + Math.sin(u * 7 - s * 0.07)) * (Math.abs(u) > GL_FLAT ? 0.9 : 0.16);
+let glPlaatTex = null, glBergTex = null;
 function glMats() {
-  glBaanTex ||= markShared(canvasTex(64, 64, (x) => {
-    // gele kunststof glijbaan met glimstrepen in de lengte en naden ertussen
-    x.fillStyle = '#f2b51d'; x.fillRect(0, 0, 64, 64);
-    for (let i = 0; i < 64; i += 8) { x.fillStyle = 'rgba(255,240,170,.35)'; x.fillRect(i + 2, 0, 2, 64); }
-    x.fillStyle = 'rgba(120,70,0,.45)'; x.fillRect(0, 0, 64, 2);
-    grain(x, 64, 64, 8);
+  glBergTex ||= markShared(canvasTex(64, 64, (x) => {
+    // verweerde grijze golfplaten en stof
+    x.fillStyle = '#b9b3a4'; x.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 64; i += 4) { x.fillStyle = i % 8 ? 'rgba(255,250,235,.16)' : 'rgba(40,36,28,.22)'; x.fillRect(i, 0, 2, 64); }
+    for (let i = 0; i < 26; i++) { x.fillStyle = pick(['rgba(70,60,45,.3)', 'rgba(255,255,240,.22)', 'rgba(120,70,40,.22)']); x.fillRect(rand(0, 60), rand(0, 60), rand(2, 10), rand(1, 5)); }
+    x.fillStyle = 'rgba(30,26,20,.5)'; x.fillRect(0, 0, 64, 1); x.fillRect(0, 32, 64, 1);
+    grain(x, 64, 64, 14);
   }));
-  glBaanTex.wrapS = glBaanTex.wrapT = THREE.RepeatWrapping;
+  glBergTex.wrapS = glBergTex.wrapT = THREE.RepeatWrapping;
   glPlaatTex ||= canvasTex(64, 64, (x) => {
-    // golfplaat: grijze ribbels met vlekken
     for (let i = 0; i < 64; i++) { const l = 150 + Math.round(Math.sin(i / 64 * Math.PI * 8) * 22); x.fillStyle = `rgb(${l},${l},${l - 6})`; x.fillRect(i, 0, 1, 64); }
     grain(x, 64, 64, 18);
     x.fillStyle = 'rgba(90,80,60,.25)'; for (let i = 0; i < 6; i++) x.fillRect(rand(0, 60), rand(0, 60), rand(3, 9), rand(3, 9));
   });
   glPlaatTex.wrapS = glPlaatTex.wrapT = THREE.RepeatWrapping;
-  glWaterTex ||= canvasTex(64, 64, (x) => {
-    x.fillStyle = '#4a6a78'; x.fillRect(0, 0, 64, 64);
-    for (let i = 0; i < 70; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(160,200,215,.35)' : 'rgba(30,50,60,.35)'; x.fillRect(rand(0, 60), rand(0, 64), rand(4, 12), 1); }
-  });
-  glWaterTex.wrapS = glWaterTex.wrapT = THREE.RepeatWrapping;
-  markShared(glPlaatTex); markShared(glWaterTex);
+  markShared(glPlaatTex);
 }
 function glChunk(k) {
-  const pos = [], uv = [], rand2 = [];
+  const pos = [], uv = [];
   const row = (r) => { const s = (k * GL_CHUNK + r) * GL_ROW; return { s, z: -s, cx: glCx(s), y: glY(s), w: glW(s) }; };
-  const pt = (o, u) => [o.cx + u * o.w / 2, o.y + glH(u), o.z];
+  const pt = (o, u) => [o.cx + u * o.w / 2, o.y + glH(u) + glBump(u, o.s), o.z];
   const quad = (arr, A, B, C, D) => arr.push(...A, ...B, ...C, ...A, ...C, ...D);
   for (let r = 0; r < GL_CHUNK; r++) {
-    const a = row(r), b = row(r + 1), va = a.s / 3, vb = b.s / 3;
-    // binnenkant van de bak
+    const a = row(r), b = row(r + 1), va = a.s / 9, vb = b.s / 9;
     for (let i = 0; i < GL_US.length - 1; i++) {
-      const u0 = GL_US[i], u1 = GL_US[i + 1];
+      const u0 = GL_US[i], u1 = GL_US[i + 1], t0 = u0 * 5, t1 = u1 * 5;
       quad(pos, pt(a, u0), pt(a, u1), pt(b, u1), pt(b, u0));
-      uv.push(u0 * 2, va, u1 * 2, va, u1 * 2, vb, u0 * 2, va, u1 * 2, vb, u0 * 2, vb);
+      uv.push(t0, va, t1, va, t1, vb, t0, va, t1, vb, t0, vb);
     }
-    // rode rand bovenop en de onderkant
-    for (const sg of [-1, 1]) {
-      const lipA = [a.cx + sg * (a.w / 2 + 0.14), a.y + GL_RIM, a.z], lipB = [b.cx + sg * (b.w / 2 + 0.14), b.y + GL_RIM, b.z];
-      quad(rand2, pt(a, sg), lipA, lipB, pt(b, sg));
-      quad(rand2, lipA, [lipA[0], a.y - 0.35, a.z], [lipB[0], b.y - 0.35, b.z], lipB);
-    }
-    quad(rand2, [a.cx - a.w / 2 - 0.14, a.y - 0.35, a.z], [a.cx + a.w / 2 + 0.14, a.y - 0.35, a.z], [b.cx + b.w / 2 + 0.14, b.y - 0.35, b.z], [b.cx - b.w / 2 - 0.14, b.y - 0.35, b.z]);
   }
   const g = new THREE.Group();
   const top = new THREE.BufferGeometry();
   top.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); top.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); top.computeVertexNormals();
-  g.add(new THREE.Mesh(top, new THREE.MeshLambertMaterial({ map: glBaanTex, side: THREE.DoubleSide })));
-  const rg = new THREE.BufferGeometry();
-  rg.setAttribute('position', new THREE.Float32BufferAttribute(rand2, 3)); rg.computeVertexNormals();
-  g.add(new THREE.Mesh(rg, M('#c8202b', { side: THREE.DoubleSide })));
-  // rode steunpalen tot diep in de Waal
-  for (const r of [0, 15]) {
-    const a = row(r);
-    g.add(mesh(box(0.7, 26, 0.7), M('#b51c26'), a.cx, a.y - 13.4, a.z));
-    g.add(mesh(box(a.w + 0.6, 0.35, 0.5), M('#b51c26'), a.cx, a.y - 0.5, a.z));
-  }
+  g.add(new THREE.Mesh(top, cached('glBergMat', () => new THREE.MeshLambertMaterial({ map: glBergTex, side: THREE.DoubleSide }))));
   g.userData.k = k;
   return g;
 }
-// de Waalbrug langs de Waal: groene boog, rijdek en pijlers (één stuk, geen losse buizen meer)
-function glBrug() {
-  const g = new THREE.Group(), groen = M('#2f6a3f'), grijs = M('#6f7377'), len = 140, h = 22;
-  g.add(mesh(box(10, 1, len), grijs, 0, 9, 0));
-  for (const sx of [-4.6, 4.6]) {
-    g.add(mesh(box(0.25, 1.1, len), groen, sx, 10.1, 0));
-    const n = 14;
-    for (let i = 0; i < n; i++) {
-      const t0 = i / n, t1 = (i + 1) / n, y0 = 9.5 + Math.sin(t0 * Math.PI) * h, y1 = 9.5 + Math.sin(t1 * Math.PI) * h, z0 = -len / 2 + t0 * len, z1 = -len / 2 + t1 * len;
-      const l = Math.hypot(y1 - y0, z1 - z0), seg = mesh(box(1.3, 1.3, l + 0.3), groen, sx, (y0 + y1) / 2, (z0 + z1) / 2);
-      seg.rotation.x = -Math.atan2(y1 - y0, z1 - z0); g.add(seg);
-      if (i > 0) g.add(mesh(box(0.15, y0 - 9.5, 0.15), groen, sx, 9.5 + (y0 - 9.5) / 2, z0));
-    }
-  }
-  for (let i = 2; i < 12; i += 2) { const t = i / 14; g.add(mesh(box(9.2, 0.6, 0.6), groen, 0, 9.5 + Math.sin(t * Math.PI) * h, -len / 2 + t * len)); }
-  for (const z of [-len / 2, len / 2]) g.add(mesh(box(8, 12, 5), grijs, 0, 3, z));
+// waarschuwingsbord langs de baan
+function glBord() {
+  const g = new THREE.Group();
+  g.add(mesh(box(0.14, 2.4, 0.14), M('#5a5e64'), 0, 1.2, 0));
+  const t = cached('glBordMat', () => new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, map: canvasTex(96, 64, (x) => {
+    x.fillStyle = '#ffd23f'; x.fillRect(0, 0, 96, 64); x.fillStyle = '#111'; x.fillRect(2, 2, 92, 3); x.fillRect(2, 59, 92, 3); x.fillRect(2, 2, 3, 60); x.fillRect(91, 2, 3, 60);
+    x.font = '24px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('GEVAAR', 48, 28); x.font = '20px Anton, Impact, sans-serif'; x.fillText('ASBEST', 48, 52);
+  }) }));
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.45), t); b.position.y = 2.9; g.add(b);
+  return g;
+}
+// brok asbest: een hoekige steen
+function glBrok() {
+  const m = mesh(new THREE.IcosahedronGeometry(1, 0), cached('glBrokMat', () => new THREE.MeshLambertMaterial({ map: glBergTex, flatShading: true, color: '#a8a294' })), 0, 0.55, 0);
+  m.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3)); m.scale.set(rand(0.8, 1.2), rand(0.55, 0.9), rand(0.8, 1.2));
+  const g = new THREE.Group(); g.add(m);
+  return g;
+}
+// loods met een kapot golfplaten dak
+function glLoods() {
+  const g = new THREE.Group();
+  g.add(mesh(box(6, 3.2, 4.4), M('#6f6a60'), 0, 1.6, 0));
+  const dak = mesh(box(6.8, 0.2, 5.2), cached('glDakMat', () => new THREE.MeshLambertMaterial({ map: glBergTex })), 0, 3.5, 0);
+  dak.rotation.z = 0.16; g.add(dak);
+  g.add(mesh(box(1.4, 2.2, 0.1), M('#2a2622'), -1.2, 1.1, -2.22));
   return g;
 }
 const GL_OBS = {
+  brok: { r: 1.1, make: glBrok, pts: 0 },
+  loods: { r: 3.2, make: glLoods, pts: 0, tall: true },
   kliko: { r: 0.45, make: makeKliko, pts: 0 },
   kegel: { r: 0.3, make: makeCone, pts: 0 },
   hek: { r: 1.1, flat: true, make: makeDranghek, pts: 0 },
   drerrie: { r: 0.55, make: () => miniLoose(makeDrerrie(false)), pts: 0, move: 7 },
-  gat: { r: 0.8, hole: true, pts: 0 },
-  schans: { r: 0.9, ramp: true, pts: 0 },
-  beker: { r: 0.6, pickup: true, make: () => makeCup(0.55), pts: 50 },
-  boost: { r: 1.0, boost: true, pts: 0 },
+  gat: { r: 2.1, hole: true, pts: 0 },
+  schans: { r: 1.3, ramp: true, pts: 0 },
+  container: { r: 1.5, make: () => makeContainer(), pts: 0, tall: true },
+  beker: { r: 0.7, pickup: true, make: () => makeCup(1.15), pts: 50 },
+  boost: { r: 1.3, boost: true, pts: 0 },
   // mensen op de glijbaan: je hoort ze al van ver
   docent: { r: 0.5, person: 'docent', pose: 'point', line: '🧑‍🏫 JENS! NAAR DE CONRECTOR!', snd: () => sfx.schoolbel() },
   fietser: { r: 0.6, person: 'fietser', pose: 'bike', move: 6, line: '🚲 JENS, WACHT NOU! *tring tring*', snd: () => { sfx.bel(); setTimeout(() => sfx.bel(), 350); } },
@@ -10913,40 +11543,51 @@ const GL_OBS = {
 };
 function glSpawn(s) {
   const st = mini.s, w = glW(s), cx = glCx(s);
-  const diff = clamp(s / 2500, 0, 1);
-  const roll = Math.random();
-  const lane = () => cx + rand(-1, 1) * (w / 2) * (GL_FLAT - 0.08); // alleen op de vlakke bodem
+  const diff = clamp(s / 3000, 0, 1);
+  const lane = () => cx + rand(-1, 1) * (w / 2) * (GL_FLAT - 0.06);
+  // ook dicht bij de speler iets neerzetten: de berg is breed, zonder dit stuur je er overal omheen
+  const buurt = () => clamp(st.x + st.vx * 0.4 + rand(-11, 11), cx - (w / 2) * (GL_FLAT - 0.06), cx + (w / 2) * (GL_FLAT - 0.06));
   const add = (type, x, sOff = 0) => {
     const d = GL_OBS[type], ss = s + sOff;
     let m;
-    if (d.hole) { m = mesh(box(1.6, 0.04, 2.2), M('#141414'), 0, 0.03, 0); m.add(mesh(box(1.9, 0.03, 2.5), M('#3a2a1a'), 0, 0, 0)); }
-    else if (d.boost) { m = new THREE.Group(); m.add(mesh(box(1.8, 0.03, 2.4), M('#1f9a4a', { emissive: '#0a5a20' }), 0, 0.03, 0)); for (let i = 0; i < 3; i++) { const a = mesh(new THREE.ConeGeometry(0.45, 0.6, 3), M('#7dff6a', { emissive: '#2a8a20' }), 0, 0.06, 0.6 - i * 0.6); a.rotation.x = -Math.PI / 2; a.scale.y = 0.2; m.add(a); } }
+    if (d.hole) { m = mesh(box(4.4, 0.04, 3.4), M('#141414'), 0, 0.03, 0); m.add(mesh(box(5, 0.03, 4), M('#3a2a1a'), 0, 0, 0)); }
+    else if (d.boost) { m = new THREE.Group(); m.add(mesh(box(2.4, 0.03, 3.4), M('#1f9a4a', { emissive: '#0a5a20' }), 0, 0.03, 0)); for (let i = 0; i < 3; i++) { const a = mesh(new THREE.ConeGeometry(0.6, 0.8, 3), M('#7dff6a', { emissive: '#2a8a20' }), 0, 0.06, 0.8 - i * 0.8); a.rotation.x = -Math.PI / 2; a.scale.y = 0.2; m.add(a); } }
     else if (d.person) { const pm = osModel(d.person); m = pm.root; m.userData.p = pm.p; m.rotation.y = Math.PI; }
-    else if (d.ramp) { m = new THREE.Group(); const sch = mesh(box(1.8, 0.12, 2.2), M('#c8202b'), 0, 0.25, 0); sch.rotation.x = 0.35; m.add(sch); m.add(mesh(box(1.8, 0.04, 0.3), M('#ffd23f'), 0, 0.5, -1.0)); }
+    else if (d.ramp) { m = new THREE.Group(); const sch = mesh(box(2.6, 0.12, 2.8), M('#c8202b'), 0, 0.3, 0); sch.rotation.x = 0.35; m.add(sch); m.add(mesh(box(2.6, 0.04, 0.3), M('#ffd23f'), 0, 0.6, -1.3)); }
     else m = d.make();
     if (d.make) miniLoose(m);
     m.position.set(x, glY(ss), -ss);
-    if (d.hole || d.ramp || d.boost) m.rotation.x = -Math.atan(0.28); // plat op de helling
+    if (d.hole || d.ramp || d.boost) m.rotation.x = -Math.atan(0.42); // plat op de helling
     st.world.add(m);
     st.obs.push({ type, d, m, x, s: ss, hit: false, vx: 0, vy: 0, fly: 0 });
   };
-  if (roll < 0.22 + diff * 0.15) add(pick(['kliko', 'kegel', 'kegel']), lane());
-  else if (roll < 0.34 + diff * 0.2) { const m = Math.max(0, w / 2 * GL_FLAT - 1.1); add('hek', cx + rand(-m, m)); }
-  else if (roll < 0.42 + diff * 0.22) add('gat', lane());
-  else if (roll < 0.48 + diff * 0.12 && s > 250) add('drerrie', lane());
-  else if (roll < 0.53) add('schans', lane());
-  else if (roll < 0.62) add('boost', lane());
-  else if (roll < 0.62 + 0.12 + diff * 0.08 && s > 120) add(pick(['docent', 'fietser', 'shane', 'boa', 'fietser']), lane());
-  else if (roll < 0.86) { const x = lane(); for (let i = 0; i < 5; i++) add('beker', x + Math.sin(i * 0.8) * 0.6, i * 2.2); }
-  if (diff > 0.4 && Math.random() < diff * 0.5) add(pick(['kliko', 'kegel']), lane(), 4);
+  // elke rij een paar dingen tegelijk verspreid over de breedte
+  const n = 2 + Math.floor(rand(0, 2 + diff * 3));
+  for (let i = 0; i < n; i++) {
+    const roll = Math.random(), off = rand(-3, 3);
+    if (roll < 0.36) add('brok', lane(), off);
+    else if (roll < 0.46 && s > 200) add('loods', lane(), off);
+    else if (roll < 0.56) add(pick(['kliko', 'kegel', 'container']), lane(), off);
+    else if (roll < 0.66) add('hek', lane(), off);
+    else if (roll < 0.74 && s > 150) add('gat', lane(), off);
+    else if (roll < 0.8 && s > 250) add('drerrie', lane(), off);
+    else if (roll < 0.86 && s > 120) add(pick(['docent', 'fietser', 'shane', 'boa', 'fietser']), lane(), off);
+    else add('brok', lane(), off);
+  }
+  // recht op je pad: hier moet je echt voor sturen
+  if (Math.random() < 0.55 + diff * 0.35) add(pick(['brok', 'brok', 'hek', 'kliko', 'kegel']), buurt());
+  const r2 = Math.random();
+  if (r2 < 0.12) add('schans', buurt());
+  else if (r2 < 0.22) add('boost', buurt());
+  else if (r2 < 0.62) { const x = buurt(); for (let i = 0; i < 5; i++) add('beker', x + Math.sin(i * 0.8 + s) * 1.2, 3 + i * 2.6); }
 }
 MINI.glijden = {
   start() {
     glMats();
-    const sc = mini.scene = miniWorld('#bfe3ff', 45, 170);
+    // grijze stoflucht, korte mist: je ziet de berg pas laat
+    const sc = mini.scene = miniWorld('#b7a896', 34, 150);
+    sc.children.forEach((l) => { if (l.isHemisphereLight) { l.color.set('#dfe4ea'); l.groundColor.set('#3a3a3c'); l.intensity = 1.5; } if (l.isDirectionalLight) { l.color.set('#fff0dc'); l.intensity = 2.6; l.position.set(-8, 10, 4); } });
     const world = new THREE.Group(); sc.add(world);
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500, 40, 40), new THREE.MeshLambertMaterial({ map: glWaterTex }));
-    water.rotation.x = -Math.PI / 2; glWaterTex.repeat.set(60, 60); sc.add(water);
     // de plaat met Jens erop
     const plaat = new THREE.Group();
     plaat.add(mesh(box(1.15, 0.06, 1.75), new THREE.MeshLambertMaterial({ map: glPlaatTex }), 0, 0.04, 0));
@@ -10954,16 +11595,16 @@ MINI.glijden = {
     plaat.add(jp.root);
     jp.root.position.set(0, -0.82, 0.25);
     sc.add(plaat);
-    mini.s = { world, water, plaat, jens: jp, chunks: new Map(), obs: [], decor: [], nextSpawn: 40, nextDecor: 0,
-      x: glCx(0), s: 0, y: glY(0), vx: 0, speed: 11, vy: 0, air: false, fall: false, fallT: 0, hits: 0, inv: 0, dist: 0, bekers: 0, schans: 0, near: 0, spin: 0 };
+    mini.s = { world, plaat, jens: jp, chunks: new Map(), obs: [], decor: [], nextSpawn: 50, nextDecor: 0,
+      x: glCx(0), s: 0, y: glY(0), vx: 0, speed: 15, vy: 0, air: false, fall: false, fallT: 0, hits: 0, inv: 0, dist: 0, bekers: 0, schans: 0, near: 0, spin: 0 };
     miniButtons('<button class="mini-btn left" data-hold="ArrowLeft">◀</button><button class="mini-btn jump" data-hold=" ">⤒</button><button class="mini-btn right" data-hold="ArrowRight">▶</button>');
     this.hud();
-    miniMsg('🛷 GLIJDEN!<small>Stuur met ◀ ▶ of A/D · spring met spatie · niet in de Waal vallen!</small>', 2.6);
+    miniMsg('⛰️ ASBEST!<small>Stuur met ◀ ▶ of A/D · spring met spatie · je gaat steeds harder!</small>', 2.6);
     this.update(0);
   },
   hud() {
     const st = mini.s;
-    $('#miniInfo').innerHTML = `<span>${'❤️'.repeat(Math.max(0, 3 - st.hits))}${'🖤'.repeat(Math.min(3, st.hits))}</span><span>${Math.floor(st.dist)} m</span><span>🏆 ${st.bekers}</span>`;
+    $('#miniInfo').innerHTML = `<span>${'❤️'.repeat(Math.max(0, 3 - st.hits))}${'🖤'.repeat(Math.min(3, st.hits))}</span><span>${Math.floor(st.dist)} m</span><span>${Math.round((st.speed + (st.boost || 0) * 8) * 3.6)} km/u</span><span>🏆 ${st.bekers}</span>`;
   },
   key(k) {
     if (k === ' ' || k === 'ArrowUp' || k === 'w') this.jump();
@@ -10982,47 +11623,49 @@ MINI.glijden = {
     let steer = (mini.keys.ArrowRight || mini.keys.d ? 1 : 0) - (mini.keys.ArrowLeft || mini.keys.a ? 1 : 0);
     if (mini.ptr && !steer) steer = clamp((mini.ptr.x - mini.ptr.x0) / (innerWidth * 0.12), -1, 1);
     if (!mini.over && !st.fall) {
-      st.speed = Math.min(36, st.speed + dt * (0.32 + st.s / 8000));
-      const vNu = st.speed + (st.boost || 0) * 5;
-      st.vx += steer * 36 * dt;
-      st.vx *= 1 - 4.2 * dt; // stroef genoeg om goed te sturen, je glijdt nog net een beetje door
-      st.vx = clamp(st.vx, -9, 9);
+      // steeds meer vaart: dit is het hele idee van de modus
+      st.speed = Math.min(92, st.speed + dt * (1.15 + st.s / 2600));
+      const vNu = st.speed + (st.boost || 0) * 8;
+      const stuur = 13 + st.speed * 0.42;
+      st.vx += steer * stuur * 6 * dt;
+      st.vx *= 1 - 3.4 * dt; // je glijdt een beetje door: bij hoge snelheid moet je vooruit sturen
+      st.vx = clamp(st.vx, -stuur, stuur);
       st.boost = Math.max(0, (st.boost || 0) - dt);
       st.x += st.vx * dt;
       st.s += vNu * dt;
       st.dist = st.s;
-      $('#mini').classList.toggle('fast', vNu > 26);
+      $('#mini').classList.toggle('fast', vNu > 42);
       mini.score = st.s + st.bekers * 50 + st.schans * 100 + st.near * 25 + (st.bonus || 0);
       // in de bak: hoe verder naar de rand, hoe harder hij je terugduwt; te hard = eroverheen
       const u = (st.x - glCx(st.s)) / (glW(st.s) / 2), au = Math.abs(u);
-      if (!st.air && au > GL_FLAT) st.vx -= Math.sign(u) * 66 * ((Math.min(1, au) - GL_FLAT) / (1 - GL_FLAT)) * dt;
+      if (!st.air && au > GL_FLAT) st.vx -= Math.sign(u) * 150 * ((Math.min(1, au) - GL_FLAT) / (1 - GL_FLAT)) * dt;
+      if (au > 0.99) { st.x = glCx(st.s) + Math.sign(u) * 0.99 * glW(st.s) / 2; st.vx *= -0.3; }
       st.u = u;
       const ground = glY(st.s) + glH(u);
       if (st.air) {
         st.vy -= 18 * dt; st.y += st.vy * dt;
         if (st.y <= ground && au <= 1.02) { st.y = ground; st.air = false; st.vy = 0; noise(0.12, 0.15); }
-        else if (st.y < glY(st.s) - 0.5) this.fall('rand');
       } else st.y = ground;
-      if (!st.air && au > 1.02) { st.air = true; st.vy = 3; miniMsg('😱 OVER DE RAND!', 1); }
       st.inv = Math.max(0, st.inv - dt);
       // obstakels
       for (const o of st.obs) {
         if (o.hit) continue;
         const dz = o.s - st.s, dx = o.x - st.x;
         if (o.d.move) { o.s -= o.d.move * dt; o.m.position.z = -o.s; o.m.position.y = glY(o.s); }
+        const raak = Math.max(1.1, vNu * dt * 0.6 + 0.6);
         if (o.d.person || o.type === 'drerrie') pose(o.m.userData.p || o.m.userData.person, o.d.pose || 'bike', dt);
         if (o.d.snd && !o.said && dz < 48) { o.said = true; o.d.snd(); miniMsg(o.d.line, 1.4); }
         if (o.d.person && st.air && !o.jumped && Math.abs(dz) < 0.8 && Math.abs(dx) < 1.2 && st.y - glY(st.s) > 0.9) { o.jumped = true; st.bonus = (st.bonus || 0) + 250; popWorld('+250 EROVERHEEN!', _pv.set(o.x, glY(o.s) + 2.4, -o.s), mini.cam, 'good'); sfx.power(); }
-        if (Math.abs(dz) > 1.1) { if (!o.passed && dz < -1.1 && !o.d.pickup && !o.d.ramp && Math.abs(dx) < o.d.r + 1.1) { o.passed = true; st.near++; } continue; }
+        if (Math.abs(dz) > raak) { if (!o.passed && dz < -raak && !o.d.pickup && !o.d.ramp && Math.abs(dx) < o.d.r + 1.1) { o.passed = true; st.near++; } continue; }
         if (Math.abs(dx) > o.d.r + 0.45) continue;
         if (o.d.pickup) { o.hit = true; o.m.visible = false; st.bekers++; const dn = fxDing(); popWorld('+50', _pv.set(o.x, st.y + 1.6, -o.s), mini.cam, dn > 3 ? 'good' : ''); continue; }
         if (o.d.boost) { if (!st.air) { o.hit = true; st.boost = 2.2; sfx.power(); hype('⚡ BOOST!'); fxFlash('#7dff6a', 0.25); } continue; }
         if (o.d.ramp) { if (!st.air) { o.hit = true; st.air = true; st.vy = 9; st.schans++; sfx.power(); popWorld('🚀 +100', _pv.set(st.x, st.y + 2.2, -st.s - 2), mini.cam, 'blue'); } continue; }
         if (o.d.hole) { if (!st.air) { o.hit = true; this.fall('gat'); } continue; }
-        if (st.air && st.y - glY(st.s) > (o.d.flat ? 0.9 : 1.2)) continue;
+        if (st.air && !o.d.tall && st.y - glY(st.s) > (o.d.flat ? 0.9 : 1.2)) continue;
         if (st.inv > 0) continue;
         o.hit = true; o.fly = 1; o.vx = Math.sign(dx || 1) * 4; o.vy = 6;
-        st.hits++; st.inv = 1.3; st.speed *= 0.6; st.vx += Math.sign(-dx || 1) * 5; st.spin = 1;
+        st.hits++; st.inv = 1.3; st.speed *= 0.72; st.vx += Math.sign(-dx || 1) * 5; st.spin = 1;
         sfx.stumble(); buzz(60);
         miniBurst(new THREE.Vector3(o.x, st.y + 0.6, -o.s), 14, 5, miniDustMats, 0.7);
         if (st.hits >= 3) { this.fall('kapot'); break; }
@@ -11035,36 +11678,31 @@ MINI.glijden = {
       st.vy -= 20 * dt; st.y += st.vy * dt;
       st.x += st.vx * dt; st.s += st.speed * 0.5 * dt;
       st.plaat.rotation.x += dt * 2.5; st.plaat.rotation.z += dt * st.vx * 0.3;
-      if (!st.plons && st.y < glY(st.s) - 16) {
+      if (!st.plons && st.fallT > 1.1) {
         st.plons = true;
-        miniBurst(new THREE.Vector3(st.x, st.y + 0.3, -st.s), 40, 9, [M('#dfefff'), M('#9fc4d6'), M('#ffffff')], 1.2, 12);
-        noise(0.9, 0.5); tone(140, 0.6, 'sine', 0.3, 50); buzz([80, 40, 120]);
+        miniBurst(new THREE.Vector3(st.x, st.y + 0.3, -st.s), 40, 9, [M('#d8d0bf'), M('#a8a294'), M('#ffffff')], 1.2, 12);
+        noise(0.9, 0.5); tone(120, 0.6, 'sine', 0.3, 40); buzz([80, 40, 120]);
         st.plaat.visible = false;
-        miniEnd(st.why === 'kapot' ? 'Van de plaat gevallen!' : 'PLONS!', st.why === 'gat' ? `Jens gleed door een gat in de baan en ligt in de Waal. ${Math.floor(st.dist)} meter.`
-          : st.why === 'kapot' ? `Na drie klappen vloog Jens van z'n asbestplaat, zo de Waal in. ${Math.floor(st.dist)} meter.`
-          : `Jens gleed van de baan en ligt in de Waal. ${Math.floor(st.dist)} meter.`);
+        miniEnd(st.why === 'kapot' ? 'Van de plaat gevallen!' : 'EEN SCHEUR!', st.why === 'gat' ? `Jens gleed in een scheur in de berg. ${Math.floor(st.dist)} meter, op ${Math.round(st.speed * 3.6)} km/u.`
+          : `Na drie klappen vloog Jens van z'n asbestplaat. ${Math.floor(st.dist)} meter, op ${Math.round(st.speed * 3.6)} km/u.`);
       }
     }
     for (const o of st.obs) if (o.fly) { o.fly += dt; o.vy -= 18 * dt; o.m.position.x += o.vx * dt; o.m.position.y += o.vy * dt; o.m.rotation.x += dt * 6; if (o.fly > 2) o.m.visible = false; }
-    // af en toe vuurwerk boven de Waal
-    if (!mini.over && (st.fwT = (st.fwT ?? 12) - dt) <= 0) {
-      st.fwT = rand(14, 24);
-      miniSnd('cake', 0.35);
-      for (let i = 0; i < 6; i++) setTimeout(() => { if (mini.kind === 'glijden' && mini.s === st) miniBurst(new THREE.Vector3(glCx(st.s + 90) + rand(-30, 30), glY(st.s + 90) + rand(14, 26), -(st.s + 90 + rand(0, 30))), 26, 9, miniSparkMats, 1.4, 2); }, i * 380);
-    }
     st.shake = Math.max(0, (st.shake || 0) - dt);
     // baan aanleggen en opruimen
-    const k0 = Math.floor((st.s - 30) / (GL_CHUNK * GL_ROW)), k1 = Math.floor((st.s + 170) / (GL_CHUNK * GL_ROW));
+    const k0 = Math.floor((st.s - 40) / (GL_CHUNK * GL_ROW)), k1 = Math.floor((st.s + 170) / (GL_CHUNK * GL_ROW));
     for (let k = Math.max(0, k0); k <= k1; k++) if (!st.chunks.has(k)) { const c = glChunk(k); st.world.add(c); st.chunks.set(k, c); }
     for (const [k, c] of st.chunks) if (k < k0) { st.world.remove(c); freeObject(c); for (const ch of c.children) ch.geometry.dispose(); st.chunks.delete(k); }
-    while (st.nextSpawn < st.s + 140) { if (st.nextSpawn > 30) glSpawn(st.nextSpawn); st.nextSpawn += rand(9, 16) * (1 - clamp(st.s / 6000, 0, 0.35)); }
+    while (st.nextSpawn < st.s + 150) { if (st.nextSpawn > 40) glSpawn(st.nextSpawn); st.nextSpawn += rand(13, 20) + st.speed * 0.12; }
     for (let i = st.obs.length - 1; i >= 0; i--) { const o = st.obs[i]; if (o.s < st.s - 15) { st.world.remove(o.m); st.obs.splice(i, 1); } }
-    // decor: schepen op de Waal en de Waalbrug in de verte
-    while (st.nextDecor < st.s + 220) {
-      const side = Math.random() < 0.5 ? -1 : 1, s = st.nextDecor, wl = glY(s) - 15.6;
-      if (Math.random() < 0.45) { const b = makeSchip(); b.position.set(glCx(s) + side * rand(18, 45), wl, -s); b.rotation.y = rand(-0.3, 0.3); st.world.add(b); st.decor.push({ m: b, s }); }
-      else if (!st.lastBrug || s - st.lastBrug > 260) { st.lastBrug = s; const b = glBrug(); b.position.set(glCx(s) + side * rand(50, 65), wl, -s - 40); st.world.add(b); st.decor.push({ m: b, s: s + 80 }); }
-      st.nextDecor += rand(50, 90);
+    // decor: borden en brokken op de bergwand
+    while (st.nextDecor < st.s + 170) {
+      const side = Math.random() < 0.5 ? -1 : 1, ds = st.nextDecor, u = side * rand(0.86, 0.93);
+      const b = Math.random() < 0.55 ? miniLoose(glBord()) : miniLoose(glBrok());
+      if (!b.children[1]) b.scale.setScalar(rand(1.5, 3.2));
+      b.position.set(glCx(ds) + u * glW(ds) / 2, glY(ds) + glH(u) - 0.2, -ds);
+      st.world.add(b); st.decor.push({ m: b, s: ds });
+      st.nextDecor += rand(8, 18);
     }
     for (let i = st.decor.length - 1; i >= 0; i--) if (st.decor[i].s < st.s - 40) { st.world.remove(st.decor[i].m); st.decor.splice(i, 1); }
     // plaat, Jens en camera
@@ -11081,21 +11719,20 @@ MINI.glijden = {
     jp.legL.rotation.x = jp.legR.rotation.x = 1.45; jp.kneeL.rotation.x = jp.kneeR.rotation.x = -0.12;
     jp.armL.rotation.x = jp.armR.rotation.x = st.air ? 2.4 : 0.35; jp.armL.rotation.z = 0.5; jp.armR.rotation.z = -0.5;
     jp.body.rotation.z = -steer * 0.2;
-    st.water.position.set(st.x, glY(st.s) - 15.6, -st.s);
-    glWaterTex.offset.y = (glWaterTex.offset.y + dt * 0.02) % 1;
-    const cam = mini.cam, camS = st.fall ? st.s - 8 : st.s - 6.5;
+    const cam = mini.cam, camS = st.fall ? st.s - 8 : st.s - (6.5 + clamp((st.speed - 15) * 0.03, 0, 2));
     const cx = st.fall ? st.x : damp(cam.position.x, st.x * 0.75 + glCx(camS) * 0.25, 6, dt || 1);
     const sk = st.shake * 0.4;
-    cam.position.set(cx + rand(-sk, sk), (st.fall ? glY(st.s) : st.y) + 3.4 + rand(-sk, sk), -camS);
+    const lucht = st.fall ? glY(st.s) : st.y;
+    cam.position.set(cx + rand(-sk, sk), lucht + 3.6 + (camS - st.s) * -0.42 * 0 + 3.0 + rand(-sk, sk), -camS);
     cam.lookAt(st.x, (st.fall ? st.y : st.y) + 0.4, -(st.s + 7));
-    cam.fov = damp(cam.fov, 64 + clamp((st.speed - 11) * 0.5, 0, 12) + (st.boost > 0 ? 12 : 0), 5, dt || 1); cam.updateProjectionMatrix();
+    cam.fov = damp(cam.fov, 62 + clamp((st.speed - 15) * 0.32, 0, 28) + (st.boost > 0 ? 8 : 0), 5, dt || 1); cam.updateProjectionMatrix();
   },
   fall(why) {
     const st = mini.s;
     if (st.fall) return;
     st.fall = true; st.why = why; st.vy = why === 'gat' ? -2 : 2.5;
     sfx.die(); buzz([40, 30, 80]);
-    miniMsg(why === 'gat' ? '🕳️ EEN GAT!' : why === 'kapot' ? '💥 DAAR GAAT JENS!' : '🌊 VAN DE BAAN!', 1.4);
+    miniMsg(why === 'gat' ? '🕳️ EEN SCHEUR!' : '💥 DAAR GAAT JENS!', 1.4);
   },
 };
 
@@ -12023,7 +12660,7 @@ window.addEventListener('keydown', (e) => { if (curScreen === '#arcade' && arc.g
 window.addEventListener('keyup', (e) => { if (curScreen === '#arcade' && arc.game && (e.key === ' ' || e.key === 'Enter')) arcPress(false); });
 // pixeltekst
 function arcText(x, str, px, py, size = 10, color = '#fff', align = 'center') {
-  x.font = `${size}px "Press Start 2P", monospace`; x.textAlign = align; x.textBaseline = 'middle';
+  x.font = `${size}px Anton, Impact, sans-serif`; x.textAlign = align; x.textBaseline = 'middle';
   x.fillStyle = '#000'; x.fillText(str, px + 2, py + 2);
   x.fillStyle = color; x.fillText(str, px, py);
 }
@@ -12202,4 +12839,4 @@ const ARC = {
   },
 };
 
-window.__jr = { startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { camera, jens, player, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };

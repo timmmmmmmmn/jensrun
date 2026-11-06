@@ -17,9 +17,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Jens Run">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Pixelify+Sans:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/anton.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="img/iconen.png" as="image">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,13 +32,23 @@
 
   <div id="hud" class="hidden">
     <div class="hud-l">
-      <div id="score">0</div>
-      <div id="meters">0 m</div>
+      <div class="bug">
+        <i class="bug-logo"><img src="img/beker.png" alt=""></i>
+        <div class="bug-bar">
+          <div class="bug-main">
+            <span class="bug-home">JENS</span>
+            <span class="bug-clock" id="bugTime">0:00</span>
+            <span class="bug-num" id="score">0</span>
+            <span class="bug-num" id="bekerCount"><img class="bug-cup" src="img/beker.png" alt=""><span>0</span></span>
+            <span class="bug-clock" id="meters">0 m</span>
+            <span class="bug-away" id="bugAway">SHANE</span>
+          </div>
+        </div>
+      </div>
       <div class="xpbar"><b id="xpLv">LV 1</b><span><i id="xpFill"></i></span></div>
       <div id="dubbelCD" class="pill hidden"></div>
     </div>
     <div class="hud-r">
-      <div id="bekerCount" class="pill">🏆 <span>0</span></div>
       <button id="pauseBtn" class="icon-btn" aria-label="Pauze">❚❚</button>
     </div>
     <div id="powers"></div>
@@ -98,81 +107,93 @@
     <div class="start-box">
       <img class="splash-icon" src="icons/icon-512.png" alt="">
       <h1 class="logo">JENS<span>RUN</span></h1>
-      <div class="sub">Nijmegen-Oost editie</div>
+      <div class="sub">Versie 2.0</div>
       <div class="splash-load"><i id="splashBar"></i></div>
       <div class="splash-foot">jensrun.timvanbergen.nl</div>
       <div class="press"><span class="desk">DRUK OP EEN TOETS</span><span class="mob">TIK OM TE BEGINNEN</span></div>
     </div>
   </div>
 
-  <!-- MENU -->
-  <div id="menu" class="screen hidden">
-    <div class="panel">
-      <div class="m-top">
-        <div class="m-wallet">🏆 <b id="mBekers">0</b><span id="mMult" class="m-mult"></span></div>
-        <button class="m-ic" data-go="#passBtn" aria-label="Seizoenspas">🎟️</button>
-        <button class="m-ic" data-go="#krantBtn" aria-label="Krant">📰</button>
+  <!-- MENU: spelen linksonder, seizoenspas linksboven, nieuws rechts, Jens in het midden -->
+  <div id="menu" class="screen hidden fm">
+    <header class="fm-top">
+      <div class="fm-brand"><img src="icons/icon-192.png" alt=""><b>JENS RUN</b><small>2.0</small></div>
+      <nav class="fm-tabs">
+        <button class="on">Spelen</button>
+        <button data-go="#passBtn">Seizoenspas</button>
+        <button data-go="#shopBtn">Winkel</button>
+        <button data-go="#kamerBtn">De Hub</button>
+        <button data-go="#boardBtn">Ranglijst</button>
+        <button data-go="#krantBtn">Krant</button>
+        <button data-go="#socialBtn" id="fmBell" class="bell" data-n="">Vrienden</button>
+        <button data-go="#fameBtn">Wall of Fame</button>
+      </nav>
+      <div class="fm-tr">
+        <div class="m-wallet"><img src="img/beker.png" alt=""><b id="mBekers">0</b><span id="mMult" class="m-mult"></span></div>
         <button class="m-ic" data-go="#setBtn" aria-label="Instellingen">⚙️</button>
       </div>
-      <h1 class="logo">JENS<span>RUN</span></h1>
-      <div class="sub">Nijmegen-Oost editie</div>
-      <div class="wallet">🏆 <b id="menuBekers">0</b> bekers</div>
+    </header>
+    <aside class="fm-left">
+      <button id="fmSeason" class="fm-season" data-go="#passBtn">
+        <small id="fmSeasonH">SEIZOEN</small>
+        <b id="fmSeasonLv">TREDE 0</b>
+        <span class="fm-sbar"><i id="fmSeasonBar"></i></span>
+        <em id="fmSeasonCta"></em>
+      </button>
       <div id="wall" class="wall hidden"></div>
       <div id="challenge" class="challenge hidden"></div>
       <div id="missionBox" class="missions"></div>
-      <div class="row duo"><button id="storyBtn" class="btn big story">📖 VERHAAL</button><button id="samenBtn" class="btn big samen bell" data-n="">👥 SAMEN SPELEN</button></div>
-      <div class="label">Endless · Nijmegen-Oost</div>
-      <div id="modes" class="modes"></div>
-      <div class="label hidden">Feest</div>
-      <div id="feesten" class="feesten hidden"></div>
-      <button id="playBtn" class="btn big">RENNEN!</button>
-      <div class="row">
-        <button id="shopBtn" class="btn alt">👕 Winkel</button>
-        <button id="kamerBtn" class="btn alt">🏠 De Hub</button>
-        <button id="socialBtn" class="btn alt sq bell" aria-label="Samen">👥</button>
-        <button id="fameBtn" class="btn alt sq" aria-label="Wall of Fame">👑</button>
-      </div>
-      <div class="row">
-        <button id="xBtn" class="btn alt">✨ Extra's</button>
-        <a class="btn alt" href="https://github.com/timmmmmmmmn/jensrun" target="_blank" rel="noopener">💻 Broncode</a>
-        <button id="setBtn" class="btn alt sq" aria-label="Instellingen">⚙️</button>
-        <button id="appBtn" class="btn alt sq" aria-label="App installeren">📲</button>
-      </div>
-      <div class="hint">
-        <span class="desk">← → wisselen (nog een keer op de stoep: sticker) · ↑ springen · ↓ glijden · E nitraat</span>
-        <span class="mob">Swipe links/rechts · omhoog springen · omlaag glijden</span>
-      </div>
-      <div class="memcard">MEMORY CARD · SLOT 1</div>
-      <nav class="m-nav">
-        <button data-go="#shopBtn"><i>👕</i>Winkel</button>
-        <button data-go="#samenBtn" id="mSamen" class="bell" data-n=""><i>👥</i>Samen</button>
-        <button data-go="#storyBtn" class="m-mid"><i>📖</i>Verhaal</button>
-        <button data-go="#kamerBtn"><i>🏠</i>De Hub</button>
-        <button id="mMoreBtn" class="bell" data-n=""><i>☰</i>Meer</button>
-      </nav>
-      <div id="mMore" class="m-sheet hidden"><div class="m-sheet-in">
-        <b class="m-sheet-h">Meer</b>
-        <div class="m-grid">
-          <button data-go="#xBtn"><i>✨</i>Extra's</button>
-          <button data-go="#socialBtn" id="mBell" class="bell" data-n=""><i>🔔</i>Vrienden</button>
-          <button data-go="#fameBtn"><i>👑</i>Wall of Fame</button>
-          <button data-go="#setBtn"><i>⚙️</i>Instellingen</button>
-          <button data-go="#appBtn"><i>📲</i>App</button>
-          <a href="https://github.com/timmmmmmmmn/jensrun" target="_blank" rel="noopener"><i>💻</i>Broncode</a>
-        </div>
-      </div></div>
+    </aside>
+    <aside id="fmNews" class="fm-news"></aside>
+    <div class="fm-hint"><span class="desk">← → wisselen (nog een keer op de stoep: sticker) · ↑ springen · ↓ glijden · E nitraat</span></div>
+    <div class="fm-play">
+      <button id="fmMode" class="fm-mode"><span id="fmModeImg" class="fm-mode-img"></span><span class="fm-mode-txt"><b id="fmModeName">Rennen</b><small>Spel kiezen</small></span></button>
+      <button id="playBtn" class="fm-go">SPELEN!</button>
     </div>
-    <!-- Extra's: nieuws, ranglijst, week en seizoenspas bij elkaar -->
-    <div id="xPop" class="x-pop hidden"><div class="x-pop-in">
-      <h2>Extra's</h2>
-      <div class="x-grid">
-        <button id="krantBtn" class="btn alt">📰 Nieuws</button>
-        <button id="boardBtn" class="btn alt">🏅 Ranglijst</button>
-        <button id="wkBtn" class="btn alt">🗓️ Week</button>
-        <button id="passBtn" class="btn alt">🎟️ Seizoenspas</button>
+    <!-- zwevend venster: spel kiezen -->
+    <div id="fmModes" class="fm-float hidden"><div class="fm-float-in">
+      <div class="fm-float-h"><h2>Kies je spel</h2><button class="fm-x" data-close="#fmModes" aria-label="Sluiten">✕</button></div>
+      <div id="modes" class="modes"></div>
+      <div class="fm-more">
+        <button id="storyBtn" class="fm-card story"><i>📖</i><b>Verhaal</b><small>Terroriseer Nijmegen, Nederland en Europa</small></button>
+        <button id="samenBtn" class="fm-card samen bell" data-n=""><i>👥</i><b>Samen spelen</b><small>Live tegen je vrienden</small></button>
+        <button data-go="#wkBtn" class="fm-card"><i>🗓️</i><b>Weekuitdaging</b><small>Elke week een nieuwe regel</small></button>
       </div>
-      <button id="xClose" class="btn">Sluiten</button>
     </div></div>
+    <!-- zwevend venster: nieuwsbericht -->
+    <div id="fmArt" class="fm-float hidden"><div class="fm-float-in fm-art">
+      <div class="fm-float-h"><h2 id="fmArtH"></h2><button class="fm-x" data-close="#fmArt" aria-label="Sluiten">✕</button></div>
+      <img id="fmArtImg" alt="">
+      <p id="fmArtBody"></p>
+      <small id="fmArtFoot" class="hint"></small>
+    </div></div>
+    <nav class="m-nav">
+      <button data-go="#shopBtn"><i>👕</i>Winkel</button>
+      <button data-go="#samenBtn" id="mSamen" class="bell" data-n=""><i>👥</i>Samen</button>
+      <button data-go="#storyBtn" class="m-mid"><i>📖</i>Verhaal</button>
+      <button data-go="#kamerBtn"><i>🏠</i>De Hub</button>
+      <button id="mMoreBtn" class="bell" data-n=""><i>☰</i>Meer</button>
+    </nav>
+    <div id="mMore" class="m-sheet hidden"><div class="m-sheet-in">
+      <b class="m-sheet-h">Meer</b>
+      <div class="m-grid">
+        <button data-go="#passBtn"><i>🎟️</i>Seizoenspas</button>
+        <button data-go="#boardBtn"><i>🏅</i>Ranglijst</button>
+        <button data-go="#krantBtn"><i>📰</i>Krant</button>
+        <button data-go="#wkBtn"><i>🗓️</i>Week</button>
+        <button data-go="#socialBtn" id="mBell" class="bell" data-n=""><i>🔔</i>Vrienden</button>
+        <button data-go="#fameBtn"><i>👑</i>Wall of Fame</button>
+        <button data-go="#appBtn"><i>📲</i>App</button>
+        <a href="https://github.com/timmmmmmmmn/jensrun" target="_blank" rel="noopener"><i>💻</i>Broncode</a>
+      </div>
+    </div></div>
+    <!-- de knoppen waar de rest van de game op luistert -->
+    <div class="fm-src" hidden>
+      <span id="menuBekers"></span><div id="feesten"></div><div id="xPop" class="hidden"></div>
+      <button id="shopBtn"></button><button id="kamerBtn"></button><button id="socialBtn" class="bell" data-n=""></button><button id="fameBtn"></button>
+      <button id="xBtn"></button><button id="xClose"></button><button id="setBtn"></button><button id="appBtn"></button>
+      <button id="krantBtn"></button><button id="boardBtn"></button><button id="wkBtn"></button><button id="passBtn"></button>
+    </div>
   </div>
 
   <!-- SHOP -->
@@ -195,6 +216,7 @@
   <!-- GAME OVER -->
   <div id="over" class="screen hidden">
     <div class="panel">
+      <div class="bug over-bug"><i class="bug-logo"><img src="img/beker.png" alt=""></i><div class="bug-bar"><div class="bug-main"><span class="bug-home">JENS</span><span class="bug-num" id="obScore">0</span><span class="bug-num" id="obBekers">0</span><span class="bug-away" id="obAway">SHANE</span></div></div></div>
       <h2 id="overTitle">Gepakt!</h2>
       <p id="overText"></p>
       <div class="stats">
@@ -214,7 +236,7 @@
       <button id="replayBtn" class="btn alt hidden">🎬 Bekijk de replay</button>
       <form id="wallForm" class="namebox hidden">
         <label for="wallInput">👑 Je staat #1! Zet iets op de muur</label>
-        <div class="row"><input id="wallInput" maxlength="60" placeholder="Kom maar op 😎"><button class="btn">OK</button></div>
+        <div class="row"><input id="wallInput" maxlength="60" placeholder="Kom maar op!"><button class="btn">OK</button></div>
         <div class="err"></div>
       </form>
       <div id="overMissions" class="missions"></div>
@@ -337,9 +359,10 @@
       <div class="row"><button id="set_sound" class="btn alt"></button><button id="set_vibe" class="btn alt"></button></div>
       <button id="set_dash" class="btn alt"></button>
       <div class="label">Beeld</div>
-      <div id="set_quality" class="tabs"><button class="tab" data-q="auto">Auto</button><button class="tab" data-q="ps1">PS1</button><button class="tab" data-q="normaal">Normaal</button><button class="tab" data-q="scherp">Scherp</button></div>
+      <div id="set_quality" class="tabs"><button class="tab" data-q="auto">Auto</button><button class="tab" data-q="ps1">PS1</button><button class="tab" data-q="normaal">Iets scherper</button><button class="tab" data-q="scherp">Scherp</button></div>
       <small id="set_q_info" class="hint"></small>
       <div id="set_app" class="hidden"><div class="label">App</div><button id="set_update" class="btn alt">🔄 Zoeken naar updates</button><small id="set_appver" class="hint"></small></div>
+      <p class="hint">Iconen: game-icons.net (CC BY 3.0) · Beker-3D-model: stresvogel</p>
       <p class="hint">🎮 Controller: stick/pijltjes wisselen · ✕/A springen · ○/B glijden · □/X nitraat · Start pauze</p>
       <button id="setBack" class="btn big">KLAAR</button>
     </div>
@@ -395,6 +418,16 @@
       <button id="osShopClose" class="btn big">KLAAR</button>
     </div></div>
     <button id="achBtn" class="hidden"></button>
+  </div>
+
+  <!-- LERARENKAMER -->
+  <div id="lkamer" class="screen hidden lk">
+    <div class="panel lk-panel">
+      <div class="shop-head"><h2>Lerarenkamer</h2><div class="wallet"><img class="cup-i" src="img/beker.png" alt=""> <b id="lkBekers">0</b></div></div>
+      <p class="hint lk-sub">Niemand kijkt. Hier liggen spullen die je nergens anders krijgt. Ze werken de rest van deze run.</p>
+      <div id="lkList" class="lk-list"></div>
+      <button id="lkBack" class="btn big">TERUG DE GANG IN</button>
+    </div>
   </div>
 
   <!-- SEIZOENSPAS -->

@@ -22,6 +22,13 @@
   td.n { text-align: right; font-variant-numeric: tabular-nums; }
   #msg { color: var(--muted); margin-bottom: 12px; }
   .wrap { overflow-x: auto; }
+  .nform { display: flex; flex-direction: column; gap: 10px; background: #fff; padding: 14px; border-radius: 12px; margin-bottom: 12px; }
+  .nform label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; flex: 1; }
+  .nform textarea, .nform select { font: inherit; padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; background: #fff; }
+  .nform .row { margin: 0; }
+  #nPrev { max-width: 260px; border-radius: 10px; }
+  .nthumb { width: 72px; height: 44px; object-fit: cover; border-radius: 6px; display: block; }
+  tr.oud td { opacity: .45; }
 </style>
 </head>
 <body>
@@ -32,6 +39,21 @@
     <button id="load">Laden</button>
   </div>
   <div id="msg"></div>
+  <div id="newsBox" hidden>
+    <h2>Nieuws in het hoofdmenu</h2>
+    <div class="nform">
+      <label>Titel <input id="nTitle" maxlength="80" placeholder="Bijvoorbeeld: NEC wint de beker!"></label>
+      <label>Tekst <textarea id="nBody" rows="4" maxlength="2000" placeholder="Het hele bericht (mag leeg)"></textarea></label>
+      <div class="row nrow">
+        <label>Hoelang zichtbaar <input id="nDur" type="number" min="1" value="3"></label>
+        <label>&nbsp;<select id="nUnit"><option value="1">uur</option><option value="24" selected>dagen</option><option value="168">weken</option></select></label>
+      </div>
+      <label>Plaatje (mag leeg) <input id="nImg" type="file" accept="image/*"></label>
+      <img id="nPrev" alt="" hidden>
+      <div class="row"><button id="nAdd">Nieuws plaatsen</button></div>
+    </div>
+    <div class="wrap"><table id="newsTbl"><thead><tr><th></th><th>Titel</th><th>Staat tot</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
   <div id="cfg" hidden>
     <h2>NEC-wedstrijddagen (één datum per regel, JJJJ-MM-DD)</h2>
     <textarea id="dates" rows="6" style="width:100%;font:inherit;padding:8px;border:2px solid var(--line);border-radius:10px"></textarea>
@@ -47,7 +69,7 @@
   </table></div>
   <h2 id="spelersH" hidden>Ranglijst-spelers</h2>
   <div class="wrap"><table id="tbl" hidden>
-    <thead><tr><th>Naam</th><th>🚲</th><th>📱</th><th>📯</th><th>🎆</th><th>Sinds</th><th></th></tr></thead>
+    <thead><tr><th>Naam</th><th>Fiets</th><th>Rennen</th><th>Vakken</th><th>School</th><th>Sinds</th><th></th></tr></thead>
     <tbody></tbody>
   </table></div>
 </main>
@@ -67,13 +89,14 @@ async function load() {
     $('#msg').textContent = rows.length + ' spelers';
     $('#tbl').hidden = false;
     $('#tbl tbody').innerHTML = rows.map((r) => `<tr>
-      <td>${esc(r.name)} <button class="ren" data-ren="${esc(r.id)}" data-name="${esc(r.name)}" title="Naam aanpassen">✏️</button>${r.email ? `<br><small>${esc(r.email)}</small> <button class="pw" data-pw="${esc(r.id)}" data-name="${esc(r.name)}">🔑</button>` : ''}</td><td class="n">${r.fiets ?? ''}</td><td class="n">${r.telefoon ?? ''}</td><td class="n">${r.terror ?? ''}</td><td class="n">${r.school ?? ''}</td>
+      <td>${esc(r.name)} <button class="ren" data-ren="${esc(r.id)}" data-name="${esc(r.name)}" title="Naam aanpassen">Naam</button>${r.email ? `<br><small>${esc(r.email)}</small> <button class="pw" data-pw="${esc(r.id)}" data-name="${esc(r.name)}">Wachtwoord</button>` : ''}</td><td class="n">${r.fiets ?? ''}</td><td class="n">${r.telefoon ?? ''}</td><td class="n">${r.terror ?? ''}</td><td class="n">${r.school ?? ''}</td>
       <td>${new Date(r.created).toLocaleDateString('nl-NL')}</td>
       <td><button class="del" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Verwijder</button></td></tr>`).join('');
     const cfg = await call('/api/admin/config');
     $('#cfg').hidden = false;
     $('#dates').value = (cfg.wedstrijden || []).join('\n');
     $('#wallNow').textContent = cfg.wall ? `${cfg.wall.name}: ${cfg.wall.text}` : 'Leeg';
+    await loadNewsAdmin();
     const f = await call('/api/admin/fame');
     $('#fame').hidden = false; $('#fameH').hidden = false; $('#spelersH').hidden = false;
     $('#fame tbody').innerHTML = f.rows.length ? f.rows.map((r) => `<tr><td>${esc(r.name)}</td><td>${r.c === 'nl' ? 'Nederland' : 'Nijmegen'}</td><td class="n">${r.score}</td>
@@ -117,6 +140,46 @@ $('#tbl').onclick = async (e) => {
   catch (err) { $('#msg').textContent = err.message; }
 };
 if ($('#key').value) load();
+// ---------- nieuws ----------
+let nImage = null;
+async function loadNewsAdmin() {
+  const { rows } = await call('/api/admin/news');
+  $('#newsBox').hidden = false;
+  const now = Date.now();
+  $('#newsTbl tbody').innerHTML = rows.length ? rows.map((r) => `<tr class="${r.until < now ? 'oud' : ''}"><td>${r.has_img ? `<img class="nthumb" src="/api/news/img/${esc(r.id)}" alt="">` : ''}</td><td><b>${esc(r.title)}</b><br><small>${esc(r.body).slice(0, 90)}</small></td>
+    <td>${new Date(r.until).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${r.until < now ? ' (verlopen)' : ''}</td>
+    <td><button class="del" data-n="${esc(r.id)}" data-t="${esc(r.title)}">Verwijder</button></td></tr>`).join('') : '<tr><td colspan="4">Nog geen nieuws. Dan staat er het standaardbericht over 2.0.</td></tr>';
+}
+// plaatje alvast verkleinen in de browser: past dan altijd in de database
+$('#nImg').onchange = async () => {
+  nImage = null; $('#nPrev').hidden = true;
+  const f = $('#nImg').files[0];
+  if (!f) return;
+  try {
+    const bmp = await createImageBitmap(f), k = Math.min(1, 960 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    nImage = c.toDataURL('image/jpeg', 0.82);
+    $('#nPrev').src = nImage; $('#nPrev').hidden = false;
+  } catch (e) { $('#msg').textContent = 'Dat plaatje kan ik niet openen.'; }
+};
+$('#nAdd').onclick = async () => {
+  try {
+    const hours = Number($('#nDur').value) * Number($('#nUnit').value);
+    const r = await fetch('/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify({ title: $('#nTitle').value, body: $('#nBody').value, hours, image: nImage }) });
+    const d = await r.json();
+    if (!r.ok) { $('#msg').textContent = d.error || 'Fout ' + r.status; return; }
+    $('#nTitle').value = ''; $('#nBody').value = ''; $('#nImg').value = ''; nImage = null; $('#nPrev').hidden = true;
+    $('#msg').textContent = 'Nieuws geplaatst';
+    loadNewsAdmin();
+  } catch (e) { $('#msg').textContent = e.message; }
+};
+$('#newsTbl').onclick = async (e) => {
+  const b = e.target.closest('[data-n]');
+  if (!b || !confirm(`"${b.dataset.t}" verwijderen?`)) return;
+  try { await call('/api/admin/news/delete', { method: 'POST', body: JSON.stringify({ id: b.dataset.n }) }); loadNewsAdmin(); }
+  catch (err) { $('#msg').textContent = err.message; }
+};
 $('#saveDates').onclick = async () => {
   try { await call('/api/admin/config', { method: 'POST', body: JSON.stringify({ wedstrijden: $('#dates').value.split(/\s+/).filter(Boolean) }) }); load(); }
   catch (e) { $('#msg').textContent = e.message; }
