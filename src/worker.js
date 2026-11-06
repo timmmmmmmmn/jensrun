@@ -233,6 +233,19 @@ async function api(req, env, url) {
   }
 
   // ---------- live samen rennen ----------
+  // multiplayer met één knop: de eerste openbare kamer waar iemand wacht, anders een lege
+  if (path === '/api/live-quick' && req.method === 'GET') {
+    let leeg = null;
+    for (let i = 0; i < 10; i++) {
+      const code = `QP0${i}`;
+      const info = await env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(`https://kamer/info`).then((r) => r.json());
+      if (info.started || info.n >= 4) continue;
+      if (info.n > 0) return json({ code });
+      leeg ||= code;
+    }
+    return json({ code: leeg || `QP0${Math.floor(Math.random() * 10)}` });
+  }
+
   if (path.startsWith('/api/live/')) {
     const code = path.slice(10).toUpperCase();
     if (!/^[A-Z0-9]{4}$/.test(code)) return json({ error: 'code' }, 400);
@@ -556,7 +569,14 @@ export default {
 export class Room {
   constructor(state) { this.state = state; }
   async fetch(req) {
+    const url = new URL(req.url);
+    if (url.pathname === '/info') {
+      const n = this.players().length;
+      const started = n > 0 && Date.now() - ((await this.state.storage.get('startedAt')) || 0) < 6 * 60000;
+      return Response.json({ n, started });
+    }
     if (this.state.getWebSockets().length >= 4) return new Response('vol', { status: 409 });
+    if (/\/QP0\d$/.test(url.pathname)) await this.state.storage.put('pub', true); // openbare kamer: start vanzelf
     const [client, server] = Object.values(new WebSocketPair());
     this.state.acceptWebSocket(server);
     return new Response(null, { status: 101, webSocket: client });
@@ -575,21 +595,36 @@ export class Room {
       const name = String(m.name || 'Speler').slice(0, 16), pid = String(m.pid || '').slice(0, 40);
       const host = this.players().length === 0;
       ws.serializeAttachment({ name, pid, host });
-      this.send({ t: 'players', list: this.players() });
+      const list = this.players();
+      this.send({ t: 'players', list });
+      // openbaar: vanaf twee spelers loopt de klok, vol = meteen
+      if (list.length >= 2 && await this.state.storage.get('pub')) {
+        const lopend = await this.state.storage.getAlarm();
+        const at = list.length >= 4 ? Date.now() + 1500 : (lopend || Date.now() + 10000);
+        if (!lopend || at < lopend) await this.state.storage.setAlarm(at);
+        this.send({ t: 'soon', at });
+      }
       return;
     }
     const me = ws.deserializeAttachment();
     if (!me) return;
-    if (m.t === 'start' && me.host) { this.send({ t: 'go', mode: String(m.mode || 'fiets'), at: Date.now() + 3500 }); return; }
+    if (m.t === 'start' && me.host) { await this.state.storage.put('startedAt', Date.now()); this.send({ t: 'go', mode: String(m.mode || 'fiets'), at: Date.now() + 3500 }); return; }
     if (m.t === 's' || m.t === 'dead') this.send({ ...m, pid: me.pid, name: me.name }, ws);
   }
-  async webSocketClose(ws) { this.afterLeave(ws); }
-  async webSocketError(ws) { this.afterLeave(ws); }
-  afterLeave(ws) {
-    const list = this.players().filter((a) => a !== ws.deserializeAttachment());
+  async alarm() {
+    if (this.players().length < 2) return;
+    await this.state.storage.put('startedAt', Date.now());
+    this.send({ t: 'go', mode: 'telefoon', at: Date.now() + 3500 });
+  }
+  async webSocketClose(ws) { await this.afterLeave(ws); }
+  async webSocketError(ws) { await this.afterLeave(ws); }
+  async afterLeave(ws) {
     // als de host weggaat, wordt de volgende host
     const rest = this.state.getWebSockets().filter((x) => x !== ws);
     if (rest.length && !rest.some((x) => x.deserializeAttachment()?.host)) { const a = rest[0].deserializeAttachment(); if (a) rest[0].serializeAttachment({ ...a, host: true }); }
-    this.send({ t: 'players', list: rest.map((x) => x.deserializeAttachment()).filter((a) => a?.name) }, ws);
+    const list = rest.map((x) => x.deserializeAttachment()).filter((a) => a?.name);
+    if (list.length === 0) await this.state.storage.delete('startedAt');
+    if (list.length < 2 && await this.state.storage.getAlarm()) { await this.state.storage.deleteAlarm(); this.send({ t: 'soon', at: 0 }, ws); }
+    this.send({ t: 'players', list }, ws);
   }
 }

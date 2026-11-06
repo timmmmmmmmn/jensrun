@@ -5,6 +5,7 @@ Een endless runner door Nijmegen die eruitziet als een echte PS1-game. Speel hem
 - **Endless:** ren door Nijmegen-Oost, pak de KNVB-bekers, ontwijk alles en laat je niet pakken. Met een beetje geluk staat de lerarenkamer in het Montessori open.
 - **Asbest, Vuurwerk en Mijn Osso:** eigen spellen met een eigen wereld.
 - **Verhaal:** *Terroriseer Nijmegen* (8 wijken, eindbaas in Hatert) en *Terroriseer Nederland* (10 levels, finale in de Johan Cruijff ArenA).
+- **Multiplayer met één knop:** je komt vanzelf in een race met wie er online is, of je deelt een link. Niemand online? Dan tegen bots.
 - **Winkel, opdrachten, ranglijst en Wall of Fame.**
 
 ## Spelen als app

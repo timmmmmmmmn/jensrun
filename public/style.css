@@ -1041,3 +1041,40 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 .slider input { order: 3; flex: 0 0 100%; }
 .slider b { margin-left: auto; }
 @media (max-width: 700px) { #shop, #lkamer { padding-left: 0; } }
+
+/* ---------- 2.1: scorebord met alleen het nodige ---------- */
+.bug { align-items: stretch; gap: 0; height: 36px; font-size: 21px; color: #fff; }
+.bug > span { display: flex; align-items: center; gap: 5px; padding: 0 12px; }
+#score.bug-num { background: #000; color: #fff; box-shadow: inset 0 -4px 0 var(--accent); min-width: 72px; justify-content: center; font-size: 21px; margin: 0; text-shadow: none; }
+#hud.fever #score { color: #ffb000; }
+.bug-cups { background: #fff; color: #000; text-shadow: none; }
+.bug-cups img { height: 25px; }
+#bekerCount span { color: #000; font-family: var(--title); font-size: 21px; font-weight: 400; }
+.combo { top: calc(max(12px, env(safe-area-inset-top)) + 44px); }
+#powers { top: calc(max(12px, env(safe-area-inset-top)) + 8px); width: min(280px, 46vw); }
+/* zware effecten over het hele scherm eruit: die kostten op elk beeld veel */
+#hud.fast::before, .mini.fast::before { display: none; }
+#hud.fever::after { animation: none; box-shadow: inset 0 0 50px rgba(255,90,0,.4); }
+.fm-play { filter: none; }
+.fm-season em.claim { animation: none; }
+/* ---------- multiplayer ---------- */
+.fm-mp { margin-top: 8px; height: 46px; border-radius: 12px; background: linear-gradient(#2f8fff, #1a5fd0); color: #fff; font-family: var(--title); font-size: 21px; font-style: italic; letter-spacing: .6px; }
+.fm-mp:hover { filter: brightness(1.15); }
+.fm-live { width: min(480px, 100%); }
+#flStatus { font-size: 18px; font-weight: 700; }
+#flList { min-height: 0; }
+#overLive .btn { margin-top: 4px; }
+.livebox { border-radius: var(--r); }
+@media (max-width: 700px) {
+  .bug { height: 30px; font-size: 17px; }
+  #score.bug-num, #bekerCount span { font-size: 17px; }
+  #score.bug-num { min-width: 54px; }
+  .bug > span { padding: 0 9px; }
+  .bug-cups img { height: 20px; }
+  #powers { left: auto; right: 62px; transform: none; top: calc(max(12px, env(safe-area-inset-top)) + 2px); width: 44vw; }
+  .combo { top: calc(max(12px, env(safe-area-inset-top)) + 36px); }
+  .fm-mp { height: 46px; border-radius: 16px; margin: 0; }
+  .fm-go { height: 58px; font-size: 32px; }
+  .fm-news { bottom: calc(262px + env(safe-area-inset-bottom)); }
+}
+@media (max-height: 640px) and (min-width: 701px) { .fm-mp { height: 38px; font-size: 18px; margin-top: 5px; } }

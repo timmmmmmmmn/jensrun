@@ -1,6 +1,6 @@
 // Jens Run service worker: online altijd de nieuwste versie (netwerk eerst),
 // offline speelbaar uit de cache. Geluid en plaatjes: cache, en op de achtergrond verversen.
-const CACHE = 'jensrun-v2';
+const CACHE = 'jensrun-v3';
 const CORE = ['/', '/index.html', '/style.css', '/game.js', '/three.module.min.js', '/manifest.webmanifest', '/beker-model.js', '/iconen.js', '/img/iconen.png', '/img/beker.png', '/fonts/anton.woff2', '/fonts/barlow-500.woff2', '/fonts/barlow-700.woff2',
   '/img/menu-bg.jpg', '/img/jens-face.png', '/icons/icon-192.png'];
 
@@ -13,7 +13,7 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET') return;
+  if (req.method !== 'GET' || req.headers.has('range')) return; // muziek streamt rechtstreeks
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // lettertypes van Google: gewoon via de browser
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/beheer')) return;

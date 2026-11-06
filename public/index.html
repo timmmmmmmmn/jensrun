@@ -28,24 +28,14 @@
   <div id="splats"></div>
   <div id="aanCap" class="aan-cap hidden"></div>
   <div id="flash"></div>
-  <div id="crt"></div>
 
   <div id="hud" class="hidden">
     <div class="hud-l">
       <div class="bug">
-        <i class="bug-logo"><img src="img/beker.png" alt=""></i>
-        <div class="bug-bar">
-          <div class="bug-main">
-            <span class="bug-home">JENS</span>
-            <span class="bug-clock" id="bugTime">0:00</span>
-            <span class="bug-num" id="score">0</span>
-            <span class="bug-num" id="bekerCount"><img class="bug-cup" src="img/beker.png" alt=""><span>0</span></span>
-            <span class="bug-clock" id="meters">0 m</span>
-            <span class="bug-away" id="bugAway">SHANE</span>
-          </div>
-        </div>
+        <span class="bug-num" id="score">0</span>
+        <span class="bug-cups" id="bekerCount"><img src="img/beker.png" alt=""><span>0</span></span>
       </div>
-      <div class="xpbar"><b id="xpLv">LV 1</b><span><i id="xpFill"></i></span></div>
+      <div class="xpbar hidden"><b id="xpLv">LV 1</b><span><i id="xpFill"></i></span></div>
       <div id="dubbelCD" class="pill hidden"></div>
     </div>
     <div class="hud-r">
@@ -149,6 +139,7 @@
     <div class="fm-play">
       <button id="fmMode" class="fm-mode"><span id="fmModeImg" class="fm-mode-img"></span><span class="fm-mode-txt"><b id="fmModeName">Rennen</b><small>Spel kiezen</small></span></button>
       <button id="playBtn" class="fm-go">SPELEN!</button>
+      <button id="fmMp" class="fm-mp">👥 MULTIPLAYER</button>
     </div>
     <!-- zwevend venster: spel kiezen -->
     <div id="fmModes" class="fm-float hidden"><div class="fm-float-in">
@@ -159,6 +150,14 @@
         <button id="samenBtn" class="fm-card samen bell" data-n=""><i>👥</i><b>Samen spelen</b><small>Live tegen je vrienden</small></button>
         <button data-go="#wkBtn" class="fm-card"><i>🗓️</i><b>Weekuitdaging</b><small>Elke week een nieuwe regel</small></button>
       </div>
+    </div></div>
+    <!-- zwevend venster: multiplayer zoeken -->
+    <div id="fmLive" class="fm-float hidden"><div class="fm-float-in fm-live">
+      <div class="fm-float-h"><h2>Multiplayer</h2><button class="fm-x" id="flCancel" aria-label="Annuleren">✕</button></div>
+      <p id="flStatus"></p>
+      <ol id="flList" class="board"></ol>
+      <button id="flStart" class="btn big hidden">START</button>
+      <div class="row"><button id="flShare" class="btn alt">📣 Deel link</button><button id="flBots" class="btn alt">🏃 Tegen bots</button></div>
     </div></div>
     <!-- zwevend venster: nieuwsbericht -->
     <div id="fmArt" class="fm-float hidden"><div class="fm-float-in fm-art">
@@ -216,7 +215,6 @@
   <!-- GAME OVER -->
   <div id="over" class="screen hidden">
     <div class="panel">
-      <div class="bug over-bug"><i class="bug-logo"><img src="img/beker.png" alt=""></i><div class="bug-bar"><div class="bug-main"><span class="bug-home">JENS</span><span class="bug-num" id="obScore">0</span><span class="bug-num" id="obBekers">0</span><span class="bug-away" id="obAway">SHANE</span></div></div></div>
       <h2 id="overTitle">Gepakt!</h2>
       <p id="overText"></p>
       <div class="stats">
