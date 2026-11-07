@@ -608,8 +608,14 @@ export class Room {
     }
     const me = ws.deserializeAttachment();
     if (!me) return;
-    if (m.t === 'start' && me.host) { await this.state.storage.put('startedAt', Date.now()); this.send({ t: 'go', mode: String(m.mode || 'fiets'), at: Date.now() + 3500 }); return; }
-    if (m.t === 's' || m.t === 'dead') this.send({ ...m, pid: me.pid, name: me.name }, ws);
+    if (m.t === 'start' && me.host) {
+      await this.state.storage.put('startedAt', Date.now());
+      // Shane jaagt: de host kiest wie Shane is
+      const shane = m.mode === 'jacht' ? String(m.shane || '').slice(0, 40) : undefined;
+      this.send({ t: 'go', mode: String(m.mode || 'fiets'), shane, at: Date.now() + 3500 });
+      return;
+    }
+    if (m.t === 's' || m.t === 'dead' || m.t === 'j') this.send({ ...m, pid: me.pid, name: me.name }, ws);
   }
   async alarm() {
     if (this.players().length < 2) return;

@@ -2790,6 +2790,7 @@ let state = 'menu';
 let speed = 0, baseSpeed = 0, dist = 0, score = 0, runBekers = 0;
 let spawnZ = -40, nextSign = 0, nextPower = 0, streetIdx = 0, nextRegen = 260, firstPower = true;
 let nearT = 0, chaseDist = 4.6, brommerT = 0, bekerT = 0, invulnT = 0;
+let jacht = null; // Shane jaagt: { rol, bot, t, o: de ander, pw, slowT, trapQ, klaar, win, titel, tekst }
 let nitraten = 0;
 const shots = [], particles = [];
 let runTime = 0, lastRun = null, shoutCool = 0, nextMilestone = 500, nextVrouw = 0, bestPassed = false, streak = 0;
@@ -2938,6 +2939,7 @@ function spawnObstacle(type, lane, z) {
 }
 function spawnRow(z) {
   if (curLevel) { spawnLevelRow(z); return; }
+  if (jacht?.rol === 'shane') { if (Math.random() < 0.6) spawnCoinsLine(Math.floor(Math.random() * 3), z); return; } // Shane: vrije baan, alleen bekers
   if (seg && dist - z >= seg.s0 - 4 && dist - z <= seg.s0 + seg.L + 8) return; // uitstapje: alles staat er al
   if (schoolPhase === 'inside') { spawnIndoorRow(z); return; }
   if (schoolBlock && dist - z > schoolBlock.from && dist - z < schoolBlock.to) return;
@@ -3170,6 +3172,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'ArrowUp' || k === 'w' || k === 'W' || k === ' ') act('jump');
   else if (k === 'ArrowDown' || k === 's' || k === 'S') act('slide');
   else if (k === 'e' || k === 'E') throwNitraat();
+  else if (jacht && ['1', '2', '3'].includes(k)) jachtPower(['sprint', 'troeki', 'trap'][k - 1]);
   else if (k === 'Escape' || k === 'p' || k === 'P') { if (state === 'run') pauseGame(); else if (state === 'paused') resumeGame(); }
   else if (k === 'Enter') {
     if (state === 'menu' && started && !$('#menu').classList.contains('hidden') && e.timeStamp - startedAt > 300) startRun();
@@ -3217,6 +3220,7 @@ window.addEventListener('pagehide', muteBackground);
 // =====================================================================
 function startRun() {
   if (MODES[mode]?.mini) { startMini(mode); return; }
+  if (jacht?.klaar) jachtStop();
   audioInit();
   missionStartRun();
   missionEvent('games');
@@ -3272,6 +3276,7 @@ function resumeGame() {
   if (brommerT > 0) engineStart();
 }
 function stumble(o) {
+  if (jacht?.rol === 'shane') return; // Shane rent overal dwars doorheen
   if (invulnT > 0 || o.hit) return;
   verslaggever('stumble');
   comboBreak();
@@ -3281,6 +3286,7 @@ function stumble(o) {
   sfx.stumble();
   shakeT = 0.3;
   flash(true);
+  if (jacht) { jachtVal(1.1); return; }
   if (indoor) { invulnT = 0.5; baseSpeed *= 0.97; return; } // binnen is de achtervolger er niet
   if (fietsT > 0) {
     // op de fiets telt elke klap maar half
@@ -3301,6 +3307,8 @@ function knock(o) {
 }
 function die(reason) {
   if (state !== 'run') return;
+  // Shane jaagt: Jens gaat niet dood, hij ligt even (alleen Shane kan hem pakken)
+  if (jacht && reason !== 'gepakt') { if (jacht.rol === 'jens') { flash(true); sfx.stumble(); buzz(120); jachtVal(2.2); } return; }
   // op de fiets is een dodelijke klap 'maar' struikelen (en dat telt weer half)
   if (fietsT > 0 && reason !== 'gepakt') { stumble({}); return; }
   buzz([120, 60, 200]);
@@ -3336,9 +3344,9 @@ function finishRun() {
   state = 'over';
   const s = Math.floor(score);
   const best = save.best[mode] || 0;
-  const isBest = s > best;
+  const isBest = !jacht && s > best;
   if (isBest) save.best[mode] = s;
-  if (!curLevel && s > (save.bestRun || 0)) {
+  if (!curLevel && !jacht && s > (save.bestRun || 0)) {
     const before = save.bestRun || 0;
     save.bestRun = s;
     for (const [k, need] of Object.entries(MODE_UNLOCK)) if (need > 1 && before < need && s >= need) setTimeout(() => note(`🔓 ${MODES[k].icon} ${MODES[k].label}-modus vrijgespeeld!`), 1200);
@@ -3360,6 +3368,7 @@ function finishRun() {
   if (mode === 'school') texts.gepakt = ['Nablijven!', `De docent heeft Jens te pakken op de ${street}. Dat babypijltje gaat hem duur komen te staan.`];
   if (curLevel) texts.gepakt = ['Bonnetje!', `De BOA heeft Jens te pakken in ${curLevel.wijk}. Dat wordt een dikke boete.`];
   let [title, txt] = texts[deathReason] || texts.gepakt;
+  if (jacht?.titel) [title, txt] = [jacht.titel, jacht.tekst];
   passAddXp(dist);
   if (curLevel) { storyGameOver(title, txt); return; }
   $('#overTitle').textContent = title;
@@ -3384,7 +3393,7 @@ function finishRun() {
   if (bazen > 0 && save.name) apiCall('/api/score', { id: save.playerId, mode: 'bazen', score: bazen, dist: Math.floor(dist), secs: Math.round(runTime), bekers: 0, mult: 1 }).catch(() => {});
   $('#overTitle').dataset.weekly = weekly ? '1' : '';
   if (weekly && s > 0) submitWeekly(lastRun);
-  if (s > 0) {
+  if (s > 0 && !jacht) {
     if (save.name) submitScore(lastRun);
     else { $('#overName').classList.remove('hidden'); $('#overName .err').textContent = ''; }
   }
@@ -3672,6 +3681,7 @@ function collide() {
     if (o.kind === 'beker') {
       if (Math.abs(px - o.x) < 0.9 && dz < 0.9 && Math.abs(py + 0.9 - o.y) < 1.15) {
         o.dead = true;
+        if (jacht?.rol === 'shane') jachtBeker();
         const n = (bekerT > 0 ? 2 : 1) * (wkT > 0 ? 2 : 1);
         runBekers += n;
         save.bekers += n;
@@ -3708,8 +3718,9 @@ function collide() {
     if (o.kind === 'kaart') { if (Math.abs(px - o.x) < 1.0 && dz < 1.0) collectKaart(o); continue; }
     if (o.kind === 'fork') continue;
     if (o.kind === 'deco' || o.kind === 'sign' || o.kind === 'landmark') continue;
-    if (o.kind === 'lkdeur') { if (!o.used && dz < 0.8) { o.used = true; if (Math.abs(px - LANES[2]) < 1.1) { enterLk(); return; } } continue; }
-    if (o.kind === 'ingang') { if (!o.used && dz < 0.8) { o.used = true; if (o.forced || Math.abs(px - LANES[2]) < 1.1) { enterSchool(); return; } } continue; }
+    // op het moment dat je de deur passeert (niet 'precies raakt': met een trage frame sprong je er soms overheen)
+    if (o.kind === 'lkdeur') { if (!o.used && o.z > -0.8) { o.used = true; if (px > LANES[1] + 0.9) { enterLk(); return; } } continue; }
+    if (o.kind === 'ingang') { if (!o.used && o.z > -0.8) { o.used = true; if (o.forced || px > LANES[1] + 0.9) { enterSchool(); return; } } continue; }
     if (o.kind === 'checkpoint' || o.kind === 'finish') { storyCollide(o, px, py); if (state !== 'run') return; continue; }
     if (o.kind === 'vrouw') {
       if (Math.abs(px - o.x) > 0.62) continue;
@@ -3913,6 +3924,8 @@ function updateChaser(dt, moving) {
   if (state === 'aanloop') return;
   const c = chaser();
   if (!c) return;
+  if (jacht) jachtChaser(c, dt, moving);
+  else {
   const target = state === 'dying' ? 0.9 : brommerT > 0 || indoor ? 16 : nearT > 0 ? 1.9 : fietsT > 0 ? 9 : (state === 'run' ? (camera.aspect < 0.8 ? 3.4 : 2.9) : 3.2);
   const k = brommerT > 0 ? 0.8 : state === 'dying' ? 2.2 : 1.6;
   chaseDist = damp(chaseDist, target, k, dt);
@@ -3926,6 +3939,7 @@ function updateChaser(dt, moving) {
   else if (state === 'dying' || state === 'over') kind = c.style === 'angry' ? 'angry' : 'reach';
   pose(c, kind, dt, moving ? clamp(speed / 12, 0.8, 1.6) : (c.style === 'bike' ? 0.1 : 1));
   if (c.vehicle) for (const w of c.vehicle.userData.wheels) w.rotation.x -= (moving ? speed : 0) * dt / 0.34;
+  }
 
   // Omroep Gelderland: alleen tijdens 'de beker is van ons'. De bus rijdt vóór Jens zodat je
   // hem ook op een smal scherm ziet, de verslaggever en de cameraman rennen vlak naast hem.
@@ -4011,7 +4025,8 @@ function updateRun(dt) {
   // endless: de eerste 30 seconden hard optrekken (zo zit je er meteen in), daarna rustig verder
   if (baseSpeed < (curLevel ? curLevel.maxSpeed : 30)) baseSpeed += dt * (!curLevel && runTime < 30 ? 0.33 : baseSpeed < 17 ? 0.3 : 0.12);
   // fiets: 2x zo snel aan het begin, maar later nooit meer dan ~30 (of 15% boven lopen)
-  const target = (brommerT > 0 ? baseSpeed * 1.55 : fietsT > 0 ? Math.max(baseSpeed * 1.15, Math.min(baseSpeed * 2, 30)) : baseSpeed) * hillSpeed() * (seg?.active ? SEG_DEFS[seg.type].mul : 1);
+  const fietsMul = jacht ? baseSpeed * 1.3 : Math.max(baseSpeed * 1.15, Math.min(baseSpeed * 2, 30)); // in de jacht is de fiets geen ontsnapping
+  const target = (brommerT > 0 ? baseSpeed * 1.55 : fietsT > 0 ? fietsMul : baseSpeed) * hillSpeed() * (seg?.active ? SEG_DEFS[seg.type].mul : 1) * jachtMul();
   speed = damp(speed, target, introT < 1 ? 2.5 : 4, dt);
   const m = speed * dt;
   dist += m;
@@ -4037,7 +4052,9 @@ function updateRun(dt) {
   jens.root.position.set(player.x, player.y, 0);
   jens.root.rotation.z = damp(jens.root.rotation.z, (LANES[player.lane] - player.x) * -0.12, 10, dt);
 
-  if (seg?.active && seg.type !== 'kermis') {
+  if (jacht?.rol === 'shane') {
+    // Jens wordt in updateJacht neergezet, op de plek van de echte Jens
+  } else if (seg?.active && seg.type !== 'kermis') {
     pose(jens, seg.type === 'waal' ? 'swim' : seg.type === 'achtbaan' ? 'sit' : 'slide', dt);
   } else if (brommerT > 0) {
     brommerT -= dt / (runUp.brommer ? 1.7 : 1);
@@ -4100,6 +4117,11 @@ function updateDying(dt) {
   speed = damp(speed, 0, 5, dt);
   moveWorld(speed * dt, dt);
   if (snapDeath) snapDeath.t += dt;
+  if (deathReason === 'jacht') {
+    if (jacht?.rol !== 'shane') pose(jens, 'idle', dt);
+    if (deathT > 1.8) finishRun();
+    return;
+  }
   if (deathFly) {
     const f = deathFly, r = jens.root;
     f.v.y -= 22 * dt;
@@ -4316,6 +4338,7 @@ if (!navigator.vibrate) $('#vibeBtn').classList.add('hidden');
 $('#pauseBtn').addEventListener('click', () => { if (state === 'run') pauseGame(); });
 function toMenu() {
   stopGameover();
+  jachtStop();
   if (live?.quick) liveClose();
   else if (live && !live.started) { /* in de lobby blijven mag */ } else if (live) live.started = false;
   weekly = null;
@@ -5982,7 +6005,7 @@ function makeUitgang() {
 // verloop binnen: bel, Jos wenkt en roept als je eraan komt, rent je na het passeren achterna tot de achteruitgang
 const SCHOOL_TIME = 15;
 function updateSchool(dt, m) {
-  if (curLevel) return;
+  if (curLevel || jacht?.rol === 'shane') return;
   // kans op de school na een stuk afstand; hoe vaker hij al kwam, hoe langer de pauze
   if (!schoolPhase && dist >= nextSchoolDist) {
     nextSchoolDist = dist + 700 + schoolCount * 500;
@@ -5992,9 +6015,9 @@ function updateSchool(dt, m) {
   if (schoolPhase !== 'inside') return;
   indoorT += dt;
   const jr = jos.root;
-  if (indoorStep === 0 && indoorT > 2) {
+  if (indoorStep === 0) {
     indoorStep = 1;
-    const z = -Math.max(12, speed * 2);
+    const z = -Math.max(10, speed * 1.2); // Jos staat al bij de deur te wachten
     jr.position.set(-ROAD_W / 2 + 0.7, 0, z);
     jr.rotation.y = Math.PI;
     jr.visible = true;
@@ -6937,7 +6960,7 @@ function setWaal(on) {
   if (groundMat) groundMat.color.set(on ? '#2e5f80' : (curTheme?.grass || '#6f9a52'));
 }
 function updateSeg(dt) {
-  if (curLevel || indoor || state !== 'run') return;
+  if (curLevel || indoor || state !== 'run' || jacht) return;
   if (!seg) {
     if (schoolPhase || bos || ebos || path || hill) return;
     if ((segRollT -= dt) > 0) return;
@@ -8671,7 +8694,7 @@ function spawnHooliganRow(z) {
   else if (Math.random() < 0.5) spawnCoinsLine(lanes[2], z, 4);
 }
 function updateBos() {
-  if (curLevel || indoor || schoolPhase) return;
+  if (curLevel || indoor || schoolPhase || jacht) return;
   if (!bos && dist > nextBos) { startBos(); return; }
   if (bos && bos.spawned >= bos.total && !objs.some((o) => o.hooligan && !o.dead && !o.hit && o.z < 4)) endBos();
 }
@@ -10829,7 +10852,7 @@ function updateExtras3(dt, m) {
   updateSeg(dt);
   updateGoffert();
 }
-function updateLiveLoop(dt) { updateLive(dt); }
+function updateLiveLoop(dt) { updateLive(dt); updateJacht(dt); }
 
 // =====================================================================
 //  SAMEN: vrienden, clan, live samen rennen, meldingen
@@ -10902,6 +10925,7 @@ $('#soBody').addEventListener('click', async (e) => {
   if (e.target.id === 'clanLeave' && confirm('Clan verlaten?')) { await apiCall('/api/clan', { id: save.playerId, leave: true }); renderSocial(); }
   if (e.target.id === 'lvMake') liveConnect(Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join(''));
   if (e.target.id === 'lvStart') liveSend({ t: 'start', mode });
+  if (e.target.id === 'lvJShane' || e.target.id === 'lvJJens') jachtStartKamer(e.target.id === 'lvJShane');
   if (e.target.id === 'lvLeave') liveClose();
 });
 $('#soBody').addEventListener('submit', async (e) => {
@@ -10983,6 +11007,9 @@ function renderFlive(msg) {
   const me = list.find((p) => p.pid === save.playerId);
   $('#flStart').classList.toggle('hidden', !(live && !pub && me?.host && list.length >= 2));
   $('#flShare').classList.toggle('hidden', !live);
+  $('#flJachtHost').classList.toggle('hidden', !(live && !pub && me?.host && list.length === 2));
+  $('#flJKamer').classList.toggle('hidden', !!(live && !pub));
+  if (!msg && live && !pub && list.length < 2) $('#flStatus').textContent = 'Deel de link met je tegenstander…';
 }
 $('#fmMp').addEventListener('click', () => quickPlay());
 function fliveCancel() { clearInterval(fliveT); $('#fmLive').classList.add('hidden'); liveClose(); }
@@ -11022,30 +11049,42 @@ function updateBots(dt) {
     }
   }
 }
-function liveGo(m, at) {
+function liveGo(m, at, shane) {
   clearInterval(fliveT);
   live.results = new Map(); live.started = true;
   $('#fmLive').classList.add('hidden');
+  if (m === 'jacht') jachtStart(shane === save.playerId ? 'shane' : 'jens', !!live.bots); else jachtStop();
   setMode(MODES[m] && !MODES[m].hidden && !MODES[m].mini ? m : 'telefoon', true);
   weekly = null; feest = null; applyFeest();
   const wait = Math.max(0, at - Date.now());
-  toast('⚡ LIVE RACE<small>Start in 3…</small>', 1);
+  const ikShane = jacht?.rol === 'shane';
+  toast(jacht ? `📱 SHANE JAAGT<small>${ikShane ? 'Jij bent Shane: pak Jens!' : `Jij bent Jens: blijf ${JACHT_TIJD} seconden weg!`}</small>` : '⚡ LIVE RACE<small>Start in 3…</small>', jacht ? 1.8 : 1);
   setTimeout(() => toast('2…', 0.8), Math.max(0, wait - 2000));
   setTimeout(() => toast('1…', 0.8), Math.max(0, wait - 1000));
-  setTimeout(() => { if (live) { startRun(); toast('⚡ REN!<small>Wie houdt het langst vol?</small>', 1.4); } }, wait);
+  setTimeout(() => {
+    if (!live) return;
+    startRun();
+    if (!jacht) toast('⚡ REN!<small>Wie houdt het langst vol?</small>', 1.4);
+    else if (ikShane) toast('📱 PAK HEM!<small>1 ⚡ sprint · 2 🚀 Kwaliteit Troeki · 3 💣 obstakels</small>', 2.4);
+    else toast(`🏃 REN, JENS!<small>Shane zit ${JACHT_VOORSPRONG} meter achter je</small>`, 2);
+  }, wait);
 }
 function liveSend(m) { if (live?.ws.readyState === 1) live.ws.send(JSON.stringify(m)); }
-function liveClose() { if (live) { const ws = live.ws; live = null; clearGhosts(); try { ws.close(); } catch (e) { /* al dicht */ } } if (curScreen === '#social') renderLive(); }
+function liveClose() { jachtStop(); if (live) { const ws = live.ws; live = null; clearGhosts(); try { ws.close(); } catch (e) { /* al dicht */ } } if (curScreen === '#social') renderLive(); }
 function liveMsg(m) {
   if (!live) return;
-  if (m.t === 'players') { live.players = m.list; if (curScreen === '#social') renderLive(); renderFlive(); }
+  if (m.t === 'players') {
+    live.players = m.list; if (curScreen === '#social') renderLive(); renderFlive();
+    if (jacht && !jacht.bot && state === 'run' && m.list.length < 2) jachtEinde(true, 'Gewonnen!', 'Je tegenstander is weggegaan.');
+  }
   if (m.t === 'soon') {
     live.soon = m.at || 0;
     clearInterval(fliveT);
     if (m.at) fliveT = setInterval(() => renderFlive(), 400);
     renderFlive();
   }
-  if (m.t === 'go') liveGo(m.mode, m.at);
+  if (m.t === 'go') liveGo(m.mode, m.at, m.shane);
+  if (jacht && !jacht.bot) { if (m.t === 's' || m.t === 'dead' || m.t === 'j') jachtMsg(m); return; }
   if (m.t === 's') {
     let g = live.ghosts.get(m.pid);
     if (!g) g = makeGhost(m.pid, m.name);
@@ -11071,7 +11110,8 @@ function renderLive() {
   const me = live.players.find((p) => p.pid === save.playerId);
   body.innerHTML = `<div class="clanhead"><b>⚡ Kamer <code>${live.code}</code></b><span>Geef deze code aan je vrienden (max 4 spelers)</span></div>
     <ol class="board">${live.players.map((p) => `<li><span class="pos">${p.host ? '👑' : '🏃'}</span><span class="nm">${escHtml(p.name)}</span></li>`).join('') || '<li class="empty">Verbinden…</li>'}</ol>
-    ${me?.host ? `<button class="btn big" id="lvStart" ${live.players.length < 2 ? 'disabled' : ''}>START (${MODES[mode].icon} ${MODES[mode].label})</button><p class="hint">De modus die je in het menu gekozen hebt, geldt voor iedereen.</p>` : '<p>Wachten tot de host start…</p>'}
+    ${me?.host ? `<button class="btn big" id="lvStart" ${live.players.length < 2 ? 'disabled' : ''}>START (${MODES[mode].icon} ${MODES[mode].label})</button><p class="hint">De modus die je in het menu gekozen hebt, geldt voor iedereen.</p>
+      ${live.players.length === 2 ? '<div class="label">📱 Shane jaagt (1 tegen 1)</div><div class="row"><button class="btn" id="lvJShane">Ik ben Shane</button><button class="btn" id="lvJJens">Ik ben Jens</button></div>' : ''}` : '<p>Wachten tot de host start…</p>'}
     <button class="btn alt" id="lvLeave">Kamer verlaten</button>`;
 }
 function makeGhost(pid, name) {
@@ -11091,7 +11131,11 @@ function updateLive(dt) {
   if (live.bots) updateBots(dt);
   if (state === 'run') {
     liveSendT -= dt;
-    if (liveSendT <= 0) { liveSendT = 0.1; liveSend({ t: 's', d: Math.round(dist * 10) / 10, x: Math.round(player.x * 100) / 100, y: Math.round(player.y * 100) / 100, sl: player.slideT > 0 ? 1 : 0, sc: Math.floor(score) }); }
+    if (liveSendT <= 0) {
+      liveSendT = 0.1;
+      const d = jacht ? jachtMijnD() : dist, jx = jacht ? { tr: jacht.pw.troeki.t > 0 ? 1 : 0, bk: fietsT > 0 || indoor ? 1 : 0 } : {};
+      liveSend({ t: 's', d: Math.round(d * 10) / 10, x: Math.round(player.x * 100) / 100, y: Math.round(player.y * 100) / 100, sl: player.slideT > 0 ? 1 : 0, sc: Math.floor(score), ...jx });
+    }
   }
   for (const g of live.ghosts.values()) {
     if (!g.alive) continue;
@@ -11109,6 +11153,16 @@ function liveOnDeath() {
 function renderLiveResult() {
   const el = $('#overLive');
   if (!live?.started || state !== 'over') { el.classList.add('hidden'); return; }
+  if (jacht?.klaar) {
+    const ikShane = jacht.rol === 'shane', shaneWint = jacht.win === ikShane;
+    const host = live.players.find((p) => p.pid === save.playerId)?.host;
+    el.classList.remove('hidden');
+    el.innerHTML = `<b>📱 Shane jaagt · ${shaneWint ? '🏆 Shane wint!' : '🏆 Jens ontsnapt!'}</b>
+      <p>${jacht.win ? 'Jij wint' : 'Jij verliest'} als ${ikShane ? 'Shane' : 'Jens'}.</p>
+      ${jacht.bot ? `<div class="row"><button class="btn alt" data-jbot="${jacht.rol}">🔁 Nog een keer</button><button class="btn alt" data-jbot="${ikShane ? 'jens' : 'shane'}">Wissel van rol</button></div>`
+        : host && live.players.length >= 2 ? '<button class="btn alt" id="lvJWissel">🔁 Nog een keer (rollen wisselen)</button>' : '<p class="hint">Wachten tot de host een nieuwe jacht start…</p>'}`;
+    return;
+  }
   const others = [...live.ghosts.entries()].filter(([pid, g]) => g.alive && !live.results.has(pid));
   const rows = [...live.results.values()].sort((a, b) => b.dist - a.dist);
   const done = others.length === 0;
@@ -11118,8 +11172,265 @@ function renderLiveResult() {
     ${rows.map((r, i) => `<li class="${r.name === liveName() ? 'me' : ''}"><span class="pos">${done ? i + 1 : '💀'}</span><span class="nm">${escHtml(r.name)}</span><span class="sc">${r.dist} m</span></li>`).join('')}</ol>
     ${done && live.quick ? '<button class="btn alt" id="lvQuick">⚡ Nog een race</button>' : done && live.players.find((p) => p.pid === save.playerId)?.host ? '<button class="btn alt" id="lvAgain">⚡ Nog een race</button>' : ''}`;
 }
-$('#overLive').addEventListener('click', (e) => { if (e.target.id === 'lvAgain') liveSend({ t: 'start', mode }); if (e.target.id === 'lvQuick') { toMenu(); quickPlay(); } });
-setInterval(() => { if (state === 'over' && live?.started) renderLiveResult(); }, 1000);
+$('#overLive').addEventListener('click', (e) => {
+  const jb = e.target.closest('[data-jbot]');
+  if (jb) { startJachtBot(jb.dataset.jbot); return; }
+  if (e.target.id === 'lvJWissel' && jacht) { jachtStartKamer(jacht.rol !== 'shane'); return; }
+  if (e.target.id === 'lvAgain') liveSend({ t: 'start', mode }); if (e.target.id === 'lvQuick') { toMenu(); quickPlay(); } });
+setInterval(() => { if (state === 'over' && live?.started && !jacht) renderLiveResult(); }, 1000);
+
+// =====================================================================
+//  SHANE JAAGT: 1 tegen 1. Eén speler is Shane en moet Jens pakken,
+//  Jens moet JACHT_TIJD seconden uit zijn handen blijven.
+//  Afstanden gaan in 'Jens-meters': Shane begint JACHT_VOORSPRONG achter.
+// =====================================================================
+const JACHT_TIJD = 90, JACHT_VOORSPRONG = 80;
+const JACHT_POWERS = {
+  sprint: { icon: '⚡', naam: 'SPRINT', duur: 3, cd: 15, mul: 1.3, start: 3 },
+  troeki: { icon: '🚀', naam: 'TROEKI', duur: 4, cd: 45, mul: 1.6, start: 25 },
+  trap: { icon: '💣', naam: 'OBSTAKELS', duur: 0, cd: 16, start: 8 },
+};
+// Kwaliteit Troeki: Shane z'n opgevoerde cabrio
+function makeTroeki() {
+  const g = new THREE.Group();
+  const lak = M('#e8e8ec'), zwart = M('#151515'), goud = M('#e0b030');
+  g.add(mesh(box(1.7, 0.5, 3.6), lak, 0, 0.42, 0));
+  g.add(mesh(box(1.72, 0.08, 3.62), M('#c8202b'), 0, 0.56, 0)); // racestreep
+  g.add(mesh(box(1.5, 0.35, 0.06), M('#26313d'), 0, 0.85, -0.55)); // voorruit
+  g.add(mesh(box(1.6, 0.06, 0.4), zwart, 0, 1.0, 1.7)); // spoiler
+  for (const x of [-0.6, 0.6]) g.add(mesh(box(0.06, 0.32, 0.06), zwart, x, 0.82, 1.7));
+  g.add(mesh(box(1.4, 0.12, 0.05), M('#fff6c0', { emissive: '#b09020' }), 0, 0.5, -1.82)); // koplampen
+  for (const [x, z] of [[-0.85, -1.15], [0.85, -1.15], [-0.85, 1.15], [0.85, 1.15]]) {
+    const w = wheel(0.3, 0.26, zwart); w.position.set(x, 0.3, z); g.add(w);
+    g.add(mesh(cylG(0.17, 0.17, 0.27, 8).rotateZ(Math.PI / 2), goud, x, 0.3, z));
+  }
+  const neon = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#30e0ff', transparent: true, opacity: 0.55, depthWrite: false }));
+  neon.position.y = 0.03; g.add(neon);
+  const plaat = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.2).rotateY(Math.PI), new THREE.MeshBasicMaterial({ map: canvasTex(128, 32, (x) => {
+    x.fillStyle = '#ffd23f'; x.fillRect(0, 0, 128, 32); x.fillStyle = '#111'; x.font = '22px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('TROEKI', 64, 17);
+  }) }));
+  plaat.position.set(0, 0.45, 1.81); g.add(plaat);
+  g.add(makeShadow(2.2, 4.2));
+  return g;
+}
+const jensLabel = makeLabel('JENS', '#c8202b');
+jensLabel.position.y = 2.4; jensLabel.visible = false;
+jens.root.add(jensLabel);
+const troeki = makeTroeki();
+troeki.position.y = -0.42;
+troeki.visible = false;
+chasers.telefoon.root.add(troeki);
+
+function jachtStart(rol, bot) {
+  jachtStop();
+  const pw = {};
+  for (const [k, p] of Object.entries(JACHT_POWERS)) pw[k] = { t: 0, cd: p.start };
+  jacht = { rol, bot, t: 0, o: { d: rol === 'shane' ? 0 : -JACHT_VOORSPRONG, v: 0, x: 0, y: 0, at: now() }, pw, slowT: 0, trapQ: 0, klaar: false, vastT: 0, hudT: 0,
+    b: { struikel: rand(7, 12), slow: 0, power: rand(12, 20), boost: 0, wis: 1, denk: rand(0.5, 2) } };
+  $('#jachtKnop').classList.toggle('hidden', rol !== 'shane');
+  jensLabel.visible = rol === 'shane';
+}
+function jachtStop() {
+  if (!jacht) return;
+  jacht = null;
+  troeki.visible = false;
+  chasers.telefoon.root.position.y = 0;
+  jens.root.visible = true;
+  jensBike.visible = false;
+  jensLabel.visible = false;
+  $('#jachtHud').classList.add('hidden');
+  $('#jachtKnop').classList.add('hidden');
+}
+// waar de ander nu ongeveer is (berichten komen elke 0,1 s)
+const jachtAnder = () => jacht.o.d + (jacht.o.v || 0) * Math.min(0.35, now() - jacht.o.at);
+const jachtMijnD = () => (jacht.rol === 'shane' ? dist - JACHT_VOORSPRONG : dist);
+function jachtMul() {
+  if (!jacht) return 1;
+  if (jacht.rol === 'jens') return jacht.slowT > 0 ? 0.45 : 1;
+  return jacht.pw.troeki.t > 0 ? JACHT_POWERS.troeki.mul : jacht.pw.sprint.t > 0 ? JACHT_POWERS.sprint.mul : 1;
+}
+// Jens struikelt of knalt ergens op: niet dood, wel even traag (en Shane komt dichterbij)
+function jachtVal(t) {
+  jacht.slowT = Math.max(jacht.slowT, t);
+  invulnT = Math.max(invulnT, t + 0.4);
+  shakeT = 0.35;
+  if (t > 1.5) bubble(jens.head, pick(['AUW!', 'Mijn knie!', 'Nee nee nee']), 'shout', 1.2, 0.5);
+}
+function jachtPower(k) {
+  if (!jacht || jacht.rol !== 'shane' || state !== 'run' || jacht.klaar) return;
+  const p = jacht.pw[k], def = JACHT_POWERS[k];
+  if (!p || p.cd > 0) return;
+  p.cd = def.cd; p.t = def.duur;
+  buzz([30, 40, 30]); sfx.power();
+  if (k === 'sprint') { toast('⚡ SPRINT!', 1); fxFlash('#5ad1ff', 0.2); }
+  if (k === 'troeki') { hype('🚀 KWALITEIT TROEKI!'); fxFlash('#30e0ff', 0.3); jacht.pw.sprint.t = 0; }
+  if (k === 'trap') {
+    toast('💣 OBSTAKELS!<small>Jens z\'n weg ligt vol</small>', 1.4);
+    if (jacht.bot) jacht.b.struikel = Math.min(jacht.b.struikel, rand(0.8, 2.5));
+    else liveSend({ t: 'j', e: 'trap' });
+  }
+}
+// Shane z'n bekers laden de power-ups sneller op
+function jachtBeker() { for (const p of Object.values(jacht.pw)) if (p.cd > 0) p.cd = Math.max(0, p.cd - 0.25); }
+// Shane gooit de weg vol: drie lastige rijen achter elkaar
+function jachtTrap() {
+  for (const o of objs) if (o.z < -40 && o.z > -100 && !['landmark', 'deco', 'sign', 'ingang'].includes(o.kind)) o.dead = true;
+  const rijen = ['muur', 'bukken', 'gat'].sort(() => Math.random() - 0.5);
+  rijen.forEach((r, i) => {
+    const z = -52 - i * 16;
+    if (r === 'muur') {
+      const vrij = Math.floor(Math.random() * 3);
+      for (let l = 0; l < 3; l++) if (l === vrij) addObj('kliko', prefab('kliko', makeKliko), LANES[l], z, 0.8, 0.8, 1.12);
+      else addObj('auto', prefab('auto', makeCar, 5), LANES[l], z - 1.2, 1.85, 3.9, 1.5);
+    } else if (r === 'bukken') addObj('afzetting', makeAfzetting(), 0, z, ROAD_W, 0.3, 1.5);
+    else addObj('gat', makeHole(ROAD_W - 0.4, 2.8), 0, z, ROAD_W, 2.8, 0);
+  });
+  toast('💣 SHANE GOOIT DE WEG VOL!<small>Springen, bukken, uitwijken!</small>', 1.8);
+  bubble(chasers.telefoon.head, 'Succes, Jens!', 'shout', 1.4);
+  buzz([40, 30, 40]);
+}
+function jachtEinde(win, titel, tekst) {
+  if (!jacht || jacht.klaar || state !== 'run') return;
+  Object.assign(jacht, { klaar: true, win, titel, tekst });
+  state = 'dying'; deathReason = 'jacht'; deathT = 0;
+  engineStop();
+  if (fietsT > 0) stopFiets();
+  brommerT = 0; moped.visible = false;
+  $('#hud').classList.add('hidden');
+  $('#jachtHud').classList.add('hidden'); $('#jachtKnop').classList.add('hidden');
+  if (win) { hype(`🏆 ${titel}`, 'mega'); fxFlash('#ffd23f', 0.4); buzz(TRIL.record); } else { playGameover(); flash(true); }
+  setTimeout(renderLiveResult, 2000);
+}
+// berichten van de ander
+function jachtMsg(m) {
+  if (m.t === 's') {
+    const o = jacht.o, t = now();
+    if (o.at && t > o.at) o.v = clamp((m.d - o.d) / (t - o.at), 0, 60);
+    Object.assign(o, { d: m.d, x: m.x, y: m.y, sl: m.sl, tr: m.tr, bk: m.bk, at: t });
+  }
+  if (m.t === 'dead' && jacht.rol === 'shane') jachtEinde(true, 'GEPAKT!', `Shane heeft Jens na ${Math.floor(jacht.t)} seconden te pakken. Telefoon inleveren, om half 4 mag hij hem ophalen.`);
+  if (m.t === 'j' && m.e === 'trap' && jacht.rol === 'jens') jacht.trapQ++;
+  if (m.t === 'j' && m.e === 'ontsnapt' && jacht.rol === 'shane') jachtEinde(false, 'Ontsnapt…', `Jens is ${JACHT_TIJD} seconden uit je handen gebleven. Geen telefoon vandaag.`);
+}
+// de bot speelt de andere rol
+function jachtBot(dt) {
+  const b = jacht.b, o = jacht.o;
+  let mul = 1;
+  if (jacht.rol === 'shane') {
+    if (b.slow > 0) b.slow -= dt;
+    if (b.boost > 0) b.boost -= dt;
+    if ((b.struikel -= dt) <= 0) { b.struikel = rand(7, 13); b.slow = rand(0.8, 1.5); }
+    if ((b.power -= dt) <= 0) { b.power = rand(14, 24); b.boost = 5; }
+    mul = b.slow > 0 ? 0.45 : b.boost > 0 ? 1.45 : 1;
+    o.y = Math.max(0, Math.sin(now() * 3) - 0.86) * 8;
+  } else {
+    for (const [k, p] of Object.entries(jacht.pw)) { if (p.t > 0) p.t -= dt; if (p.cd > 0) p.cd -= dt; }
+    if ((b.denk -= dt) <= 0) {
+      b.denk = rand(1, 3);
+      const p = jacht.pw;
+      if (p.troeki.cd <= 0 && p.sprint.t <= 0) { p.troeki.cd = JACHT_POWERS.troeki.cd; p.troeki.t = JACHT_POWERS.troeki.duur; }
+      else if (p.sprint.cd <= 0 && p.troeki.t <= 0) { p.sprint.cd = JACHT_POWERS.sprint.cd; p.sprint.t = JACHT_POWERS.sprint.duur; }
+      if (p.trap.cd <= 0) { p.trap.cd = JACHT_POWERS.trap.cd; jacht.trapQ++; }
+    }
+    mul = jacht.pw.troeki.t > 0 ? JACHT_POWERS.troeki.mul : jacht.pw.sprint.t > 0 ? JACHT_POWERS.sprint.mul : 1;
+    o.tr = jacht.pw.troeki.t > 0 ? 1 : 0;
+  }
+  if ((b.wis -= dt) <= 0) { b.wis = rand(1, 3); o.x = pick(LANES); }
+  o.v = baseSpeed * mul;
+  o.d += o.v * dt; o.at = now();
+}
+function updateJacht(dt) {
+  if (!jacht) return;
+  const run = state === 'run';
+  if (run && !jacht.klaar) {
+    jacht.t += dt;
+    if (jacht.slowT > 0) jacht.slowT -= dt;
+    if (jacht.bot) jachtBot(dt);
+    else if (!live) { jachtEinde(false, 'Verbinding weg', 'De live-verbinding is verbroken.'); return; }
+    if (jacht.rol === 'shane') for (const p of Object.values(jacht.pw)) { if (p.t > 0) p.t -= dt; if (p.cd > 0) p.cd -= dt; }
+    const gap = jacht.rol === 'jens' ? dist - jachtAnder() : jachtAnder() - jachtMijnD();
+    if (jacht.rol === 'jens') {
+      if (jacht.trapQ > 0 && !indoor && !seg?.active && !schoolPhase) { jacht.trapQ--; jachtTrap(); }
+      if (gap <= 0.7 && jacht.t > 2) {
+        Object.assign(jacht, { klaar: true, win: false, titel: 'Gepakt!', tekst: `Shane heeft je na ${Math.floor(jacht.t)} seconden te pakken. Telefoon inleveren!` });
+        die('gepakt');
+        return;
+      }
+      if (jacht.t >= JACHT_TIJD) { liveSend({ t: 'j', e: 'ontsnapt' }); jachtEinde(true, 'ONTSNAPT!', `Jens is ${JACHT_TIJD} seconden uit Shane z'n handen gebleven. De telefoon blijft in zijn zak.`); return; }
+    } else {
+      // de echte Jens meldt zelf dat hij gepakt is; dit is alleen voor bots en haperende verbindingen
+      jacht.vastT = gap <= (jacht.bot ? 0.7 : -2) ? jacht.vastT + dt : 0;
+      if (jacht.vastT > (jacht.bot ? 0 : 1.5)) { jachtEinde(true, 'GEPAKT!', `Shane heeft Jens na ${Math.floor(jacht.t)} seconden te pakken. Telefoon inleveren!`); return; }
+      if (jacht.t >= JACHT_TIJD + (jacht.bot ? 0 : 3)) { jachtEinde(false, 'Ontsnapt…', `Jens is ${JACHT_TIJD} seconden uit je handen gebleven. Geen telefoon vandaag.`); return; }
+    }
+    if ((jacht.hudT -= dt) <= 0) { jacht.hudT = 0.1; jachtHud(gap); }
+  }
+  // Shane-kant: de echte Jens rent voor je uit
+  if (jacht.rol === 'shane' && (run || state === 'dying')) {
+    const o = jacht.o, z = Math.min(-0.9, jachtMijnD() - jachtAnder());
+    const r = jens.root;
+    r.position.set(damp(r.position.x, o.x, 8, dt), o.y || 0, z);
+    r.rotation.set(0, 0, 0);
+    r.visible = z > -75;
+    jensBike.visible = !!o.bk && !jacht.klaar;
+    pose(jens, jacht.klaar ? 'grabbed' : o.bk ? 'bike' : o.sl ? 'slide' : o.y > 0.1 ? 'jump' : 'phone', dt, clamp(speed / 12, 0.9, 1.7));
+  }
+}
+function jachtHud(gap) {
+  const el = $('#jachtHud');
+  el.classList.remove('hidden');
+  const rest = Math.max(0, Math.ceil(JACHT_TIJD - jacht.t)), m = Math.max(0, Math.round(gap));
+  $('#jhRol').textContent = jacht.rol === 'shane' ? '🎯 JENS' : '📱 SHANE';
+  $('#jhGap').textContent = `${m} m`;
+  $('#jhBar').style.width = `${clamp(gap / (JACHT_VOORSPRONG * 1.5), 0, 1) * 100}%`;
+  $('#jhTijd').textContent = `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}`;
+  el.classList.toggle('dichtbij', gap < 15);
+  if (jacht.rol !== 'shane') return;
+  for (const b of document.querySelectorAll('#jachtKnop [data-jp]')) {
+    const p = jacht.pw[b.dataset.jp], def = JACHT_POWERS[b.dataset.jp];
+    b.classList.toggle('klaar', p.cd <= 0);
+    b.classList.toggle('aan', p.t > 0);
+    b.querySelector('i').style.height = p.cd > 0 ? `${(p.cd / def.cd) * 100}%` : '0';
+  }
+}
+// Shane-achtervolger: op Jens z'n scherm volgt hij de echte Shane, op Shane z'n scherm ben jij het
+function jachtChaser(c, dt, moving) {
+  const tr = jacht.rol === 'shane' ? jacht.pw.troeki.t > 0 && !jacht.klaar : !!jacht.o.tr;
+  troeki.visible = tr;
+  if (c.label) c.label.visible = false;
+  if (jacht.rol === 'jens') {
+    if (state === 'run' || state === 'dying') chaseDist = damp(chaseDist, state === 'dying' && !jacht.win ? 0.9 : clamp(dist - jachtAnder(), 0.6, 90), 6, dt);
+    chaseX = damp(chaseX, state === 'dying' ? player.x : jacht.o.x || 0, 5, dt);
+    c.root.position.set(chaseX, tr ? 0.42 : 0, chaseDist);
+    c.root.visible = !indoor && !seg?.active && chaseDist < 70;
+    pose(c, tr ? 'sit' : moving ? 'grab' : 'reach', dt, moving ? clamp(speed / 12, 0.8, 1.6) : 1);
+  } else {
+    c.root.position.set(player.x, player.y + (tr ? 0.42 : 0), 0);
+    c.root.visible = true;
+    pose(c, tr ? 'sit' : player.slideT > 0 ? 'slide' : !player.grounded ? 'jump' : moving ? 'grab' : 'idle', dt, clamp(speed / 12, 0.8, 1.6));
+  }
+  if (tr) for (const o of troeki.children) if (o.isMesh && o.geometry.type === 'CylinderGeometry') o.rotation.x -= speed * dt / 0.3;
+}
+function startJachtBot(rol) {
+  liveClose();
+  live = { ws: { readyState: 3, close() {} }, code: 'BOTS', quick: true, bots: true, players: [], ghosts: new Map(), results: new Map(), started: false };
+  $('#fmLive').classList.add('hidden');
+  liveGo('jacht', Date.now() + 3000, rol === 'shane' ? save.playerId : 'bot');
+}
+function jachtStartKamer(ikShane) {
+  const ander = live?.players.find((p) => p.pid !== save.playerId);
+  if (!ander) return;
+  liveSend({ t: 'start', mode: 'jacht', shane: ikShane ? save.playerId : ander.pid });
+}
+for (const b of document.querySelectorAll('#jachtKnop [data-jp]')) {
+  b.addEventListener('click', () => jachtPower(b.dataset.jp));
+  b.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); jachtPower(b.dataset.jp); }, { passive: false });
+}
+$('#flJShane').addEventListener('click', () => jachtStartKamer(true));
+$('#flJJens').addEventListener('click', () => jachtStartKamer(false));
+$('#flJKamer').addEventListener('click', () => liveConnect(Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join(''), true));
+$('#flJBotShane').addEventListener('click', () => { audioInit(); startJachtBot('shane'); });
+$('#flJBotJens').addEventListener('click', () => { audioInit(); startJachtBot('jens'); });
 
 // =====================================================================
 //  ACCOUNT: inloggen met naam/e-mail + wachtwoord, voortgang synct tussen apparaten
@@ -13057,4 +13368,4 @@ const ARC = {
   },
 };
 
-window.__jr = { camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };

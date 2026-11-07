@@ -1064,6 +1064,40 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 #flStatus { font-size: 18px; font-weight: 700; }
 #flList { min-height: 0; }
 #overLive .btn { margin-top: 4px; }
+/* ---------- Shane jaagt ---------- */
+.fl-jacht { margin-top: 12px; padding: 12px; border-radius: 12px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 8px; }
+.fl-jacht-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fl-jacht-h b { font-family: var(--title); font-size: 20px; font-style: italic; color: #ffd23f; }
+.fl-jacht-h span { font-size: 13px; opacity: .8; }
+.fl-jacht p { margin: 0; font-size: 14px; line-height: 1.35; }
+.jachthud {
+  position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top)) + 44px);
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 12px; background: rgba(0,0,0,.72);
+  font-family: var(--title); font-size: 15px; white-space: nowrap;
+}
+.jachthud b { font-size: 20px; color: #ffd23f; min-width: 52px; text-align: right; }
+.jachthud i { display: block; width: 90px; height: 8px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,.15); }
+.jachthud em { display: block; height: 100%; width: 50%; background: #7dff6a; transition: width .1s linear; }
+.jachthud.dichtbij b { color: #ff5a3a; }
+.jachthud.dichtbij em { background: #ff5a3a; }
+.jachtknop {
+  position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex; gap: 8px; pointer-events: auto;
+}
+.jachtknop button {
+  position: relative; overflow: hidden; width: 74px; height: 74px; border: 0; border-radius: 16px; color: #fff;
+  background: linear-gradient(#3a3f4a, #20242c); box-shadow: 0 4px 0 #0c0e12; opacity: .7;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.jachtknop button b { font-size: 28px; line-height: 1; }
+.jachtknop button span { font-family: var(--title); font-size: 11px; letter-spacing: .4px; }
+.jachtknop button small { position: absolute; top: 4px; left: 6px; font-family: var(--title); font-size: 11px; opacity: .7; }
+.jachtknop button i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0,0,0,.55); }
+.jachtknop button.klaar { opacity: 1; background: linear-gradient(#ff5a3a, #c11a10); box-shadow: 0 4px 0 #6d0c06; }
+.jachtknop button.aan { opacity: 1; background: linear-gradient(#30e0ff, #1a7fd0); box-shadow: 0 4px 0 #0b3c66; }
+.jachtknop button:active { transform: translateY(2px); }
+@media (pointer: coarse) { .jachtknop button small { display: none; } }
+@media (max-width: 700px) { .jachthud { top: calc(max(12px, env(safe-area-inset-top)) + 38px); font-size: 13px; } .jachthud i { width: 60px; } }
 .livebox { border-radius: var(--r); }
 @media (max-width: 700px) {
   .bug { height: 30px; font-size: 17px; }

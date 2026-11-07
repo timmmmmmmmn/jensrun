@@ -48,6 +48,12 @@
       <div class="lvl-top"><b id="lvlName"></b><span id="lvlTasks"></span></div>
       <div class="lvl-bar"><i id="lvlBar"></i></div>
     </div>
+    <div id="jachtHud" class="jachthud hidden"><span id="jhRol"></span><b id="jhGap">0 m</b><i><em id="jhBar"></em></i><span id="jhTijd">1:30</span></div>
+    <div id="jachtKnop" class="jachtknop hidden">
+      <button data-jp="sprint" aria-label="Sprint"><b>⚡</b><span>SPRINT</span><small>1</small><i></i></button>
+      <button data-jp="troeki" aria-label="Kwaliteit Troeki"><b>🚀</b><span>TROEKI</span><small>2</small><i></i></button>
+      <button data-jp="trap" aria-label="Obstakels"><b>💣</b><span>OBSTAKELS</span><small>3</small><i></i></button>
+    </div>
     <button id="nitroBtn" class="nitro hidden" aria-label="Nitraat afsteken">🧨 <span>×3</span><small>E</small></button>
   </div>
   <div id="snap" class="snap hidden">
@@ -159,6 +165,13 @@
       <ol id="flList" class="board"></ol>
       <button id="flStart" class="btn big hidden">START</button>
       <div class="row"><button id="flShare" class="btn alt">📣 Deel link</button><button id="flBots" class="btn alt">🏃 Tegen bots</button></div>
+      <div class="fl-jacht">
+        <div class="fl-jacht-h"><b>📱 SHANE JAAGT</b><span>2 spelers · 90 sec</span></div>
+        <p>Eén speler is Shane. Hij rent dwars door alles heen, sprint, rijdt in de Kwaliteit Troeki en gooit obstakels op Jens z'n weg. Jens moet 90 seconden uit zijn handen blijven.</p>
+        <div class="row hidden" id="flJachtHost"><button id="flJShane" class="btn">Ik ben Shane</button><button id="flJJens" class="btn">Ik ben Jens</button></div>
+        <button id="flJKamer" class="btn">📱 Jachtkamer maken</button>
+        <div class="row"><button id="flJBotShane" class="btn alt">Oefen als Shane</button><button id="flJBotJens" class="btn alt">Oefen als Jens</button></div>
+      </div>
     </div></div>
     <!-- zwevend venster: nieuwsbericht -->
     <div id="fmArt" class="fm-float hidden"><div class="fm-float-in fm-art">
