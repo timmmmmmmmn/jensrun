@@ -566,6 +566,8 @@ export default {
 // =====================================================================
 //  Live samen rennen: één kamer per code, berichten worden doorgestuurd
 // =====================================================================
+// iedereen in de race krijgt hetzelfde getal, en dus dezelfde kaart
+const newSeed = () => 1 + Math.floor(Math.random() * 2147483646);
 export class Room {
   constructor(state) { this.state = state; }
   async fetch(req) {
@@ -612,15 +614,16 @@ export class Room {
       await this.state.storage.put('startedAt', Date.now());
       // Shane jaagt: de host kiest wie Shane is
       const shane = m.mode === 'jacht' ? String(m.shane || '').slice(0, 40) : undefined;
-      this.send({ t: 'go', mode: String(m.mode || 'fiets'), shane, at: Date.now() + 3500 });
+      this.send({ t: 'go', mode: String(m.mode || 'fiets'), shane, seed: newSeed(), at: Date.now() + 3500 });
       return;
     }
-    if (m.t === 's' || m.t === 'dead' || m.t === 'j') this.send({ ...m, pid: me.pid, name: me.name }, ws);
+    if (m.t === 'chat') { const txt = String(m.txt || '').trim().slice(0, 80); if (txt) this.send({ t: 'chat', txt, pid: me.pid, name: me.name }, ws); return; }
+    if (m.t === 's' || m.t === 'dead' || m.t === 'j' || m.t === 'ev') this.send({ ...m, pid: me.pid, name: me.name }, ws);
   }
   async alarm() {
     if (this.players().length < 2) return;
     await this.state.storage.put('startedAt', Date.now());
-    this.send({ t: 'go', mode: 'telefoon', at: Date.now() + 3500 });
+    this.send({ t: 'go', mode: 'telefoon', seed: newSeed(), at: Date.now() + 3500 });
   }
   async webSocketClose(ws) { await this.afterLeave(ws); }
   async webSocketError(ws) { await this.afterLeave(ws); }

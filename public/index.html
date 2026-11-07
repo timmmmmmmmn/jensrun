@@ -48,6 +48,7 @@
       <div class="lvl-top"><b id="lvlName"></b><span id="lvlTasks"></span></div>
       <div class="lvl-bar"><i id="lvlBar"></i></div>
     </div>
+    <div id="mpFeed" class="mpfeed"></div>
     <div id="jachtHud" class="jachthud hidden"><span id="jhRol"></span><b id="jhGap">0 m</b><i><em id="jhBar"></em></i><span id="jhTijd">1:30</span></div>
     <div id="jachtKnop" class="jachtknop hidden">
       <button data-jp="sprint" aria-label="Sprint"><b>⚡</b><span>SPRINT</span><small>1</small><i></i></button>
@@ -244,7 +245,14 @@
         <button id="shareBtn" class="btn alt">📣 Daag uit</button>
         <button id="snapShare" class="btn alt snapbtn hidden">💾 Download je filmpje</button>
       </div>
-      <div id="overLive" class="livebox hidden"></div>
+      <div id="overLive" class="livebox hidden">
+        <div id="olRes"></div>
+        <div id="olChat" class="olchat">
+          <ol id="chatLog"></ol>
+          <div id="chatQuick" class="chatq"><button data-q="GG">GG</button><button data-q="Haha 😂">Haha 😂</button><button data-q="REN!">REN!</button><button data-q="Bijna 🔥">Bijna 🔥</button><button data-q="Nog een keer?">Nog een keer?</button></div>
+          <form id="chatForm" class="row"><input id="chatIn" maxlength="80" placeholder="Stuur een bericht…" autocomplete="off"><button class="btn">Stuur</button></form>
+        </div>
+      </div>
       <button id="replayBtn" class="btn alt hidden">🎬 Bekijk de replay</button>
       <form id="wallForm" class="namebox hidden">
         <label for="wallInput">👑 Je staat #1! Zet iets op de muur</label>
