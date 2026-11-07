@@ -1960,7 +1960,7 @@ const omCamera = makePerson({ key: 'omcamera', skin: '#f1cdb2', hair: '#777', ha
   for (const p of [omReporter, omCamera]) { p.root.visible = false; scene.add(p.root); }
 }
 const OM_LINES = ['Omroep Gelderland! Een reactie?', 'Jens, één vraagje maar!', 'Jens! Hoe voelt dit?', 'Wij zijn live, Jens!', 'Is de beker echt van ons?', 'Jens, wacht nou even!', 'Kijkers willen het weten!', 'Eén reactie voor de camera!'];
-let omroepT = 0, omroepNext = 40, omroepK = 0, omroepSide = 1, omroepSay = 0;
+let omroepK = 0, omroepSide = 1, omroepSay = 0;
 
 // =====================================================================
 //  world: road, sidewalks, houses, trees
@@ -2864,7 +2864,7 @@ function resetRun() {
   else if (boss) { scene.remove(boss.mesh); boss = null; }
   applyTheme(curLevel ? THEMES[curLevel.theme] : THEMES.oost);
   spawnZ = -42; nextSign = 380; nextPower = rand(85, 130); nextRegen = 260; firstPower = true; streetIdx = Math.floor(Math.random() * STREETS.length);
-  nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 34; omroepT = 0; omroepNext = rand(25, 50); omroepK = 0; runUp = {}; wkT = 0; thunderT = 3; lkKans = false; plakMaatje.root.visible = false;
+  nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 34; omroepK = 0; rijTel.clear(); runUp = {}; wkT = 0; thunderT = 3; lkKans = false; plakMaatje.root.visible = false;
   deathT = 0; shakeT = 0; runTime = 0; lineT = mode === 'telefoon' ? rand(30, 45) : rand(6, 9); toetT = rand(4, 7);
   nitraten = 0;
   for (const sh of shots) scene.remove(sh.mesh);
@@ -2894,17 +2894,21 @@ function resetRun() {
 // =====================================================================
 function gapFor() { return clamp(baseSpeed * rand(1.0, 1.5), 12, 30); }
 
+let rijId = 0;
+const rijTel = new Map();
 function spawnCoinsLine(lane, z, n = 6) {
+  const rij = ++rijId;
   for (let i = 0; i < n; i++) {
     const cz = z + 3.5 - i * 1.6;
-    addObj('beker', coinProxy(), LANES[lane], cz, 0, 0, 0, { y: 0.85 });
+    addObj('beker', coinProxy(), LANES[lane], cz, 0, 0, 0, { y: 0.85, rij, rijN: n });
   }
 }
 function spawnCoinsArc(lane, z) {
+  const rij = ++rijId;
   for (let i = 0; i < 6; i++) {
     const t = i / 5;
     const cz = z + 4 - t * 8;
-    addObj('beker', coinProxy(), LANES[lane], cz, 0, 0, 0, { y: 0.85 + Math.sin(t * Math.PI) * 1.3 });
+    addObj('beker', coinProxy(), LANES[lane], cz, 0, 0, 0, { y: 0.85 + Math.sin(t * Math.PI) * 1.3, rij, rijN: 6 });
   }
 }
 // vaste obstakels: één keer bouwen en samenvoegen, daarna alleen nog klonen (geen nieuwe vormen en minder tekenopdrachten)
@@ -3069,10 +3073,14 @@ function updateHud() {
     const best = save.best[mode] || 0;
     if (state === 'run' && !nearRecord && best > 1500 && sc > best * 0.9 && sc < best) { nearRecord = true; note(`😬 Nog ${(best - sc).toLocaleString('nl-NL')} tot je record!`); tone(660, 0.1, 'square', 0.05); tone(880, 0.12, 'square', 0.05, null, 0.12); }
   }
+  if (hudBekers === runBekers && bekerRunT <= 0) $('#bugStreak').classList.add('hidden');
   if (hudBekers !== runBekers) {
     hudBekers = runBekers;
     const el = $('#bekerCount');
     el.querySelector('span').textContent = runBekers;
+    const st = $('#bugStreak'), reeks = bekerRunT > 0 && bekerRun >= 3;
+    st.classList.toggle('hidden', !reeks);
+    if (reeks) { st.textContent = `×${bekerRun}`; st.classList.remove('pop'); void st.offsetWidth; st.classList.add('pop'); }
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   }
   let html = '';
@@ -3671,6 +3679,18 @@ function collide() {
         missionEvent('bekers', n);
         const dn = fxDing();
         coinFly(_pv.set(player.x, player.y + 1.4, -0.3), camera);
+        burst(_pv.set(o.x, (o.y || 0.85) + 0.3, o.z), lowFx ? 3 : 6, 3.4, glinsterMats, 0.32);
+        if (o.rij) {
+          const k = (rijTel.get(o.rij) || 0) + 1;
+          if (k >= o.rijN) {
+            rijTel.delete(o.rij);
+            const pts = 50 * scoreMult() * (bekerT > 0 ? 2 : 1);
+            score += pts;
+            runPop(`VOLLE RIJ! +${pts}`, 'good rij');
+            jingle.kaching(); buzz(18);
+          } else rijTel.set(o.rij, k);
+          if (rijTel.size > 40) rijTel.delete(rijTel.keys().next().value);
+        }
         if (dn >= 8) runPop('+' + 10 * n * scoreMult(), 'good small');
         bekerRun = bekerRunT > 0 ? bekerRun + 1 : 1; bekerRunT = 1.4;
         if (bekerRun === 10 || bekerRun === 25 || bekerRun === 50 || bekerRun === 100) { hype(`🏆 BEKERSTREAK ×${bekerRun}!`, bekerRun >= 50 ? 'mega' : ''); buzz(TRIL.streak); score += bekerRun * 10 * scoreMult(); }
@@ -3907,14 +3927,10 @@ function updateChaser(dt, moving) {
   pose(c, kind, dt, moving ? clamp(speed / 12, 0.8, 1.6) : (c.style === 'bike' ? 0.1 : 1));
   if (c.vehicle) for (const w of c.vehicle.userData.wheels) w.rotation.x -= (moving ? speed : 0) * dt / 0.34;
 
-  // Omroep Gelderland: tijdens 'de beker is van ons' en af en toe zomaar. De bus rijdt vóór Jens zodat je
+  // Omroep Gelderland: alleen tijdens 'de beker is van ons'. De bus rijdt vóór Jens zodat je
   // hem ook op een smal scherm ziet, de verslaggever en de cameraman rennen vlak naast hem.
   const run = state === 'run' || state === 'paused';
-  if (state === 'run' && !curLevel && !indoor && !seg?.active) {
-    if (omroepT > 0) omroepT -= dt;
-    else if ((omroepNext -= dt) <= 0) { omroepT = 10; omroepNext = rand(45, 90); }
-  }
-  const omOn = run && !indoor && !seg?.active && (bekerT > 0 || omroepT > 0);
+  const omOn = run && !indoor && !seg?.active && bekerT > 0; // alleen bij de power-up 'de beker is van ons'
   const wasOff = omroepK < 0.02;
   omroepK = damp(omroepK, omOn ? 1 : 0, omOn ? 1.8 : 2.6, dt);
   const vanTarget = omOn ? (camera.aspect < 0.8 ? -10 : -7) : 34;
@@ -3964,11 +3980,11 @@ function earlyHooks(dt) {
   if (curLevel) return;
   // XP komt uit je punten
   if (score > xpScore) { gainXp(Math.floor(score - xpScore)); xpScore = Math.floor(score); }
-  // elke 100 meter een klein beloninkje (tot 1000 m)
-  if (nextMicro <= 1000 && dist > nextMicro) {
+  // elke 100 meter een klein beloninkje, na 1000 m elke 500 meter
+  if (dist > nextMicro) {
     const mr = $('#score').getBoundingClientRect();
     popAt(`${nextMicro} M ✓`, mr.left + 60, mr.top + mr.height / 2, 'good small'); jingle.drum(); fxDing();
-    score += 25 * scoreMult(); nextMicro += 100;
+    score += 25 * scoreMult(); nextMicro += nextMicro < 1000 ? 100 : 500;
   }
   // sneller: per snelheidstrap een melding
   if (speedTier < SPEED_TIERS.length && baseSpeed > SPEED_TIERS[speedTier]) { speedTier++; hype('⚡ SNELLER!', '', 'riser'); fxFlash('#5ad1ff', 0.15); buzz(TRIL.sneller); }
@@ -7843,8 +7859,8 @@ const COMBO_HYPE = { 10: 'COMBO 10!', 20: 'ON FIRE! 🔥', 30: 'NIET TE STOPPEN!
 // losse tekstjes tijdens het rennen: boven de horizon, nooit op de weg; op de telefoon alleen de grote
 const isPhone = () => innerWidth <= 700;
 function runPop(text, cls) {
-  if (isPhone() && !cls.includes('big')) return;
-  popAt(text, innerWidth / 2 + rand(-40, 40), innerHeight * 0.2, cls);
+  if (isPhone() && !cls.includes('big') && !cls.includes('rij')) return;
+  popAt(text, innerWidth / 2 + rand(-40, 40), innerHeight * (cls.includes('rij') ? 0.34 : 0.2), cls); // de rij-bonus onder de grote meldingen
 }
 function comboHit(label) {
   const before = comboMult();
@@ -11487,6 +11503,7 @@ function fxFlash(color = '#fff', a = 0.4) {
 }
 // bekertje vliegt van Jens naar je teller rechtsboven
 let coinFlying = 0;
+const glinsterMats = ['#fff3b0', '#ffd23f', '#ffffff'].map((c) => new THREE.MeshBasicMaterial({ color: c }));
 function coinFly(pos, cam) {
   if (isPhone() || coinFlying > 3) return; // de teller telt toch wel op
   const tgt = $('#bekerCount')?.getBoundingClientRect();
@@ -13040,4 +13057,4 @@ const ARC = {
   },
 };
 
-window.__jr = { camera, jens, player, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };

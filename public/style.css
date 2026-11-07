@@ -1078,3 +1078,12 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
   .fm-news { bottom: calc(262px + env(safe-area-inset-bottom)); }
 }
 @media (max-height: 640px) and (min-width: 701px) { .fm-mp { height: 38px; font-size: 18px; margin-top: 5px; } }
+
+/* ---------- kleine beloningen ---------- */
+#bekerCount.pop { animation: cupPop .22s ease-out; }
+@keyframes cupPop { 0% { background: #ffe14a; } 45% { transform: scale(1.14); } 100% { transform: scale(1); background: #fff; } }
+.bug-streak { background: var(--accent); color: #fff; font-family: var(--title); font-size: 19px; padding: 0 9px !important; font-style: italic; }
+.bug-streak.pop { animation: streakPop .2s ease-out; }
+@keyframes streakPop { 40% { transform: scale(1.25) rotate(-4deg); } }
+.fx-pop.rij { font-size: 22px; color: #ffe14a; text-shadow: 2px 2px 0 #c2410c, -1px -1px 0 #000; }
+@media (max-width: 700px) { .bug-streak { font-size: 15px; } .fx-pop.rij { font-size: 15px; } }
