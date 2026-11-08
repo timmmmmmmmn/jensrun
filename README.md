@@ -27,6 +27,7 @@ Lokaal draaien: `npx wrangler dev`. Live zetten: `npx wrangler deploy`.
 
 ## Met dank aan
 
+- Glazen menu ("Meer" op de telefoon): overgenomen uit [expo-glass-custom-menu](https://github.com/rit3zh/expo-glass-custom-menu) van rit3zh (MIT, zie `android/app/src/main/java/nl/timvanbergen/jensrun/glass/LICENSE`), met het lettertype Inter (OFL)
 - 3D-model van de KNVB-beker: stresvogel (gebruikt met toestemming, teruggebracht tot PS1-formaat in `public/beker-model.js`)
 - Iconen: [game-icons.net](https://game-icons.net) (CC BY 3.0), vlaggen: [flag-icons](https://github.com/lipis/flag-icons) (MIT)
 - Lettertypen: Anton en Barlow Semi Condensed (OFL)

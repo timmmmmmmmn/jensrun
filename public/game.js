@@ -4258,6 +4258,7 @@ function showScreen(sel) {
   for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer']) $(s).classList.toggle('hidden', s !== sel);
   for (const f of ['#fmModes', '#fmArt', '#fmLive']) $(f).classList.add('hidden');
   if (sel === '#menu') { renderWall(); renderFm(); }
+  glasSluit(true);
   if (sel === '#menu') { $('#mMore').classList.add('hidden'); $('#xPop').classList.add('hidden'); $('#menuBekers').textContent = $('#mBekers').textContent = save.bekers.toLocaleString('nl-NL'); $('#mMult').textContent = `×${save.mult}`; $('#fmBell').dataset.n = $('#mBell').dataset.n = $('#socialBtn').dataset.n || ''; renderModes(); renderMissions(); renderFeesten(); renderChallenge(); }
   if (sel === '#over') renderMissions('#overMissions');
 }
@@ -5631,7 +5632,133 @@ $('#storyBtn').addEventListener('click', openLevels);
 $('#samenBtn').addEventListener('click', () => { audioInit(); openSocial('live'); });
 // mobiel menu: proxy-knoppen, 'Meer'-blad en opklapbare opdrachten
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { $('#mMore').classList.add('hidden'); $(b.dataset.go)?.click(); }));
-$('#mMoreBtn').addEventListener('click', () => $('#mMore').classList.toggle('hidden'));
+// ---------- "Meer" op de telefoon: een menu van glas ----------
+// In de Android-app (13+) tekent de app het echte glas; elders dezelfde beweging met CSS.
+// De regels komen uit het gewone paneel en klikken daar ook op de echte knoppen; dat paneel
+// blijft de terugval voor browsers zonder backdrop-filter.
+const glasRows = () => [...document.querySelectorAll('#mMore .m-grid > [data-i]')].map((el) => {
+  const n = el.dataset.n;
+  return { el, icon: el.dataset.i, title: el.lastChild.textContent.trim() + (n ? ` (${n})` : '') };
+});
+function glasIcoon(icon) {
+  const cell = ICONS[icon];
+  if (!cell || !iconSheet.complete) return '';
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 48;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(iconSheet, cell[0] * ICON_CS, cell[1] * ICON_CS, ICON_CS, ICON_CS, 0, 0, 48, 48);
+    return c.toDataURL('image/png').split(',')[1];
+  } catch (e) { return ''; }
+}
+// Veerbeweging als CSS-easing (zelfde gevoel als het glazen menu in de app).
+const glasVeer = (() => {
+  const punten = [];
+  for (let i = 0; i <= 40; i++) {
+    const t = i / 40 * 0.62;
+    punten.push((1 - Math.exp(-11 * t) * Math.cos(15 * t)).toFixed(3));
+  }
+  const s = `linear(${punten.join(',')})`;
+  return window.CSS?.supports?.('animation-timing-function', s) ? s : 'cubic-bezier(.2,1.25,.35,1)';
+})();
+let glasOpen = null;
+function glasSluit(meteen) {
+  if (!glasOpen) return false;
+  const g = glasOpen;
+  glasOpen = null;
+  if (meteen) { g.root.remove(); return true; }
+  g.root.style.pointerEvents = 'none';
+  g.panel.animate({ transform: g.van, opacity: 0 }, { duration: 170, easing: 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' }).finished
+    .catch(() => {}).finally(() => g.root.remove());
+  return true;
+}
+function glasMenu(from) {
+  const rows = glasRows();
+  const r = from.getBoundingClientRect();
+  try {
+    if (window.JensRunNative?.glassMenu?.(JSON.stringify({
+      x: r.left, y: r.top, w: r.width, h: r.height,
+      items: rows.map((row, i) => ({ id: String(i), title: row.title, png: glasIcoon(row.icon) })),
+    }))) {
+      window.__jrGlassPick = (id) => rows[+id]?.el.click();
+      return true;
+    }
+  } catch (e) { /* dan de versie hieronder */ }
+  if (!CSS.supports('backdrop-filter', 'blur(1px)') && !CSS.supports('-webkit-backdrop-filter', 'blur(1px)')) return false;
+  const root = document.createElement('div');
+  root.className = 'glas';
+  root.innerHTML = `<div class="glas-p" role="menu"><span class="glas-plate"></span>${rows.map((row) => `<button role="menuitem"><i>${row.icon}</i><span>${escHtml(row.title)}</span></button>`).join('')}</div>`;
+  $('#app').appendChild(root);
+  const panel = root.firstChild, plate = panel.firstChild;
+  const knoppen = [...panel.querySelectorAll('button')];
+  const p = panel.getBoundingClientRect();
+  const ox = r.left + r.width / 2 - p.right, oy = r.top + r.height / 2 - p.bottom;
+  const van = `translate(${ox}px, ${oy}px) scale(${Math.max(.08, r.width / p.width * .7)}, ${Math.max(.05, r.height / p.height * .7)})`;
+  glasOpen = { root, panel, van };
+  const rustig = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  panel.animate({ transform: [van, 'none'], opacity: [0, 1, 1] }, { duration: rustig ? 1 : 420, easing: glasVeer });
+  const inhoud = panel.querySelectorAll('button > *');
+  if (!rustig) inhoud.forEach((el) => el.animate({ opacity: [0, 1], filter: ['blur(5px)', 'blur(0)'] }, { duration: 240, delay: 70, easing: 'ease-out', fill: 'backwards' }));
+  let actief = -1, ingedrukt = false, klaar = false;
+  const rijOp = (y) => knoppen.findIndex((b) => { const q = b.getBoundingClientRect(); return y >= q.top && y < q.bottom; });
+  const licht = (i) => {
+    if (i === actief) return;
+    if (i >= 0 && actief >= 0) buzz(6);
+    const eerste = actief < 0;
+    actief = i;
+    plate.classList.toggle('aan', i >= 0);
+    if (i < 0) return;
+    if (eerste) plate.style.transition = 'opacity .12s';
+    plate.style.transform = `translateY(${knoppen[i].offsetTop}px)`;
+    plate.style.height = `${knoppen[i].offsetHeight}px`;
+    if (eerste) requestAnimationFrame(() => { plate.style.transition = ''; });
+  };
+  const kies = (i) => {
+    if (klaar) return;
+    klaar = true;
+    buzz(10);
+    glasSluit();
+    rows[i]?.el.click();
+  };
+  const volg = (e) => {
+    const q = panel.getBoundingClientRect();
+    panel.style.setProperty('--x', `${e.clientX - q.left}px`);
+    panel.style.setProperty('--y', `${e.clientY - q.top}px`);
+    // het glas trekt een klein beetje naar je vinger toe
+    const dx = e.clientX - (q.left + q.width / 2), dy = e.clientY - (q.top + q.height / 2);
+    panel.style.translate = `${Math.max(-6, Math.min(6, dx * .025))}px ${Math.max(-6, Math.min(6, dy * .018))}px`;
+    licht(e.clientX >= q.left - 24 && e.clientX <= q.right + 24 ? rijOp(e.clientY) : -1);
+  };
+  root.addEventListener('pointerdown', (e) => {
+    ingedrukt = panel.contains(e.target);
+    if (!ingedrukt) return;
+    panel.classList.add('druk');
+    panel.setPointerCapture?.(e.pointerId);
+    volg(e);
+  });
+  panel.addEventListener('pointermove', (e) => { if (ingedrukt) volg(e); });
+  const los = (e, kiezen) => {
+    if (!ingedrukt) return;
+    ingedrukt = false;
+    panel.classList.remove('druk');
+    panel.style.translate = '';
+    const i = actief;
+    licht(-1);
+    if (kiezen && i >= 0) kies(i);
+  };
+  panel.addEventListener('pointerup', (e) => los(e, true));
+  panel.addEventListener('pointercancel', (e) => los(e, false));
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b) kies(knoppen.indexOf(b));
+    else if (e.target === root) { buzz(6); glasSluit(); }
+  });
+  return true;
+}
+$('#mMoreBtn').addEventListener('click', (e) => {
+  if (!glasOpen && !glasMenu(e.currentTarget)) $('#mMore').classList.toggle('hidden');
+});
 $('#xBtn').addEventListener('click', () => $('#xPop').classList.remove('hidden'));
 $('#xPop').addEventListener('click', (e) => { if (e.target.id === 'xPop' || e.target.id === 'xClose' || e.target.closest('.x-grid button')) $('#xPop').classList.add('hidden'); });
 $('#mMore').addEventListener('click', (e) => { if (e.target.id === 'mMore') $('#mMore').classList.add('hidden'); });
@@ -11668,6 +11795,7 @@ $('#appBtn').addEventListener('click', () => {
 $('#instBack').addEventListener('click', () => showScreen('#menu'));
 // terug-knop van de Android-app
 window.__jrBack = () => {
+  if (glasSluit()) return true;
   if (state === 'run') { pauseGame(); return true; }
   if (state === 'mini') { if (mini.over) miniQuit(); else miniPause(!mini.paused); return true; }
   if (curScreen && curScreen !== '#menu' && curScreen !== '#start') { if (curLevel || state !== 'menu') toMenu(); else showScreen('#menu'); return true; }

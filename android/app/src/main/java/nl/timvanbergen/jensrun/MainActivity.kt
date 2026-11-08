@@ -6,13 +6,16 @@ import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.RectF
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import androidx.core.content.FileProvider
 import java.io.File
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -22,9 +25,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.annotation.RequiresApi
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import nl.timvanbergen.jensrun.glass.GlassMenu
+import nl.timvanbergen.jensrun.glass.records.GlassMenuItemRecord
+import org.json.JSONObject
 
 /**
  * Jens Run als app: de game van jensrun.timvanbergen.nl schermvullend in een eigen venster.
@@ -34,6 +41,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var web: WebView
     private var paused = false
+    private var glassMenu: GlassMenu? = null
     private val askNotifications = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -46,6 +54,7 @@ class MainActivity : ComponentActivity() {
         web = WebView(this)
         web.setBackgroundColor(Color.BLACK)
         setContentView(web)
+        if (Build.VERSION.SDK_INT >= 33) glassMenu = GlassMenu(window.decorView as ViewGroup)
         hideBars()
 
         with(web.settings) {
@@ -90,6 +99,28 @@ class MainActivity : ComponentActivity() {
         Meldingen.channel(this)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    @RequiresApi(33)
+    private fun showGlassMenu(menu: JSONObject) {
+        val density = resources.displayMetrics.density
+        val origin = IntArray(2).also { web.getLocationInWindow(it) }
+        val left = origin[0] + menu.getDouble("x").toFloat() * density
+        val top = origin[1] + menu.getDouble("y").toFloat() * density
+        val from = RectF(left, top, left + menu.getDouble("w").toFloat() * density, top + menu.getDouble("h").toFloat() * density)
+        val rows = menu.getJSONArray("items")
+        val items = List(rows.length()) { i ->
+            val row = rows.getJSONObject(i)
+            val png = row.optString("png").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
+            GlassMenuItemRecord(
+                id = row.getString("id"),
+                title = row.getString("title"),
+                iconBitmap = png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) },
+            )
+        }
+        glassMenu?.show(from, items) { id ->
+            web.evaluateJavascript("window.__jrGlassPick && __jrGlassPick(${JSONObject.quote(id)})", null)
         }
     }
 
@@ -183,6 +214,15 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun checkUpdate() {
             runOnUiThread { Updater.check(this@MainActivity, manual = true) }
+        }
+
+        /** Het glazen menu; false op oudere toestellen, dan toont de pagina haar eigen versie. */
+        @JavascriptInterface
+        fun glassMenu(json: String): Boolean {
+            if (Build.VERSION.SDK_INT < 33) return false
+            val menu = JSONObject(json)
+            runOnUiThread { showGlassMenu(menu) }
+            return true
         }
 
         @JavascriptInterface

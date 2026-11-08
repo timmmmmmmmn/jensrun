@@ -1140,3 +1140,32 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 @keyframes streakPop { 40% { transform: scale(1.25) rotate(-4deg); } }
 .fx-pop.rij { font-size: 22px; color: #ffe14a; text-shadow: 2px 2px 0 #c2410c, -1px -1px 0 #000; }
 @media (max-width: 700px) { .bug-streak { font-size: 15px; } .fx-pop.rij { font-size: 15px; } }
+
+/* ---------- "Meer" op de telefoon: een menu van glas ---------- */
+.glas { position: absolute; inset: 0; z-index: 7; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.glas-p {
+  position: absolute; right: 10px; bottom: calc(max(6px, env(safe-area-inset-bottom)) + 66px);
+  width: min(248px, calc(100% - 20px)); padding: 8px; border-radius: 30px; transform-origin: 100% 100%;
+  background: linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.03) 42%, rgba(12,8,6,.1)), rgba(14,9,6,.42);
+  -webkit-backdrop-filter: blur(14px) saturate(1.7) brightness(.82); backdrop-filter: blur(14px) saturate(1.7) brightness(.82);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.5), inset 0 0 0 .5px rgba(255,255,255,.22), inset 0 -8px 16px -10px rgba(255,255,255,.22), 0 16px 40px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.3);
+  transition: translate .42s cubic-bezier(.2,1.5,.4,1);
+}
+.glas-p.druk { transition: translate .1s linear; }
+/* licht onder je vinger */
+.glas-p::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .4s;
+  background: radial-gradient(130px circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,.17), transparent 70%);
+}
+.glas-p.druk::after { opacity: 1; transition-duration: .1s; }
+.glas-plate {
+  position: absolute; left: 8px; right: 8px; top: 0; border-radius: 22px; background: rgba(255,255,255,.16); opacity: 0; pointer-events: none;
+  transition: transform .2s cubic-bezier(.2,1.2,.4,1), opacity .14s;
+}
+.glas-plate.aan { opacity: 1; }
+.glas-p button {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 13px; width: 100%; height: 47px; padding: 0 14px; border-radius: 22px;
+  background: none; color: #fff; font-size: 16.5px; font-weight: 600; text-align: left; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.55); pointer-events: auto;
+}
+.glas-p button > span { overflow: hidden; text-overflow: ellipsis; }
+.glas-p button i { font-style: normal; font-size: 19px; line-height: 1; width: 26px; text-align: center; flex: none; }
