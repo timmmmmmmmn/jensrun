@@ -4327,7 +4327,24 @@ async function loadNews() {
     if (curScreen === '#menu') renderFmNews();
   } catch (e) { /* offline: de ingebouwde blijft staan */ }
 }
-$('#fmMode').addEventListener('click', () => { audioInit(); renderModes(); $('#fmModes').classList.remove('hidden'); });
+// Telefoon: spel kiezen in het glazen menu; de oude knoppen doen het echte werk.
+setTimeout(() => { if (isMobiel()) Object.keys(MODES).forEach((k) => { if (!MODES[k].hidden) glasVoorlaad(MODE_IMG(k)); }); }, 2500);
+function modeRows() {
+  renderModes();
+  const rows = Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => (modeOpen(k)
+    ? { title: m.label, img: MODE_IMG(k), checked: k === mode, run: () => $(`#modes [data-mode="${k}"]`).click() }
+    : { title: m.label, icon: '🔒', subtitle: `${(MODE_UNLOCK[k] / 1000).toLocaleString('nl-NL')}k in 1 run`, checked: false, disabled: true }));
+  return [...rows, { separator: true },
+    { title: 'Verhaal', icon: '📖', run: () => $('#storyBtn').click() },
+    { title: 'Samen spelen', icon: '👥', run: () => $('#samenBtn').click() },
+    { title: 'Weekuitdaging', icon: '🗓️', run: () => $('#wkBtn').click() }];
+}
+$('#fmMode').addEventListener('click', (e) => {
+  audioInit();
+  if (isMobiel() && glasMenu(e.currentTarget, modeRows())) return;
+  renderModes();
+  $('#fmModes').classList.remove('hidden');
+});
 for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => $(b.dataset.close).classList.add('hidden'));
 for (const f of ['#fmModes', '#fmArt']) $(f).addEventListener('click', (e) => { if (e.target.id === f.slice(1)) e.currentTarget.classList.add('hidden'); });
 $('#modes').addEventListener('click', (e) => {
@@ -4491,6 +4508,7 @@ bindNameForm('#boardName', () => renderBoard());
 let boardMode = mode;
 async function renderBoard() {
   $('#boardTabs').innerHTML = Object.entries(MODES).filter(([k, m]) => !m.hidden || k === 'bazen').map(([k, m]) => `<button class="tab ${k === boardMode ? 'sel' : ''}" data-bmode="${k}">${m.icon} ${m.label}</button>`).join('');
+  $('#boardPick').innerHTML = `<span>${MODES[boardMode]?.icon || ''} ${MODES[boardMode]?.label || ''}</span>`;
   $('#boardMe').textContent = save.name ? '👤 ' + save.name : '';
   $('#boardName').classList.toggle('hidden', !!save.name);
   const list = $('#boardList');
@@ -4505,6 +4523,11 @@ async function renderBoard() {
       : '<li class="empty">Nog niemand. Wordt de eerste!</li>';
   } catch (e) { list.innerHTML = '<li class="empty">Kan de ranglijst niet laden.</li>'; }
 }
+$('#boardPick').addEventListener('click', (e) => {
+  glasMenu(e.currentTarget, Object.entries(MODES).filter(([k, m]) => !m.hidden || k === 'bazen').map(([k, m]) => ({
+    title: m.label, icon: m.icon, checked: k === boardMode, run: () => { boardMode = k; renderBoard(); },
+  })));
+});
 $('#boardTabs').addEventListener('click', (e) => {
   const b = e.target.closest('[data-bmode]');
   if (b) { boardMode = b.dataset.bmode; renderBoard(); }
@@ -5638,17 +5661,36 @@ document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click'
 // blijft de terugval voor browsers zonder backdrop-filter.
 const glasRows = () => [...document.querySelectorAll('#mMore .m-grid > [data-i]')].map((el) => {
   const n = el.dataset.n;
-  return { el, icon: el.dataset.i, title: el.lastChild.textContent.trim() + (n ? ` (${n})` : '') };
+  return { icon: el.dataset.i, title: el.lastChild.textContent.trim() + (n ? ` (${n})` : ''), run: () => el.click() };
 });
-function glasIcoon(icon) {
-  const cell = ICONS[icon];
-  if (!cell || !iconSheet.complete) return '';
+const isMobiel = () => matchMedia('(max-width: 700px)').matches;
+// Regel van een icoon uit het iconenvel, of een klein plaatje (r.img), als PNG voor het native menu.
+const glasImgs = {};
+function glasVoorlaad(url) {
+  if (glasImgs[url]) return glasImgs[url];
+  const i = new Image();
+  i.src = url;
+  return (glasImgs[url] = i);
+}
+function glasIcoon(row) {
+  const pic = row.img && glasImgs[row.img];
+  const klaar = pic?.complete && pic.naturalWidth;
+  const cell = ICONS[(row.icon || '').replace(/\uFE0F/g, '')];
+  if (!klaar && (!cell || !iconSheet.complete)) return '';
   try {
     const c = document.createElement('canvas');
     c.width = c.height = 48;
     const g = c.getContext('2d');
-    g.imageSmoothingEnabled = false;
-    g.drawImage(iconSheet, cell[0] * ICON_CS, cell[1] * ICON_CS, ICON_CS, ICON_CS, 0, 0, 48, 48);
+    if (klaar) {
+      const s = Math.min(pic.naturalWidth, pic.naturalHeight);
+      g.beginPath();
+      g.roundRect(0, 0, 48, 48, 10);
+      g.clip();
+      g.drawImage(pic, (pic.naturalWidth - s) / 2, (pic.naturalHeight - s) / 2, s, s, 0, 0, 48, 48);
+    } else {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(iconSheet, cell[0] * ICON_CS, cell[1] * ICON_CS, ICON_CS, ICON_CS, 0, 0, 48, 48);
+    }
     return c.toDataURL('image/png').split(',')[1];
   } catch (e) { return ''; }
 }
@@ -5673,35 +5715,54 @@ function glasSluit(meteen) {
     .catch(() => {}).finally(() => g.root.remove());
   return true;
 }
-function glasMenu(from) {
-  const rows = glasRows();
+const glasKan = window.JensRunNative?.glassMenu || CSS.supports('backdrop-filter', 'blur(1px)') || CSS.supports('-webkit-backdrop-filter', 'blur(1px)');
+if (glasKan) document.documentElement.classList.add('glas-ok');
+// rows: { title, icon, img, subtitle, checked, disabled, heading, separator, run }
+function glasMenu(from, rows) {
   const r = from.getBoundingClientRect();
   try {
     if (window.JensRunNative?.glassMenu?.(JSON.stringify({
       x: r.left, y: r.top, w: r.width, h: r.height,
-      items: rows.map((row, i) => ({ id: String(i), title: row.title, png: glasIcoon(row.icon) })),
+      items: rows.map((row, i) => ({ ...row, run: undefined, img: undefined, icon: undefined, id: String(i), png: glasIcoon(row) })),
     }))) {
-      window.__jrGlassPick = (id) => rows[+id]?.el.click();
+      window.__jrGlassPick = (id) => rows[+id]?.run?.();
       return true;
     }
   } catch (e) { /* dan de versie hieronder */ }
-  if (!CSS.supports('backdrop-filter', 'blur(1px)') && !CSS.supports('-webkit-backdrop-filter', 'blur(1px)')) return false;
+  if (!glasKan) return false;
+  glasSluit(true);
+  const metVink = rows.some((row) => row.checked !== undefined);
   const root = document.createElement('div');
   root.className = 'glas';
-  root.innerHTML = `<div class="glas-p" role="menu"><span class="glas-plate"></span>${rows.map((row) => `<button role="menuitem"><i>${row.icon}</i><span>${escHtml(row.title)}</span></button>`).join('')}</div>`;
+  root.innerHTML = `<div class="glas-p" role="menu"><span class="glas-plate"></span>${rows.map((row, i) => {
+    if (row.separator) return '<hr>';
+    if (row.heading) return `<b class="glas-h">${escHtml(row.title)}</b>`;
+    const ico = row.img ? `<i class="glas-img" style="background-image:url(${row.img})"></i>` : row.icon ? `<i>${row.icon}</i>` : '';
+    return `<button role="menuitem" data-i="${i}"${row.disabled ? ' disabled' : ''}>${metVink ? `<em>${row.checked ? '✓' : ''}</em>` : ''}${ico}<span>${escHtml(row.title)}${row.subtitle ? `<small>${escHtml(row.subtitle)}</small>` : ''}</span></button>`;
+  }).join('')}</div>`;
   $('#app').appendChild(root);
   const panel = root.firstChild, plate = panel.firstChild;
   const knoppen = [...panel.querySelectorAll('button')];
+  // plaats: boven of onder de knop, aan de kant waar de knop staat, altijd binnen het scherm
+  const vak = root.getBoundingClientRect();
+  const p0 = panel.getBoundingClientRect();
+  const marge = 10, boven = r.top - vak.top, onder = vak.bottom - r.bottom;
+  const naarBoven = boven >= p0.height + marge || boven > onder;
+  const hoogte = Math.min(p0.height, (naarBoven ? boven : onder) - marge - 8);
+  panel.style.maxHeight = `${hoogte}px`;
+  const links = Math.max(marge, Math.min(vak.width - p0.width - marge, r.left + r.width / 2 > vak.width / 2 ? r.right - p0.width : r.left));
+  panel.style.left = `${links}px`;
+  panel.style.top = `${naarBoven ? r.top - vak.top - hoogte - 8 : r.bottom - vak.top + 8}px`;
   const p = panel.getBoundingClientRect();
-  const ox = r.left + r.width / 2 - p.right, oy = r.top + r.height / 2 - p.bottom;
-  const van = `translate(${ox}px, ${oy}px) scale(${Math.max(.08, r.width / p.width * .7)}, ${Math.max(.05, r.height / p.height * .7)})`;
+  const scrolt = panel.scrollHeight > panel.clientHeight + 1;
+  if (scrolt) root.style.touchAction = 'pan-y';
+  const van = `translate(${r.left + r.width / 2 - (p.left + p.width / 2)}px, ${r.top + r.height / 2 - (p.top + p.height / 2)}px) scale(${Math.max(.08, Math.min(1, r.width / p.width) * .7)}, ${Math.max(.05, r.height / p.height * .7)})`;
   glasOpen = { root, panel, van };
   const rustig = matchMedia('(prefers-reduced-motion: reduce)').matches;
   panel.animate({ transform: [van, 'none'], opacity: [0, 1, 1] }, { duration: rustig ? 1 : 420, easing: glasVeer });
-  const inhoud = panel.querySelectorAll('button > *');
-  if (!rustig) inhoud.forEach((el) => el.animate({ opacity: [0, 1], filter: ['blur(5px)', 'blur(0)'] }, { duration: 240, delay: 70, easing: 'ease-out', fill: 'backwards' }));
+  if (!rustig) panel.querySelectorAll('button > *, .glas-h').forEach((el) => el.animate({ opacity: [0, 1], filter: ['blur(5px)', 'blur(0)'] }, { duration: 240, delay: 70, easing: 'ease-out', fill: 'backwards' }));
   let actief = -1, ingedrukt = false, klaar = false;
-  const rijOp = (y) => knoppen.findIndex((b) => { const q = b.getBoundingClientRect(); return y >= q.top && y < q.bottom; });
+  const rijOp = (y) => knoppen.findIndex((b) => { const q = b.getBoundingClientRect(); return !b.disabled && y >= q.top && y < q.bottom; });
   const licht = (i) => {
     if (i === actief) return;
     if (i >= 0 && actief >= 0) buzz(6);
@@ -5714,24 +5775,25 @@ function glasMenu(from) {
     plate.style.height = `${knoppen[i].offsetHeight}px`;
     if (eerste) requestAnimationFrame(() => { plate.style.transition = ''; });
   };
-  const kies = (i) => {
-    if (klaar) return;
+  const kies = (b) => {
+    if (klaar || !b || b.disabled) return;
     klaar = true;
     buzz(10);
     glasSluit();
-    rows[i]?.el.click();
+    rows[+b.dataset.i]?.run?.();
   };
   const volg = (e) => {
     const q = panel.getBoundingClientRect();
     panel.style.setProperty('--x', `${e.clientX - q.left}px`);
-    panel.style.setProperty('--y', `${e.clientY - q.top}px`);
+    panel.style.setProperty('--y', `${e.clientY - q.top + panel.scrollTop}px`);
     // het glas trekt een klein beetje naar je vinger toe
     const dx = e.clientX - (q.left + q.width / 2), dy = e.clientY - (q.top + q.height / 2);
     panel.style.translate = `${Math.max(-6, Math.min(6, dx * .025))}px ${Math.max(-6, Math.min(6, dy * .018))}px`;
     licht(e.clientX >= q.left - 24 && e.clientX <= q.right + 24 ? rijOp(e.clientY) : -1);
   };
   root.addEventListener('pointerdown', (e) => {
-    ingedrukt = panel.contains(e.target);
+    // een lijst die zelf scrolt: alleen tikken, slepen is dan scrollen
+    ingedrukt = !scrolt && panel.contains(e.target);
     if (!ingedrukt) return;
     panel.classList.add('druk');
     panel.setPointerCapture?.(e.pointerId);
@@ -5745,19 +5807,19 @@ function glasMenu(from) {
     panel.style.translate = '';
     const i = actief;
     licht(-1);
-    if (kiezen && i >= 0) kies(i);
+    if (kiezen && i >= 0) kies(knoppen[i]);
   };
   panel.addEventListener('pointerup', (e) => los(e, true));
   panel.addEventListener('pointercancel', (e) => los(e, false));
   root.addEventListener('click', (e) => {
     const b = e.target.closest('button');
-    if (b) kies(knoppen.indexOf(b));
+    if (b) kies(b);
     else if (e.target === root) { buzz(6); glasSluit(); }
   });
   return true;
 }
 $('#mMoreBtn').addEventListener('click', (e) => {
-  if (!glasOpen && !glasMenu(e.currentTarget)) $('#mMore').classList.toggle('hidden');
+  if (!glasOpen && !glasMenu(e.currentTarget, glasRows())) $('#mMore').classList.toggle('hidden');
 });
 $('#xBtn').addEventListener('click', () => $('#xPop').classList.remove('hidden'));
 $('#xPop').addEventListener('click', (e) => { if (e.target.id === 'xPop' || e.target.id === 'xClose' || e.target.closest('.x-grid button')) $('#xPop').classList.add('hidden'); });
@@ -8454,6 +8516,7 @@ async function openProfile(name, from = '#board') {
       <div class="badges">${r.fame ? '<span>👑 Hatert verslagen</span>' : ''}${r.fameNl ? '<span>🏟️ Spandoek in de ArenA</span>' : ''}${p.stars != null ? `<span>★ ${p.stars}/24 Nijmegen</span><span>★ ${p.starsNl}/30 Nederland</span>` : ''}${p.ach?.length ? `<span>🏅 ${p.ach.length}/${ACH.length} prestaties</span>` : ''}</div>
       ${p.ach?.length ? `<div class="achrow">${ACH.filter((a) => p.ach.includes(a.id)).map((a) => `<span title="${a.name}">${a.icon}</span>`).join('')}</div>` : ''}
       <div class="reacts">${REACTIES.map((e) => `<button class="react ${r.myReaction === e ? 'sel' : ''}" data-react="${e}">${e} <small>${r.reactions?.[e] || 0}</small></button>`).join('')}</div>
+      <button id="prReact" class="glas-kies" data-mijn="${r.myReaction || ''}" data-tel="${escHtml(JSON.stringify(r.reactions || {}))}"><span>${REACTIES.filter((e) => r.reactions?.[e]).map((e) => `${e} ${r.reactions[e]}`).join(' &nbsp; ') || 'Reageren'}</span></button>
       <ol class="board">${scores}</ol>
       ${p.outfit ? `<div class="outfit"><b>Outfit</b><span>👕 ${ITEM('shirt', p.outfit.shirt)}</span><span>💇 ${ITEM('head', p.outfit.head)}</span><span>🕶️ ${ITEM('bril', p.outfit.bril)}</span><span>📣 ${ITEM('shout', p.outfit.shout)}</span><span>🦸 ${ITEM('rug', p.outfit.rug)}</span><span>✋ ${ITEM('hand', p.outfit.hand)}</span><span>🐾 ${ITEM('maatje', p.outfit.maatje)}</span></div>` : ''}`;
   } catch (e) { $('#prBody').innerHTML = '<p>Kan dit profiel niet laden.</p>'; }
@@ -10083,11 +10146,22 @@ $('#wallForm').addEventListener('submit', async (e) => {
 //  EMOJI-REACTIES op profielen
 // =====================================================================
 const REACTIES = ['😂', '🔥', '👑', '💀', '🤡'];
+const REACTIE_NAAM = { '😂': 'Lachen', '🔥': 'Vuur', '👑': 'Koning', '💀': 'Dood', '🤡': 'Clown' };
 async function reactTo(name, emoji) {
   if (!save.name) { note('Kies eerst een naam op de ranglijst'); return; }
   try { await apiCall('/api/react', { id: save.playerId, target: name, emoji }); buzz(15); openProfile(name, profileFrom); } catch (e) { /* offline */ }
 }
-$('#prBody').addEventListener('click', (e) => { const b = e.target.closest('[data-react]'); if (b) reactTo($('#prName').textContent, b.dataset.react); });
+$('#prBody').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-react]');
+  if (b) return reactTo($('#prName').textContent, b.dataset.react);
+  const k = e.target.closest('#prReact');
+  if (!k) return;
+  const tel = JSON.parse(k.dataset.tel);
+  glasMenu(k, REACTIES.map((em) => ({
+    title: REACTIE_NAAM[em] + (tel[em] ? ` (${tel[em]})` : ''), icon: em, checked: k.dataset.mijn === em,
+    run: () => reactTo($('#prName').textContent, em),
+  })));
+});
 
 // =====================================================================
 //  JENS' KAMER + RADIO
@@ -11014,10 +11088,19 @@ function openSocial(tab) {
   showScreen('#social');
   renderSocial();
 }
+const socialTabs = () => [['live', '⚡', 'Samen rennen'], ['vrienden', '👥', 'Vrienden'], ['clan', '🛡️', 'Clan'], ['meldingen', '🔔', `Meldingen${unread ? ` (${unread})` : ''}`]];
 function renderSocialTabs() {
-  $('#soTabs').innerHTML = [['live', '⚡ Samen rennen'], ['vrienden', '👥 Vrienden'], ['clan', '🛡️ Clan'], ['meldingen', `🔔 Meldingen${unread ? ` (${unread})` : ''}`]]
-    .map(([k, t]) => `<button class="tab ${k === socialTab ? 'sel' : ''}" data-so="${k}">${t}</button>`).join('');
+  $('#soTabs').innerHTML = socialTabs()
+    .map(([k, i, t]) => `<button class="tab ${k === socialTab ? 'sel' : ''}" data-so="${k}">${i} ${t}</button>`).join('');
+  const nu = socialTabs().find(([k]) => k === socialTab);
+  $('#soPick').innerHTML = `<span>${nu[1]} ${nu[2]}</span>`;
+  $('#soPick').classList.toggle('stip', !!unread && socialTab !== 'meldingen');
 }
+$('#soPick').addEventListener('click', (e) => {
+  glasMenu(e.currentTarget, socialTabs().map(([k, i, t]) => ({
+    title: t, icon: i, checked: k === socialTab, run: () => { socialTab = k; renderSocial(); },
+  })));
+});
 async function renderSocial() {
   renderSocialTabs();
   const body = $('#soBody');

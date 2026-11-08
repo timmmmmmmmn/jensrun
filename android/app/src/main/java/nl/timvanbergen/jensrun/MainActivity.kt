@@ -115,8 +115,13 @@ class MainActivity : ComponentActivity() {
             val png = row.optString("png").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
             GlassMenuItemRecord(
                 id = row.getString("id"),
-                title = row.getString("title"),
+                title = row.optString("title"),
+                subtitle = row.optString("subtitle").ifEmpty { null },
                 iconBitmap = png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) },
+                checked = if (row.has("checked")) row.optBoolean("checked") else null,
+                disabled = row.optBoolean("disabled"),
+                separator = row.optBoolean("separator"),
+                heading = row.optBoolean("heading"),
             )
         }
         glassMenu?.show(from, items) { id ->
