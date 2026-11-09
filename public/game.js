@@ -177,6 +177,7 @@ const SHOP = {
     { id: 'gonl', name: 'Go Nederland!', price: 300, text: 'GO NEDERLAND!', voice: 'gonl' },
     { id: 'bio', name: 'Nooit meer naar bio 🎵', price: 600, text: '🎵 Nooit meer naar bio 🎵', voice: 'bio' },
     { id: 'dbivo', name: 'DBIVO', price: 900, text: 'DIE BEKER IS VAN ONS!', clip: 'dbivo' },
+    { id: 'hohoho', name: 'Ho Ho Ho, Merry Christmas', price: 1200, text: '🎄 HO HO HO, MERRY CHRISTMAS! 🎄', voice: 'hohoho' },
   ] },
   shirt: { label: 'Shirt', items: [
     { id: 'wit', name: 'Wit shirtje', price: 0 },
@@ -5926,7 +5927,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 //  FIETS (power-up): Jens fietst zo lang als het filmpje duurt
 // =====================================================================
-const FIETS_CLIPS = 41;
+const FIETS_CLIPS = 43;
 let fietsDmg = 0;
 let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.5;
 const jensBike = makeBike('#c8202b');
@@ -5935,7 +5936,7 @@ jens.root.add(jensBike);
 function loadVoices() {
   queueClip('telefoon', 'audio/telefoon.mp3');
   queueClip('bio', 'audio/bio.mp3');
-  for (const n of ['gonl', 'telefoon2', 'lent', 'telefoon3', 'telefoon4', 'telefoon5', 'brommer']) queueClip(n, `audio/${n}.mp3`);
+  for (const n of ['gonl', 'hohoho', 'telefoon2', 'lent', 'telefoon3', 'telefoon4', 'telefoon5', 'brommer']) queueClip(n, `audio/${n}.mp3`);
   JOS_VOICE.forEach((_, i) => queueClip('jos' + (i + 1), `audio/jos/${i + 1}.mp3`));
   fietsVooruit();
 }
