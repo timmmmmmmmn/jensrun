@@ -4337,6 +4337,7 @@ function modeRows() {
   return [...rows, { separator: true },
     { title: 'Verhaal', icon: '📖', run: () => $('#storyBtn').click() },
     { title: 'Samen spelen', icon: '👥', run: () => $('#samenBtn').click() },
+    { title: 'Shane jaagt', icon: '📱', subtitle: '1 tegen 1 online', run: () => quickPlay(null, true) },
     { title: 'Weekuitdaging', icon: '🗓️', run: () => $('#wkBtn').click() }];
 }
 $('#fmMode').addEventListener('click', (e) => {
@@ -11259,41 +11260,47 @@ function liveConnect(code, quick) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/api/live/${code}`);
   live = { ws, code, quick, players: [], ghosts: new Map(), results: new Map(), started: false };
-  ws.onopen = () => liveSend({ t: 'hello', name: liveName(), pid: save.playerId });
+  let verbonden = false;
+  ws.onopen = () => { verbonden = true; jachtPogingen = 0; liveSend({ t: 'hello', name: liveName(), pid: save.playerId }); };
   ws.onmessage = (e) => liveMsg(JSON.parse(e.data));
-  ws.onclose = () => { if (live?.ws === ws) { if (!quick || live.started) note('⚡ Live-verbinding verbroken'); clearGhosts(); live = null; if (curScreen === '#social' && socialTab === 'live') renderLive(); renderFlive('Geen verbinding. Tegen bots kan altijd.'); } };
+  ws.onclose = () => {
+    // de jachtkamer was net vol: dan de volgende proberen
+    if (live?.ws === ws && !verbonden && /^JP0/.test(code) && jachtPogingen++ < 3) { live = null; quickPlay(null, true); return; }
+    if (live?.ws === ws) { if (!quick || live.started) note('⚡ Live-verbinding verbroken'); clearGhosts(); live = null; if (curScreen === '#social' && socialTab === 'live') renderLive(); renderFlive('Geen verbinding. Tegen bots kan altijd.'); } };
   renderLive();
 }
 // ---------- MULTIPLAYER: één druk op de knop en je zoekt een race ----------
-let fliveT = null;
-async function quickPlay(code) {
+let fliveT = null, jachtPogingen = 0;
+async function quickPlay(code, jachtZoek) {
   audioInit();
   clearInterval(fliveT);
   liveClose();
   $('#fmLive').classList.remove('hidden');
   renderFlive('Verbinden…');
   try {
-    if (!code) code = (await fetch('/api/live-quick').then((x) => x.json())).code;
+    if (!code) code = (await fetch(`/api/live-quick${jachtZoek ? '?mode=jacht' : ''}`).then((x) => x.json())).code;
     if (!$('#fmLive').classList.contains('hidden')) liveConnect(code, true);
   } catch (e) { renderFlive('Geen verbinding. Tegen bots kan altijd.'); }
 }
 function renderFlive(msg) {
   const el = $('#fmLive');
   if (el.classList.contains('hidden')) return;
-  const list = live?.players || [], pub = live && /^QP0/.test(live.code);
+  const list = live?.players || [], jachtPub = !!live && /^JP0/.test(live.code), pub = !!live && (jachtPub || /^QP0/.test(live.code));
+  const me = list.find((p) => p.pid === save.playerId);
   let tekst = msg;
   if (!tekst) {
     const rest = live?.soon ? Math.ceil((live.soon - Date.now()) / 1000) : 0;
-    tekst = rest > 0 ? `De race start over ${rest} …` : list.length >= 2 ? (pub ? 'Bijna…' : 'Klaar om te starten') : 'Zoeken naar spelers… deel de link of wacht even.';
+    if (jachtPub) tekst = list.length >= 2 ? 'Tegenstander gevonden! Het lot kiest wie Shane is…' : 'Zoeken naar een tegenstander…';
+    else tekst = rest > 0 ? `De race start over ${rest} …` : list.length >= 2 ? (pub ? 'Bijna…' : me?.host ? 'Klaar om te starten: kies een race of Shane jaagt' : `Wachten tot ${list.find((p) => p.host)?.name || 'de host'} start…`) : 'Zoeken naar spelers… deel de link of wacht even.';
   }
   $('#flStatus').textContent = tekst;
   $('#flList').innerHTML = list.map((p) => `<li class="${p.pid === save.playerId ? 'me' : ''}"><span class="pos">🏃</span><span class="nm">${escHtml(p.name)}</span></li>`).join('');
-  const me = list.find((p) => p.pid === save.playerId);
   $('#flStart').classList.toggle('hidden', !(live && !pub && me?.host && list.length >= 2));
-  $('#flShare').classList.toggle('hidden', !live);
+  $('#flShare').classList.toggle('hidden', !live || jachtPub);
   $('#flJachtHost').classList.toggle('hidden', !(live && !pub && me?.host && list.length === 2));
-  $('#flJKamer').classList.toggle('hidden', !!(live && !pub));
-  if (!msg && live && !pub && list.length < 2) $('#flStatus').textContent = 'Deel de link met je tegenstander…';
+  $('#flJZoek').classList.toggle('hidden', jachtPub || !!(live && !pub));
+  $('#flJPrive').classList.toggle('hidden', !!(live && !pub));
+  if (!msg && live && !pub && list.length < 2) $('#flStatus').textContent = `Kamercode ${live.code}: deel de link of geef de code door`;
 }
 $('#fmMp').addEventListener('click', () => quickPlay());
 function fliveCancel() { clearInterval(fliveT); $('#fmLive').classList.add('hidden'); liveClose(); }
@@ -11362,6 +11369,7 @@ function liveMsg(m) {
   if (m.t === 'players') {
     live.players = m.list; if (curScreen === '#social') renderLive(); renderFlive();
     if (jacht && !jacht.bot && state === 'run' && m.list.length < 2) jachtEinde(true, 'Gewonnen!', 'Je tegenstander is weggegaan.');
+    if (jacht?.klaar && state === 'over') renderLiveResult();
   }
   if (m.t === 'soon') {
     live.soon = m.at || 0;
@@ -11456,7 +11464,9 @@ function renderLiveResult() {
     $('#olRes').innerHTML = `<b>📱 Shane jaagt · ${shaneWint ? '🏆 Shane wint!' : '🏆 Jens ontsnapt!'}</b>
       <p>${jacht.win ? 'Jij wint' : 'Jij verliest'} als ${ikShane ? 'Shane' : 'Jens'}.</p>
       ${jacht.bot ? `<div class="row"><button class="btn alt" data-jbot="${jacht.rol}">🔁 Nog een keer</button><button class="btn alt" data-jbot="${ikShane ? 'jens' : 'shane'}">Wissel van rol</button></div>`
-        : host && live.players.length >= 2 ? '<button class="btn alt" id="lvJWissel">🔁 Nog een keer (rollen wisselen)</button>' : '<p class="hint">Wachten tot de host een nieuwe jacht start…</p>'}`;
+        : live.players.length < 2 ? '<p class="hint">Je tegenstander is weg.</p><button class="btn alt" id="lvJNieuw">🔎 Nieuwe tegenstander</button>'
+        : host ? `<button class="btn alt" id="lvJWissel">🔁 Nog een keer (rollen wisselen)</button>${/^JP0/.test(live.code) ? '<button class="btn alt" id="lvJNieuw">🔎 Nieuwe tegenstander</button>' : ''}`
+        : `<p class="hint">Wachten tot je tegenstander een nieuwe jacht start…</p>${/^JP0/.test(live.code) ? '<button class="btn alt" id="lvJNieuw">🔎 Nieuwe tegenstander</button>' : ''}`}`;
     return;
   }
   const others = [...live.ghosts.entries()].filter(([pid, g]) => g.alive && !live.results.has(pid));
@@ -11472,6 +11482,7 @@ $('#overLive').addEventListener('click', (e) => {
   const jb = e.target.closest('[data-jbot]');
   if (jb) { startJachtBot(jb.dataset.jbot); return; }
   if (e.target.id === 'lvJWissel' && jacht) { jachtStartKamer(jacht.rol !== 'shane'); return; }
+  if (e.target.id === 'lvJNieuw') { toMenu(); quickPlay(null, true); return; }
   if (e.target.id === 'lvAgain') liveSend({ t: 'start', mode }); if (e.target.id === 'lvQuick') { toMenu(); quickPlay(); } });
 setInterval(() => { if (state === 'over' && live?.started && !jacht) renderLiveResult(); }, 1000);
 
@@ -11774,6 +11785,14 @@ for (const b of document.querySelectorAll('#jachtKnop [data-jp]')) {
 $('#flJShane').addEventListener('click', () => jachtStartKamer(true));
 $('#flJJens').addEventListener('click', () => jachtStartKamer(false));
 $('#flJKamer').addEventListener('click', () => liveConnect(Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join(''), true));
+$('#flJZoek').addEventListener('click', () => quickPlay(null, true));
+$('#flCode').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const code = $('#flCodeIn').value.toUpperCase().trim();
+  $('#flCodeIn').value = '';
+  $('#flCodeIn').blur();
+  liveConnect(code, true);
+});
 $('#flJBotShane').addEventListener('click', () => { audioInit(); startJachtBot('shane'); });
 $('#flJBotJens').addEventListener('click', () => { audioInit(); startJachtBot('jens'); });
 

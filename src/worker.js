@@ -234,16 +234,19 @@ async function api(req, env, url) {
 
   // ---------- live samen rennen ----------
   // multiplayer met één knop: de eerste openbare kamer waar iemand wacht, anders een lege
+  // (?mode=jacht: Shane jaagt, kamers voor precies twee spelers)
   if (path === '/api/live-quick' && req.method === 'GET') {
+    const jacht = new URL(req.url).searchParams.get('mode') === 'jacht';
+    const prefix = jacht ? 'JP0' : 'QP0', max = jacht ? 2 : 4;
     let leeg = null;
     for (let i = 0; i < 10; i++) {
-      const code = `QP0${i}`;
+      const code = `${prefix}${i}`;
       const info = await env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(`https://kamer/info`).then((r) => r.json());
-      if (info.started || info.n >= 4) continue;
+      if (info.started || info.n >= max) continue;
       if (info.n > 0) return json({ code });
       leeg ||= code;
     }
-    return json({ code: leeg || `QP0${Math.floor(Math.random() * 10)}` });
+    return json({ code: leeg || `${prefix}${Math.floor(Math.random() * 10)}` });
   }
 
   if (path.startsWith('/api/live/')) {
@@ -577,8 +580,10 @@ export class Room {
       const started = n > 0 && Date.now() - ((await this.state.storage.get('startedAt')) || 0) < 6 * 60000;
       return Response.json({ n, started });
     }
-    if (this.state.getWebSockets().length >= 4) return new Response('vol', { status: 409 });
-    if (/\/QP0\d$/.test(url.pathname)) await this.state.storage.put('pub', true); // openbare kamer: start vanzelf
+    const jachtKamer = /\/JP0\d$/.test(url.pathname);
+    if (this.state.getWebSockets().length >= (jachtKamer ? 2 : 4)) return new Response('vol', { status: 409 });
+    if (jachtKamer) await this.state.storage.put('pub', 'jacht'); // Shane jaagt: start zodra er twee zijn
+    else if (/\/QP0\d$/.test(url.pathname)) await this.state.storage.put('pub', true); // openbare kamer: start vanzelf
     const [client, server] = Object.values(new WebSocketPair());
     this.state.acceptWebSocket(server);
     return new Response(null, { status: 101, webSocket: client });
@@ -600,9 +605,10 @@ export class Room {
       const list = this.players();
       this.send({ t: 'players', list });
       // openbaar: vanaf twee spelers loopt de klok, vol = meteen
-      if (list.length >= 2 && await this.state.storage.get('pub')) {
+      const pub = await this.state.storage.get('pub');
+      if (list.length >= 2 && pub) {
         const lopend = await this.state.storage.getAlarm();
-        const at = list.length >= 4 ? Date.now() + 1500 : (lopend || Date.now() + 10000);
+        const at = pub === 'jacht' || list.length >= 4 ? Date.now() + 1500 : (lopend || Date.now() + 10000);
         if (!lopend || at < lopend) await this.state.storage.setAlarm(at);
         this.send({ t: 'soon', at });
       }
@@ -621,8 +627,15 @@ export class Room {
     if (m.t === 's' || m.t === 'dead' || m.t === 'j' || m.t === 'ev') this.send({ ...m, pid: me.pid, name: me.name }, ws);
   }
   async alarm() {
-    if (this.players().length < 2) return;
+    const list = this.players();
+    if (list.length < 2) return;
     await this.state.storage.put('startedAt', Date.now());
+    if (await this.state.storage.get('pub') === 'jacht') {
+      // het lot bepaalt wie Shane is
+      const shane = list[Math.floor(Math.random() * list.length)].pid;
+      this.send({ t: 'go', mode: 'jacht', shane, seed: newSeed(), at: Date.now() + 3500 });
+      return;
+    }
     this.send({ t: 'go', mode: 'telefoon', seed: newSeed(), at: Date.now() + 3500 });
   }
   async webSocketClose(ws) { await this.afterLeave(ws); }

@@ -115,7 +115,7 @@
   <!-- MENU: spelen linksonder, seizoenspas linksboven, nieuws rechts, Jens in het midden -->
   <div id="menu" class="screen hidden fm">
     <header class="fm-top">
-      <div class="fm-brand"><img src="icons/icon-192.png" alt=""><b>JENS RUN</b><small>2.0</small></div>
+      <div class="fm-brand"><img src="icons/icon-192.png" alt=""><b>JENS RUN</b></div>
       <nav class="fm-tabs">
         <button class="on">Spelen</button>
         <button data-go="#passBtn">Seizoenspas</button>
@@ -170,9 +170,10 @@
       <div class="row"><button id="flShare" class="btn alt">📣 Deel link</button><button id="flBots" class="btn alt">🏃 Tegen bots</button></div>
       <div class="fl-jacht">
         <div class="fl-jacht-h"><b>📱 SHANE JAAGT</b><span>2 spelers · 90 sec</span></div>
+        <button id="flJZoek" class="btn">🔎 Zoek een tegenstander</button>
         <p>Eén speler is Shane. Hij rent dwars door alles heen, sprint, rijdt in de Kwaliteit Troeki en gooit obstakels op Jens z'n weg. Jens moet 90 seconden uit zijn handen blijven.</p>
         <div class="row hidden" id="flJachtHost"><button id="flJShane" class="btn">Ik ben Shane</button><button id="flJJens" class="btn">Ik ben Jens</button></div>
-        <button id="flJKamer" class="btn">📱 Jachtkamer maken</button>
+        <div class="row" id="flJPrive"><button id="flJKamer" class="btn alt">Kamer met vriend</button><form id="flCode" class="fl-code"><input id="flCodeIn" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" aria-label="Kamercode"><button class="btn alt">Meedoen</button></form></div>
         <div class="row"><button id="flJBotShane" class="btn alt">Oefen als Shane</button><button id="flJBotJens" class="btn alt">Oefen als Jens</button></div>
       </div>
     </div></div>
