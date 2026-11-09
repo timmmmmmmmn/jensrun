@@ -4327,8 +4327,8 @@ async function loadNews() {
     if (curScreen === '#menu') renderFmNews();
   } catch (e) { /* offline: de ingebouwde blijft staan */ }
 }
-// Telefoon: spel kiezen in het glazen menu; de oude knoppen doen het echte werk.
-setTimeout(() => { if (isMobiel()) Object.keys(MODES).forEach((k) => { if (!MODES[k].hidden) glasVoorlaad(MODE_IMG(k)); }); }, 2500);
+// Spel kiezen in het glazen menu; de oude knoppen doen het echte werk.
+setTimeout(() => Object.keys(MODES).forEach((k) => { if (!MODES[k].hidden) glasVoorlaad(MODE_IMG(k)); }), 2500);
 function modeRows() {
   renderModes();
   const rows = Object.entries(MODES).filter(([, m]) => !m.hidden).map(([k, m]) => (modeOpen(k)
@@ -4341,7 +4341,7 @@ function modeRows() {
 }
 $('#fmMode').addEventListener('click', (e) => {
   audioInit();
-  if (isMobiel() && glasMenu(e.currentTarget, modeRows())) return;
+  if (glasMenu(e.currentTarget, modeRows())) return;
   renderModes();
   $('#fmModes').classList.remove('hidden');
 });
@@ -5757,7 +5757,17 @@ function glasMenu(from, rows) {
   const scrolt = panel.scrollHeight > panel.clientHeight + 1;
   if (scrolt) root.style.touchAction = 'pan-y';
   const van = `translate(${r.left + r.width / 2 - (p.left + p.width / 2)}px, ${r.top + r.height / 2 - (p.top + p.height / 2)}px) scale(${Math.max(.08, Math.min(1, r.width / p.width) * .7)}, ${Math.max(.05, r.height / p.height * .7)})`;
-  glasOpen = { root, panel, van };
+  glasOpen = { root, panel, van, toets: (e) => {
+    const open = knoppen.map((b, i) => (b.disabled ? -1 : i)).filter((i) => i >= 0);
+    if (e.key === 'Escape') glasSluit();
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') {
+      const stap = e.key === 'ArrowUp' || e.shiftKey ? -1 : 1;
+      const nu = open.indexOf(actief);
+      const i = open[(nu < 0 ? (stap > 0 ? 0 : open.length - 1) : (nu + stap + open.length) % open.length)];
+      licht(i);
+      knoppen[i].scrollIntoView({ block: 'nearest' });
+    } else if ((e.key === 'Enter' || e.key === ' ') && actief >= 0) kies(knoppen[actief]);
+  } };
   const rustig = matchMedia('(prefers-reduced-motion: reduce)').matches;
   panel.animate({ transform: [van, 'none'], opacity: [0, 1, 1] }, { duration: rustig ? 1 : 420, easing: glasVeer });
   if (!rustig) panel.querySelectorAll('button > *, .glas-h').forEach((el) => el.animate({ opacity: [0, 1], filter: ['blur(5px)', 'blur(0)'] }, { duration: 240, delay: 70, easing: 'ease-out', fill: 'backwards' }));
@@ -5795,18 +5805,33 @@ function glasMenu(from, rows) {
     // een lijst die zelf scrolt: alleen tikken, slepen is dan scrollen
     ingedrukt = !scrolt && panel.contains(e.target);
     if (!ingedrukt) return;
+    if (e.pointerType === 'mouse') { panel.classList.add('zweef'); return; }
     panel.classList.add('druk');
     panel.setPointerCapture?.(e.pointerId);
     volg(e);
   });
-  panel.addEventListener('pointermove', (e) => { if (ingedrukt) volg(e); });
+  panel.addEventListener('pointermove', (e) => {
+    if (ingedrukt) return volg(e);
+    if (e.pointerType !== 'mouse') return;
+    // muis: de regel en het licht volgen zonder dat je hoeft te drukken
+    const q = panel.getBoundingClientRect();
+    panel.classList.add('zweef');
+    panel.style.setProperty('--x', `${e.clientX - q.left}px`);
+    panel.style.setProperty('--y', `${e.clientY - q.top + panel.scrollTop}px`);
+    licht(rijOp(e.clientY));
+  });
+  panel.addEventListener('pointerleave', (e) => {
+    if (ingedrukt || e.pointerType !== 'mouse') return;
+    panel.classList.remove('zweef');
+    licht(-1);
+  });
   const los = (e, kiezen) => {
     if (!ingedrukt) return;
     ingedrukt = false;
     panel.classList.remove('druk');
     panel.style.translate = '';
     const i = actief;
-    licht(-1);
+    if (e.pointerType !== 'mouse') licht(-1);
     if (kiezen && i >= 0) kies(knoppen[i]);
   };
   panel.addEventListener('pointerup', (e) => los(e, true));
@@ -5818,6 +5843,36 @@ function glasMenu(from, rows) {
   });
   return true;
 }
+// Zolang het menu open is, zijn de toetsen van het menu en bewegen ze Jens niet.
+window.addEventListener('keydown', (e) => {
+  if (!glasOpen || e.ctrlKey || e.metaKey || e.altKey) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (!e.repeat || e.key.startsWith('Arrow')) glasOpen.toets?.(e);
+}, true);
+// Desktop: glazen navigatie met een lichtje dat met de muis meeglijdt.
+{
+  const nav = document.querySelector('.fm-tabs'), plek = nav.querySelector('.fm-plate');
+  nav.addEventListener('pointerover', (e) => {
+    const b = e.target.closest('button');
+    if (e.pointerType !== 'mouse' || !b) return;
+    if (b.classList.contains('on')) { plek.classList.remove('aan'); return; }
+    if (!plek.classList.contains('aan')) plek.style.transition = 'opacity .14s';
+    plek.style.transform = `translateX(${b.offsetLeft}px)`;
+    plek.style.width = `${b.offsetWidth}px`;
+    plek.offsetWidth;
+    plek.style.transition = '';
+    plek.classList.add('aan');
+  });
+  nav.addEventListener('pointerleave', () => plek.classList.remove('aan'));
+}
+// Smal venster: wat niet meer in de balk past, staat achter "Meer".
+$('#fmTabMeer').addEventListener('click', (e) => {
+  glasMenu(e.currentTarget, [
+    { el: $('#fmBell'), icon: '🔔' },
+    { el: document.querySelector('.fm-tabs [data-go="#fameBtn"]'), icon: '👑' },
+  ].map(({ el, icon }) => ({ icon, title: el.textContent.trim() + (el.dataset.n ? ` (${el.dataset.n})` : ''), run: () => el.click() })));
+});
 $('#mMoreBtn').addEventListener('click', (e) => {
   if (!glasOpen && !glasMenu(e.currentTarget, glasRows())) $('#mMore').classList.toggle('hidden');
 });

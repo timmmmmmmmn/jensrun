@@ -1174,15 +1174,38 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 .glas-p .glas-img { width: 26px; height: 26px; border-radius: 7px; background-size: cover; background-position: center; }
 .glas-p hr { height: 1px; margin: 6px 16px; border: 0; background: rgba(255,255,255,.14); }
 .glas-h { display: block; padding: 8px 14px 4px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,.66); }
-/* Telefoon: één knop met een glazen uitklapmenu in plaats van een rij tabs of reacties */
+/* Eén knop met een glazen uitklapmenu in plaats van een rij tabs of reacties */
 .glas-kies { display: none; }
-@media (max-width: 700px) {
-  .glas-ok .glas-kies {
-    position: relative; display: flex; align-items: center; justify-content: space-between; width: 100%; height: 46px; padding: 0 16px; border-radius: 14px;
-    background: var(--card); color: #fff; font-size: 16px; font-weight: 700; flex: none;
-  }
-  .glas-ok .glas-kies::after { content: ''; width: 8px; height: 8px; margin-top: -4px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(45deg); }
-  .glas-ok .glas-kies.stip::before { content: ''; position: absolute; right: 38px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); }
-  .glas-ok #boardTabs, .glas-ok #soTabs, .glas-ok .reacts { display: none; }
+.glas-ok .glas-kies {
+  position: relative; display: flex; align-items: center; justify-content: space-between; width: 100%; height: 46px; padding: 0 16px; border-radius: 14px;
+  background: var(--card); color: #fff; font-size: 16px; font-weight: 700; flex: none;
 }
+.glas-ok .glas-kies::after { content: ''; width: 8px; height: 8px; margin-top: -4px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.glas-ok .glas-kies.stip::before { content: ''; position: absolute; right: 38px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); }
+.glas-ok .reacts { display: none; }
+@media (max-width: 700px) { .glas-ok #boardTabs, .glas-ok #soTabs { display: none; } }
+@media (min-width: 701px) {
+  .glas-ok #boardPick, .glas-ok #soPick { display: none; }
+  .glas-ok #prReact { width: auto; min-width: 220px; gap: 16px; align-self: flex-start; }
+  .glas-ok #prReact:hover { background: var(--card2); }
+  /* De navigatie als glazen capsule */
+  .glas-ok .fm-tabs {
+    position: relative; flex: 0 1 auto; margin: 0 auto; padding: 5px; gap: 0; border-radius: 22px;
+    background: rgba(14,9,6,.3); -webkit-backdrop-filter: blur(14px) saturate(1.6); backdrop-filter: blur(14px) saturate(1.6);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.4), inset 0 0 0 .5px rgba(255,255,255,.18), 0 6px 20px rgba(0,0,0,.28);
+  }
+  .glas-ok .fm-tabs button { position: relative; z-index: 1; border-radius: 17px; padding: 6px 13px; transition: transform .14s; }
+  .glas-ok .fm-tabs button:hover { background: none; }
+  .glas-ok .fm-tabs button.on, .glas-ok .fm-tabs button.on:hover { background: #fff; }
+  .glas-ok .fm-tabs button:active { transform: scale(.94); }
+  .fm-plate {
+    position: absolute; top: 5px; bottom: 5px; left: 0; width: 0; border-radius: 17px; background: rgba(255,255,255,.2); opacity: 0; pointer-events: none;
+    transition: transform .3s cubic-bezier(.2,1.25,.35,1), width .3s cubic-bezier(.2,1.25,.35,1), opacity .14s;
+  }
+  .fm-plate.aan { opacity: 1; }
+}
+.fm-plate, .fm-tab-meer { display: none; }
+.glas-ok .fm-plate { display: block; }
+@media (max-width: 960px) and (min-width: 701px) { .fm-tabs .fm-tab-meer { display: block !important; } }
+.glas-p.zweef::after { opacity: .7; transition-duration: .1s; }
 .glas-p button i { font-style: normal; font-size: 19px; line-height: 1; width: 26px; text-align: center; flex: none; }
