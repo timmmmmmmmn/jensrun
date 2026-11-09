@@ -5927,7 +5927,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 //  FIETS (power-up): Jens fietst zo lang als het filmpje duurt
 // =====================================================================
-const FIETS_CLIPS = 47;
+const FIETS_CLIPS = 48;
 let fietsDmg = 0;
 let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.5;
 const jensBike = makeBike('#c8202b');
