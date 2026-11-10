@@ -135,7 +135,7 @@ const STREETS = ['Berg en Dalseweg', 'Javastraat', 'Sumatrastraat', 'Ubbergseweg
 
 // Foto's van gezichten: zet een bestand in public/img/ en voeg hier de naam toe,
 // bijv. jens: 'img/jens.png'. Leeg = getekend gezicht.
-const PHOTO_FACES = { jens: 'img/jens-face.png', shane: 'img/shane-face.png' };
+const PHOTO_FACES = { jens: 'img/jens-face.png', shane: 'img/shane-face.png', jules: 'img/jules-face.png' };
 
 // =====================================================================
 //  game data
@@ -1497,7 +1497,7 @@ function buildBril(group, style) {
 
 // ---------- persoon ----------
 // hoofdrolspelers krijgen alle details; figuranten een lichtere versie
-const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost']);
+const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost', 'jules']);
 function makePerson(o) {
   const root = new THREE.Group();
   root.userData.isPerson = true;
@@ -2868,7 +2868,7 @@ function resetRun() {
   speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
-  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800);
+  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(250, 450);
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
   replayBuf = []; replayLen = 0; player.usedDouble = false; player.dubbelCD = 0;
@@ -3003,6 +3003,7 @@ function spawnRow(z) {
   }
   if (!early && !path && ahead > nextTruck) { nextTruck = ahead + rand(650, 1100); spawnTruck(z - 3); }
   if (!early && !path && ahead > nextRaam && spawnRaam(z - 6)) nextRaam = ahead + rand(160, 320);
+  if (!early && !path && ahead > nextJules) { nextJules = ahead + rand(380, 650); spawnJules(z - 4); }
   if (!early && !path && ahead > nextVrienden) { nextVrienden = ahead + rand(900, 1500); spawnVrienden(z - 5); }
   if (!early && !path && ahead > nextReporter) { nextReporter = ahead + rand(900, 1500); spawnReporter(z - 9); }
   if (ahead > nextSign) {
@@ -5303,6 +5304,83 @@ function splatScreen() {
   el.style.backgroundImage = `url(${c.toDataURL()})`;
   $('#splats').appendChild(el);
   setTimeout(() => el.remove(), 3000);
+}
+// ---------- Jules: staat langs de weg en spuit O2-drankje in Jens' gezicht ----------
+var nextJules = 350;
+const JULES_ROEP = ['Jens! Even verfrissen!', 'O2 drankje, gratis!', 'Pssst, Jens!', 'Dorst, Jens?', 'Hier, pak aan!'];
+const sprayMat = new THREE.MeshBasicMaterial({ color: '#bfe6ff', transparent: true, opacity: 0.8, depthWrite: false });
+const sprayGeo = new THREE.BoxGeometry(0.07, 0.07, 0.07);
+function makeJules() {
+  // blond met middenscheiding, donkerblauwe gebreide trui
+  const p = makePerson({ key: 'jules', skin: '#f2d3c0', hair: '#d9be7c', hairStyle: 'middenscheiding', shirt: { base: '#1f2a44', paint(x) {
+      x.fillStyle = 'rgba(255,255,255,.05)';
+      for (let y = 0; y < 128; y += 4) x.fillRect(0, y, 128, 1); // breiwerk
+    } }, pants: '#2b3448', shoes: '#e8e8e8', face: { skin: '#f2d3c0', brow: '#b89a5e' } });
+  longSleeves(p, fabricMat('#1f2a44'));
+  // flesje O2 in z'n rechterhand
+  const fles = new THREE.Group();
+  fles.add(mesh(cylG(0.045, 0.045, 0.2, 6), M('#e9f4ff'), 0, 0, 0));
+  fles.add(mesh(cylG(0.047, 0.047, 0.09, 6), M('#1d6fd1'), 0, 0.01, 0)); // etiket
+  fles.add(mesh(cylG(0.025, 0.025, 0.05, 6), M('#1d6fd1'), 0, 0.12, 0));
+  fles.position.set(0, -0.1, -0.02);
+  p.handR.add(fles);
+  return p;
+}
+function spawnJules(z) {
+  const side = Math.random() < 0.5 ? -1 : 1, x = side * (ROAD_W / 2 + 0.9);
+  const p = makeJules();
+  p.root.rotation.y = side < 0 ? -Math.PI / 2 - 0.35 : Math.PI / 2 + 0.35; // kijkt schuin naar Jens
+  addObj('deco', p.root, x, z, 0, 0, 0, { y: 0.14, len: 2, gespoten: 0, nextSpray: 0,
+    upd(o, dt) {
+      pose(p, 'idle', dt);
+      if (o.z > -30) { p.armR.rotation.x = 1.55; p.elR.rotation.x = 0.1; } // flesje op Jens gericht
+      if (!o.yelled && o.z > -26) { o.yelled = true; bubble(p.head, pick(JULES_ROEP), '', 1.4); }
+      if (state !== 'run' || o.z < -13 || o.z > -4 || o.gespoten >= 2) return;
+      o.nextSpray -= dt;
+      if (o.nextSpray > 0) return;
+      o.nextSpray = 0.35; o.gespoten++;
+      sprayO2(o.x - side * 0.5, o.z);
+    } });
+}
+function sprayO2(sx, sz) {
+  noise(0.35, 0.22);
+  const g = new THREE.Group();
+  for (let i = 0; i < 9; i++) g.add(new THREE.Mesh(sprayGeo, sprayMat));
+  const tx = player.x, T = 0.4;
+  addObj('deco', g, sx, sz, 0, 0, 0, { y: 1.45, t: 0,
+    upd(o, dt) {
+      o.t += dt;
+      const k = Math.min(1, o.t / T);
+      o.x = sx + (tx - sx) * k; o.z = sz * (1 - k);
+      o.mesh.position.set(o.x, 1.45 + 0.15 * k, o.z);
+      // nevel waaiert uit
+      o.mesh.children.forEach((d, i) => d.position.set(Math.sin(i * 2.4) * k * 0.35, Math.cos(i * 1.7) * k * 0.25, (i / 9 - 0.5) * k * 1.2));
+      if (k < 1) return;
+      o.dead = true;
+      if (state === 'run' && Math.abs(player.x - tx) < 1 && player.slideT <= 0) wazigZicht();
+    } });
+}
+// O2 in je ogen: het beeld is een paar seconden wazig, met druppels op het scherm
+function wazigZicht() {
+  if (canvas.classList.contains('wazig')) return;
+  noise(0.25, 0.3); tone(700, 0.3, 'sine', 0.12, 240);
+  buzz(60);
+  canvas.classList.add('wazig');
+  setTimeout(() => canvas.classList.remove('wazig'), 3500);
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 34; i++) {
+    const cx = rand(6, 154), cy = rand(6, 154), r = rand(1.5, 6);
+    x.fillStyle = 'rgba(190,225,255,.45)'; x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.7)'; x.beginPath(); x.arc(cx - r * 0.35, cy - r * 0.35, r * 0.25, 0, 7); x.fill();
+  }
+  const el = document.createElement('div'); el.className = 'splat';
+  const s = Math.max(innerWidth, innerHeight);
+  el.style.cssText = `width:${s}px;height:${s}px;left:${(innerWidth - s) / 2}px;top:${(innerHeight - s) / 2}px;animation-duration:3.5s`;
+  el.style.backgroundImage = `url(${c.toDataURL()})`;
+  $('#splats').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+  toast('🥤 Jules spoot O2 in je gezicht!', 1.6);
 }
 function spawnDrerrie(lane, z) {
   const m = makeDrerrie(false);
@@ -13734,4 +13812,4 @@ const ARC = {
   },
 };
 
-window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
