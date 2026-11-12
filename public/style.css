@@ -704,7 +704,10 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 @keyframes fxHypeM { 0% { transform: scale(.3); opacity: 0; } 18% { transform: scale(1.08); opacity: 1; } 30% { transform: scale(1); } 75% { opacity: 1; } 100% { transform: translateY(-12px); opacity: 0; } }
 /* slow-motion: beeld even blauwig en scherp */
 #c.wazig { animation: wazig 3.5s ease-in forwards; }
-@keyframes wazig { 0% { filter: blur(0); } 8% { filter: blur(1.4vmin) saturate(.8) brightness(1.08); } 60% { filter: blur(1vmin) saturate(.9); } 100% { filter: blur(0); } }
+@keyframes wazig { 0% { filter: blur(0); } 8% { filter: blur(.75vmin) saturate(.8) brightness(1.08); } 60% { filter: blur(.5vmin) saturate(.9); } 100% { filter: blur(0); } }
+/* klap met een stokbrood (Linus): heel licht wazig en een beetje zweverig */
+#c.duizelig { animation: duizelig 1.6s ease-in-out infinite; }
+@keyframes duizelig { 0%, 100% { filter: blur(.15vmin) saturate(.92); transform: rotate(-.6deg) scale(1.02); } 50% { filter: blur(.28vmin) saturate(.88); transform: rotate(.6deg) scale(1.02); } }
 body.slomo #c { filter: saturate(1.4) contrast(1.1) hue-rotate(-12deg); }
 /* mobiel: effecten uit het zicht, de weg blijft vrij */
 @media (max-width: 700px) {

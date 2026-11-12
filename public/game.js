@@ -135,7 +135,7 @@ const STREETS = ['Berg en Dalseweg', 'Javastraat', 'Sumatrastraat', 'Ubbergseweg
 
 // Foto's van gezichten: zet een bestand in public/img/ en voeg hier de naam toe,
 // bijv. jens: 'img/jens.png'. Leeg = getekend gezicht.
-const PHOTO_FACES = { jens: 'img/jens-face.png', shane: 'img/shane-face.png', jules: 'img/jules-face.png' };
+const PHOTO_FACES = { jens: 'img/jens-face.png', shane: 'img/shane-face.png', jules: 'img/jules-face.png', linus: 'img/linus-face.png' };
 
 // =====================================================================
 //  game data
@@ -1497,7 +1497,7 @@ function buildBril(group, style) {
 
 // ---------- persoon ----------
 // hoofdrolspelers krijgen alle details; figuranten een lichtere versie
-const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost', 'jules']);
+const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost', 'jules', 'linus']);
 function makePerson(o) {
   const root = new THREE.Group();
   root.userData.isPerson = true;
@@ -2868,7 +2868,7 @@ function resetRun() {
   speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
-  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(250, 450);
+  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(250, 450); nextLinus = rand(450, 700);
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
   replayBuf = []; replayLen = 0; player.usedDouble = false; player.dubbelCD = 0;
@@ -2877,7 +2877,7 @@ function resetRun() {
   else if (boss) { scene.remove(boss.mesh); boss = null; }
   applyTheme(curLevel ? THEMES[curLevel.theme] : THEMES.oost);
   spawnZ = -42; nextSign = 380; nextPower = rand(85, 130); nextRegen = 260; firstPower = true; streetIdx = Math.floor(Math.random() * STREETS.length);
-  nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 34; omroepK = 0; rijTel.clear(); runUp = {}; wkT = 0; thunderT = 3; lkKans = false; plakMaatje.root.visible = false;
+  nearT = 0; chaseDist = 3.2; brommerT = 0; bekerT = 0; invulnT = 0; chaseX = 0; vanZ = 34; omroepK = 0; rijTel.clear(); runUp = {}; wkT = 0; thunderT = 3; duizeligT = 0.001; lkKans = false; plakMaatje.root.visible = false;
   deathT = 0; shakeT = 0; runTime = 0; lineT = mode === 'telefoon' ? rand(30, 45) : rand(6, 9); toetT = rand(4, 7);
   nitraten = 0;
   for (const sh of shots) scene.remove(sh.mesh);
@@ -3004,6 +3004,7 @@ function spawnRow(z) {
   if (!early && !path && ahead > nextTruck) { nextTruck = ahead + rand(650, 1100); spawnTruck(z - 3); }
   if (!early && !path && ahead > nextRaam && spawnRaam(z - 6)) nextRaam = ahead + rand(160, 320);
   if (!early && !path && ahead > nextJules) { nextJules = ahead + rand(380, 650); spawnJules(z - 4); }
+  if (!early && !path && !jacht && ahead > nextLinus && !linusActief()) { nextLinus = ahead + rand(380, 650); spawnLinus(); }
   if (!early && !path && ahead > nextVrienden) { nextVrienden = ahead + rand(900, 1500); spawnVrienden(z - 5); }
   if (!early && !path && ahead > nextReporter) { nextReporter = ahead + rand(900, 1500); spawnReporter(z - 9); }
   if (ahead > nextSign) {
@@ -4231,6 +4232,7 @@ renderer.setAnimationLoop(() => {
   }
   if (state !== 'paused') {
     updateChaser(dt, state === 'run');
+    updDuizelig(dt);
   }
   updateLiveLoop(dt);
   updateCamera(dt);
@@ -5381,6 +5383,87 @@ function wazigZicht() {
   $('#splats').appendChild(el);
   setTimeout(() => el.remove(), 3500);
   toast('🥤 Jules spoot O2 in je gezicht!', 1.6);
+}
+// ---------- Linus: rent met een stokbrood achter Jens aan en probeert hem te slaan ----------
+var nextLinus = 550;
+const LINUS_ROEP = ['JENS! Kom hier!', 'Stokbrood in je nek!', 'Wacht maar, Jens!', 'Vers van de bakker!', 'Ik krijg je wel!'];
+const LINUS_JAAG = 5, DUIZELIG_T = 5;
+function makeLinus() {
+  // lang, dun, blonde krullen, groen shirt
+  const p = makePerson({ key: 'linus', skin: '#f1d0bc', hair: '#d6bb84', hairStyle: 'lossekrul', shirt: { base: '#3f7a52', paint() {} }, pants: '#3a4252', shoes: '#ececec',
+    face: { skin: '#f1d0bc', brow: '#b99a62' }, scale: [0.86, 1.1, 0.86] });
+  // stokbrood in z'n rechterhand
+  const brood = new THREE.Group();
+  const korst = mesh(cylG(0.05, 0.045, 0.75, 6), M('#d29a4a'), 0, -0.3, 0.02);
+  brood.add(korst);
+  for (let i = 0; i < 3; i++) brood.add(mesh(box(0.07, 0.025, 0.09), M('#f0d9a8'), 0, -0.08 - i * 0.2, 0.06));
+  brood.add(mesh(sphG(0.05, 5, 4), M('#c4883a'), 0, -0.68, 0.02));
+  p.handR.add(brood);
+  return p;
+}
+function linusActief() { return objs.some((o) => o.linus && !o.dead); }
+function spawnLinus() {
+  const p = makeLinus();
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const raak = Math.random() < 0.5; // half van de keren is Jens niet snel genoeg
+  addObj('deco', p.root, player.x + side * 1.2, 14, 0, 0, 0, { linus: true, t: 0, lz: 14, raak, klap: -1, weg: false,
+    upd(o, dt) {
+      o.t += dt;
+      // de wereld schuift, Linus niet: hij rent mee achter Jens
+      if (o.weg) o.lz += dt * 6;
+      else o.lz = damp(o.lz, o.klap >= 0 ? 1.0 : o.t < 1.2 ? 14 - o.t * 10 : 1.7 + Math.sin(o.t * 1.3) * 0.25, 4, dt);
+      o.z = o.lz;
+      o.x = damp(o.x, player.x + side * (o.klap >= 0 ? 0.75 : 1.2), 3, dt);
+      o.mesh.position.set(o.x, 0, o.z);
+      o.mesh.visible = !indoor && !seg?.active;
+      pose(p, 'run', dt, state === 'run' ? clamp(speed / 12, 0.8, 1.6) : 0.3);
+      if (state !== 'run' && state !== 'paused') o.weg = true;
+      if (o.z > 16) { o.dead = true; return; }
+      if (o.klap < 0) {
+        p.armR.rotation.x = 2.6 + Math.sin(o.t * 9) * 0.25; p.elR.rotation.x = 0.4; // stokbrood omhoog, zwaaien
+        if (!o.yelled && o.t > 1.3) { o.yelled = true; bubble(p.head, pick(LINUS_ROEP), '', 1.5); }
+        if (o.t > LINUS_JAAG && state === 'run') o.klap = 0;
+        return;
+      }
+      // de klap: stokbrood van boven naar beneden
+      o.klap += dt;
+      const k = Math.min(1, o.klap / 0.22);
+      p.armR.rotation.x = 2.9 - k * 2.3; p.elR.rotation.x = 0.1;
+      if (k >= 1 && !o.klapt) {
+        o.klapt = true;
+        const geraakt = o.raak && brommerT <= 0 && state === 'run';
+        if (geraakt) { duizelig(); bubble(p.head, pick(['HEBBES!', 'BAM!', 'Pak aan!']), '', 1.2); }
+        else { noise(0.15, 0.12); bubble(p.head, pick(['Mis!', 'Nee man!', 'Te snel...']), '', 1.2); toast('🥖 Linus sloeg mis!', 1.4); }
+      }
+      if (o.klap > 0.7) o.weg = true;
+    } });
+}
+// klap met een stokbrood: Jens ziet heel even een beetje wazig, met sterretjes om z'n hoofd
+const sterTex = canvasTex(64, 64, (x) => {
+  x.translate(32, 32); x.fillStyle = '#ffe14a'; x.strokeStyle = '#7a5a00'; x.lineWidth = 3;
+  x.beginPath();
+  for (let i = 0; i < 10; i++) { const r = i % 2 ? 11 : 27, a = -Math.PI / 2 + i * Math.PI / 5; x.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+  x.closePath(); x.fill(); x.stroke();
+});
+const sterren = new THREE.Group();
+for (let i = 0; i < 5; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sterTex, depthTest: false, fog: false })); sp.scale.setScalar(0.3); sterren.add(sp); }
+sterren.visible = false;
+jens.head.add(sterren);
+let duizeligT = 0;
+function duizelig() {
+  noise(0.12, 0.35); tone(220, 0.25, 'square', 0.12, 90); tone(1400, 0.6, 'sine', 0.06, 1800, 0.15);
+  buzz(80); shakeT = Math.max(shakeT, 0.25);
+  duizeligT = DUIZELIG_T;
+  canvas.classList.remove('duizelig'); void canvas.offsetWidth; canvas.classList.add('duizelig');
+  toast('🥖 Linus sloeg je met een stokbrood!', 1.6);
+}
+function updDuizelig(dt) {
+  if (duizeligT <= 0) return;
+  duizeligT -= dt;
+  sterren.visible = duizeligT > 0 && state !== 'menu';
+  if (!sterren.visible) { canvas.classList.remove('duizelig'); duizeligT = 0; return; }
+  const t = now() * 4;
+  sterren.children.forEach((sp, i) => { const a = t + i * Math.PI * 2 / 5; sp.position.set(Math.cos(a) * 0.42, 0.38 + Math.sin(a * 2) * 0.04, Math.sin(a) * 0.42); });
 }
 function spawnDrerrie(lane, z) {
   const m = makeDrerrie(false);
@@ -13812,4 +13895,4 @@ const ARC = {
   },
 };
 
-window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
