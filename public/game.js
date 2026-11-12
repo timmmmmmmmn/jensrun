@@ -5386,7 +5386,7 @@ function wazigZicht() {
 }
 // ---------- Linus: rent met een stokbrood achter Jens aan en probeert hem te slaan ----------
 var nextLinus = 550;
-const LINUS_ROEP = ['JENS! Kom hier!', 'Stokbrood in je nek!', 'Wacht maar, Jens!', 'Vers van de bakker!', 'Ik krijg je wel!'];
+const LINUS_ROEP = ['Stokbrood in je nek!', 'Wacht maar, Jens!', 'Vers van de bakker!', 'Ik krijg je wel!'];
 const LINUS_JAAG = 5, DUIZELIG_T = 5;
 function makeLinus() {
   // lang, dun, blonde krullen, groen shirt
@@ -5421,7 +5421,8 @@ function spawnLinus() {
       if (o.z > 16) { o.dead = true; return; }
       if (o.klap < 0) {
         p.armR.rotation.x = 2.6 + Math.sin(o.t * 9) * 0.25; p.elR.rotation.x = 0.4; // stokbrood omhoog, zwaaien
-        if (!o.yelled && o.t > 1.3) { o.yelled = true; bubble(p.head, pick(LINUS_ROEP), '', 1.5); }
+        if (!o.yelled && o.t > 1.3) { o.yelled = true; bubble(p.head, 'Jens, kom hier!', '', 1.5); playClip('linus1', true); } // ingesproken door Linus
+        if (!o.yelled2 && o.t > 3.6) { o.yelled2 = true; bubble(p.head, pick(LINUS_ROEP), '', 1.3); }
         if (o.t > LINUS_JAAG && state === 'run') o.klap = 0;
         return;
       }
@@ -6099,6 +6100,7 @@ function loadVoices() {
   queueClip('bio', 'audio/bio.mp3');
   for (const n of ['gonl', 'hohoho', 'telefoon2', 'lent', 'telefoon3', 'telefoon4', 'telefoon5', 'brommer']) queueClip(n, `audio/${n}.mp3`);
   JOS_VOICE.forEach((_, i) => queueClip('jos' + (i + 1), `audio/jos/${i + 1}.mp3`));
+  queueClip('linus1', 'audio/linus/1.mp3');
   fietsVooruit();
 }
 // spraakfragment uit een filmpje; de muziek gaat zolang zachter
