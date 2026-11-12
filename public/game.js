@@ -2868,7 +2868,7 @@ function resetRun() {
   speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
-  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(250, 450); nextLinus = rand(450, 700);
+  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(500, 800); nextLinus = rand(450, 700);
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
   replayBuf = []; replayLen = 0; player.usedDouble = false; player.dubbelCD = 0;
@@ -3003,7 +3003,7 @@ function spawnRow(z) {
   }
   if (!early && !path && ahead > nextTruck) { nextTruck = ahead + rand(650, 1100); spawnTruck(z - 3); }
   if (!early && !path && ahead > nextRaam && spawnRaam(z - 6)) nextRaam = ahead + rand(160, 320);
-  if (!early && !path && ahead > nextJules) { nextJules = ahead + rand(380, 650); spawnJules(z - 4); }
+  if (!early && !path && ahead > nextJules) { nextJules = ahead + rand(750, 1200); spawnJules(z - 4); }
   if (!early && !path && !jacht && ahead > nextLinus && !linusActief()) { nextLinus = ahead + rand(380, 650); spawnLinus(); }
   if (!early && !path && ahead > nextVrienden) { nextVrienden = ahead + rand(900, 1500); spawnVrienden(z - 5); }
   if (!early && !path && ahead > nextReporter) { nextReporter = ahead + rand(900, 1500); spawnReporter(z - 9); }
