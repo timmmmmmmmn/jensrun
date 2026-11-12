@@ -189,6 +189,7 @@ const SHOP = {
     { id: 'nec6', name: 'NEC-shirt #6 Nejašmić', price: 1350 },
     { id: 'eurotour', name: 'NEC European Tour-shirt', price: 1200 },
     { id: 'feyenoord', name: 'Feyenoord-shirt', price: 900 },
+    { id: 'vitesse', name: 'Oud Vitesse-shirt', price: 50 },
     { id: 'goud', name: 'Gouden NEC-shirt (plakboek)', price: 99999 },
     { id: 'pas', name: 'Seizoensshirt (seizoenspas)', price: 99999, pass: true },
   ] },
@@ -283,7 +284,7 @@ function audioInit() {
     lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
     voiceBus.connect(lim).connect(ac.destination);
     if (recDest) lim.connect(recDest);
-    for (const n of ['nitraat', 'cake', 'groot', 'schot']) queueClip(n, `audio/sfx/${n}.mp3`);
+    for (const n of ['nitraat', 'cake', 'groot', 'schot', 'boe']) queueClip(n, `audio/sfx/${n}.mp3`);
     queueClip('dbivo', 'audio/dbivo.mp3');
     for (let i = 1; i <= 6; i++) queueClip('shane' + i, `audio/shane/${i}.mp3`);
     queueClip('gameover', 'audio/gameover.mp3');
@@ -982,6 +983,14 @@ const SHIRTS = {
     else { text(x, 'JENS', '#111', 24, 34); text(x, '9', '#111', 54, 84); }
   } },
   wit: { base: '#e9e7e1', paint() {} },
+  // de vijand: vaal, vergeeld, vlekken en gaten
+  vitesse: { base: '#a58a30', img: 'img/shirt-vitesse.png', paint(x, side) {
+    x.fillStyle = '#1e1b12'; for (let i = 6; i < 128; i += 26) x.fillRect(i, 0, 13, 128);
+    x.fillStyle = 'rgba(60,40,15,.35)';
+    for (const [sx, sy, r] of [[30, 40, 12], [90, 80, 16], [60, 110, 9], [110, 30, 7]]) { x.beginPath(); x.arc(sx, sy, r, 0, 7); x.fill(); }
+    x.fillStyle = '#0d0b08'; for (const [sx, sy] of [[44, 70], [100, 104]]) { x.beginPath(); x.arc(sx, sy, 3, 0, 7); x.fill(); }
+    if (side === 'back') text(x, '0', 'rgba(210,200,170,.55)', 48, 78, 'Impact, sans-serif');
+  } },
   vierdaagse: { base: '#1f8f4e', paint(x, side) {
     if (side === 'front') { text(x, '4DAAGSE', '#fff', 26, 50); text(x, 'NIJMEGEN', '#bff0cf', 15, 76, 'Anton, sans-serif'); }
     else { text(x, 'JENS', '#fff', 30, 40); text(x, '4', '#fff', 56, 88); }
@@ -4443,6 +4452,7 @@ $('#items').addEventListener('click', (e) => {
   shopSel[shopTab] = it.id;
   previewOutfit();
   if (shopTab === 'shout') { lastSpeak = 0; singBusyUntil = 0; shout(it, true); }
+  else if (it.id === 'vitesse') { playClip('boe', true); bubble(jens.head, pick(['Bah', 'Moet dat echt?', 'Ik voel me vies']), '', 1.2, 0.5); }
   else { jens.root.position.y = 0; tone(660, 0.06, 'square', 0.05); }
   renderShop();
 });
