@@ -9237,7 +9237,7 @@ const NEWS_ANGLES = {
   heli: 'HELIKOPTER', drone: 'DRONE', achter: 'ACHTERVOLGING', voor: 'FRONTCAM', zij: 'MEERIJDER',
   reporter: 'NIJMEGENACTUEEL-CAM', bewaking: 'BEWAKINGSCAMERA', deurbel: 'DEURBELCAMERA',
 };
-const INTRO = 2.0, OUTRO = 1.0, SEG = 1.9; // samen ~8,7 s: de tune duurt 8,4 s
+const INTRO = 2.0, OUTRO = 4.0, SEG = 1.9, NEWS_HOEKEN = 5; // samen ~20 s: de tune duurt 49 s, de outro 4 s
 let newsJob = null, newsUrl = null, newsPlaying = false, newsSong = null;
 
 function newsAvailable() { return dashSupported && save.set.dashcam && !curLevel && !weakDevice && !fps30; } // een filmpje maken is te zwaar voor zwakke apparaten
@@ -9615,8 +9615,8 @@ function newsOverlay(c, job, seg, n, k, t) {
   c.textAlign = 'right';
   c.fillStyle = Math.floor(t * 2) % 2 ? '#ff3030' : '#b81010';
   c.beginPath(); c.arc(W - 78 * u, 20 * u, 5 * u, 0, 7); c.fill();
-  c.fillStyle = '#fff'; c.font = `bold ${13 * u}px Arial`; c.fillText('REPLAY', W - 10 * u, 20 * u);
-  c.font = `${10 * u}px Arial`; c.fillText(`CAM ${n} · ${NEWS_ANGLES[seg.angle]}`, W - 10 * u, 36 * u);
+  c.fillStyle = '#fff'; c.font = `bold ${13 * u}px Arial`; c.fillText(seg.slow < 1 ? 'HERHALING' : 'REPLAY', W - 10 * u, 20 * u);
+  c.font = `${10 * u}px Arial`; c.fillText(`CAM ${n} · ${NEWS_ANGLES[seg.angle]}${seg.slow < 1 ? ' · VERTRAAGD' : ''}`, W - 10 * u, 36 * u);
   // onderbalk: breaking news + kop + lopende tekst
   const y = H - 74 * u;
   c.fillStyle = '#d8101f'; c.fillRect(0, y, 112 * u, 30 * u);
@@ -9667,14 +9667,18 @@ async function newsAudio(job) {
     s.connect(f).connect(g).connect(out); s.start(t0);
   };
   const chord = (t0, fs, d, v) => fs.forEach((f) => { tone(f, t0, d, 'sawtooth', v); tone(f * 1.005, t0, d, 'square', v * 0.5); });
-  // de nieuwstune loopt onder de hele uitzending door
+  // de nieuwstune loopt onder de uitzending door tot de outro, die z'n eigen muziekje heeft
   try {
-    newsSong ||= await fetch('audio/news-intro.mp3').then((r) => r.arrayBuffer());
-    const song = await oc.decodeAudioData(newsSong.slice(0));
-    const src = oc.createBufferSource(), g = oc.createGain();
+    newsSong ||= await Promise.all(['audio/news-tune.mp3', 'audio/news-outro.mp3'].map((u) => fetch(u).then((r) => r.arrayBuffer())));
+    const [song, outro] = await Promise.all(newsSong.map((b) => oc.decodeAudioData(b.slice(0))));
+    const src = oc.createBufferSource(), g = oc.createGain(), o0 = job.outroAt;
     src.buffer = song; g.gain.value = 1.1;
-    g.gain.setValueAtTime(1.1, Math.max(0, job.dur - 0.9)); g.gain.linearRampToValueAtTime(0, job.dur); // korte fade-out
-    src.connect(g).connect(oc.destination); src.start(0);
+    g.gain.setValueAtTime(1.1, Math.max(0, o0 - 0.6)); g.gain.linearRampToValueAtTime(0, o0 + 0.05); // korte fade-out
+    src.connect(g).connect(oc.destination); src.start(0); src.stop(o0 + 0.1);
+    const os = oc.createBufferSource(), og = oc.createGain();
+    os.buffer = outro; og.gain.value = 1.1;
+    og.gain.setValueAtTime(1.1, Math.max(o0, job.dur - 0.4)); og.gain.linearRampToValueAtTime(0, job.dur);
+    os.connect(og).connect(oc.destination); os.start(o0);
   } catch (e) { /* liedje niet geladen: dan zonder */ }
   for (const s of job.segs) {
     noiseAt(s.t0, 0.35, 0.15, 1200, 'bandpass'); // swoosh
@@ -9880,20 +9884,22 @@ async function startNews(title, txt) {
   let t = 0;
   const dtF = 1 / NEWS_FPS;
   for (; t < INTRO - 1e-6; t += dtF) job.frames.push({ type: 'intro', t, ts: t });
-  const angles = Object.keys(NEWS_ANGLES).sort(() => Math.random() - 0.5).slice(0, 3);
+  const angles = Object.keys(NEWS_ANGLES).sort(() => Math.random() - 0.5).slice(0, NEWS_HOEKEN);
   angles.forEach((angle, n) => {
     const fd = buf[deathIdx];
-    const seg = { angle, n: n + 1, side: Math.random() < 0.5 ? -1 : 1, a0: rand(0, Math.PI * 2), t0: t, deathAt: null, z0: fd.jens[2] + (wEnd - (fd.w ?? wEnd)) - rand(3, 7) };
+    const seg = { angle, n: n + 1, slow: n >= 3 ? 0.5 : 1, side: Math.random() < 0.5 ? -1 : 1, a0: rand(0, Math.PI * 2), t0: t, deathAt: null, z0: fd.jens[2] + (wEnd - (fd.w ?? wEnd)) - rand(3, 7) };
     let segT = 0;
     const total = buf.slice(start, end + 1).reduce((s, f) => s + f.dt, 0);
     for (let i = start; i <= end; i++) {
       if (i === deathIdx) seg.deathAt = t;
-      job.frames.push({ type: 'replay', seg, idx: i, k: segT / total, ts: t, dur: buf[i].dt });
-      t += buf[i].dt; segT += buf[i].dt;
+      const d = buf[i].dt / seg.slow; // slow motion: elk beeld langer in beeld
+      job.frames.push({ type: 'replay', seg, idx: i, k: segT / total, ts: t, dur: d });
+      t += d; segT += buf[i].dt;
     }
     job.segs.push(seg);
   });
   const o0 = t;
+  job.outroAt = o0;
   for (; t < o0 + OUTRO - 1e-6; t += dtF) job.frames.push({ type: 'outro', t: t - o0, ts: t });
   job.dur = t;
   job.venc = new VideoEncoder({ output: (chunk, meta) => { if (meta?.decoderConfig) job.vmeta = meta; job.chunks.push(chunk); }, error: () => { job.abort = true; } });
