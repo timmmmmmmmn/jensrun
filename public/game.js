@@ -527,20 +527,45 @@ function randStil(b) {
   for (let c = 0; c < b.numberOfChannels; c++) nb.copyToChannel(b.getChannelData(c).subarray(a, z + 1), c);
   return nb;
 }
+// sneller spelnummer zonder hogere toon: vooraf gemaakte versies (5% per stap, zelfde toonhoogte),
+// pas geladen als je ze nodig hebt; wisselen gebeurt op dezelfde plek in het nummer
+const TEMPO_STAPPEN = [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150], tempoBuf = {}, tempoLaadt = {};
+let tempoNu = 100;
+const tempoStap = (rate) => TEMPO_STAPPEN.reduce((a, b) => (Math.abs(b / 100 - rate) < Math.abs(a / 100 - rate) ? b : a));
+const tempoBuffer = (st) => (st === 100 ? musicBuf.game : tempoBuf[st]);
+function laadTempo(st) {
+  if (st === 100 || tempoBuf[st] || tempoLaadt[st]) return;
+  tempoLaadt[st] = true;
+  fetch(`audio/tempo/game-${st}.mp3`).then((r) => r.arrayBuffer()).then((d) => new Promise((ok, nee) => ac.decodeAudioData(d, ok, nee))).then((b) => { tempoBuf[st] = randStil(b); }).catch(() => {}).finally(() => { tempoLaadt[st] = false; });
+  // alleen de stappen rond de huidige bewaren (geheugen)
+  for (const k of Object.keys(tempoBuf)) if (Math.abs(k - st) > 10 && +k !== tempoNu) delete tempoBuf[k];
+}
+// plek in het nummer in seconden van de gewone versie
+function gamePos(g) { return ac.currentTime > g.t0 ? (((ac.currentTime - g.t0) * g.src.playbackRate.value) % g.src.buffer.duration) * g.step / 100 : (musicPos.game || 0); }
 function bufStop() {
   // waar het spelnummer was: na de pauze gaat het daar verder
-  const g = bufNu.game;
-  if (g && ac.currentTime > g.t0) musicPos.game = ((ac.currentTime - g.t0) * g.src.playbackRate.value) % g.src.buffer.duration;
+  if (bufNu.game) musicPos.game = gamePos(bufNu.game);
   for (const k of Object.keys(bufNu)) { try { bufNu[k].src.stop(); } catch (e) { /* al gestopt */ } bufNu[k].src.disconnect(); delete bufNu[k]; }
 }
-function bufStart(k, wanneer) {
-  const src = ac.createBufferSource();
-  src.buffer = musicBuf[k]; src.loop = k === 'game';
-  src.connect(musicGain.main);
-  const vanaf = k === 'game' ? (musicPos.game || 0) % musicBuf.game.duration : 0;
+function bufStart(k, wanneer, inFade = 0) {
+  const src = ac.createBufferSource(), gain = ac.createGain();
+  const step = k === 'game' && tempoBuffer(tempoNu) ? tempoNu : 100;
+  src.buffer = k === 'game' ? tempoBuffer(step) : musicBuf[k]; src.loop = k === 'game';
+  src.connect(gain).connect(musicGain.main);
+  if (inFade) { gain.gain.setValueAtTime(0, wanneer); gain.gain.linearRampToValueAtTime(1, wanneer + inFade); }
+  const vanaf = k === 'game' ? ((musicPos.game || 0) / (step / 100)) % src.buffer.duration : 0;
   src.start(wanneer, vanaf);
-  bufNu[k] = { src, t0: wanneer - vanaf };
+  bufNu[k] = { src, gain, step, t0: wanneer - vanaf };
   if (k === 'intro') src.onended = () => { if (musicCur === 'intro') introKlaar = true; };
+}
+function wisselTempo(st, pr) {
+  const oud = bufNu.game, t = ac.currentTime + 0.02, X = 0.15;
+  musicPos.game = gamePos(oud) + X * pr; // waar het nummer is als de nieuwe versie inzet
+  tempoNu = st;
+  bufStart('game', t, X);
+  bufNu.game.src.playbackRate.value = pr;
+  oud.gain.gain.setValueAtTime(1, t); oud.gain.gain.linearRampToValueAtTime(0, t + X);
+  try { oud.src.stop(t + X + 0.05); } catch (e) { /* al gestopt */ }
 }
 const speeltBuf = () => !!bufNu[musicCur];
 function musicSwitch(k) {
@@ -562,7 +587,7 @@ function musicSwitch(k) {
   musicEl.play().catch(() => {});
 }
 // opnieuw starten (ook vanuit pauze): weer eerst de intro
-function introOpnieuw() { introKlaar = false; musicRestart('intro'); musicRestart('game'); }
+function introOpnieuw() { tempoNu = 100; introKlaar = false; musicRestart('intro'); musicRestart('game'); }
 function musicRestart(k) { musicPos[k] = 0; if (musicLoaded === k) { try { musicEl.currentTime = 0; } catch (e) { /* nog niet geladen */ } } }
 // een stream die stukgaat (netwerk, telefoon die iets anders deed): even later op dezelfde plek verder
 function musicReload() { if (!musicCur || speeltBuf()) return; const k = musicCur; musicPos[k] = musicEl.currentTime || musicPos[k] || 0; musicLoaded = null; musicCur = null; musicSwitch(k); }
@@ -637,7 +662,17 @@ function updateMusic(dt) {
   if (musicWatch.zachtIn && g.value > target * 0.97) musicWatch.zachtIn = false;
   g.value = damp(g.value, target, target > g.value ? (musicWatch.zachtIn ? 1.4 : 2.5) : 5, dt);
   const rate = want === 'game' ? (1 + 0.5 * boost) * (slomoT > 0 ? 0.72 : 1) : 1;
-  if (speeltBuf()) { for (const b of Object.values(bufNu)) if (Math.abs(b.src.playbackRate.value - rate) > 0.01) b.src.playbackRate.value = rate; return; }
+  if (speeltBuf()) {
+    // tempo via een andere versie (toonhoogte blijft gelijk); alleen slowmotion mag de toon omlaag halen
+    const pr = want === 'game' && slomoT > 0 ? 0.72 : 1;
+    if (want === 'game' && bufNu.game) {
+      const st = tempoStap(1 + 0.5 * boost);
+      laadTempo(st); laadTempo(Math.min(150, st + 5));
+      if (st !== bufNu.game.step && tempoBuffer(st)) wisselTempo(st, pr);
+    }
+    for (const b of Object.values(bufNu)) if (Math.abs(b.src.playbackRate.value - pr) > 0.01) b.src.playbackRate.value = pr;
+    return;
+  }
   if (Math.abs(musicEl.playbackRate - rate) > 0.01) musicEl.playbackRate = rate;
   if (musicEl.paused) musicEl.play().catch(() => {});
   // waakhond: het nummer moet ook écht doorlopen
@@ -14281,4 +14316,4 @@ const ARC = {
   },
 };
 
-window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer)' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
