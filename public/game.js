@@ -4003,7 +4003,10 @@ function updateCamera(dt) {
     // vooraanzicht: Jens en de achtervolger
     const wide = camera.aspect > 1.1;
     const px = player.x;
-    if (state === 'shop' && shopTab === 'rug') {
+    if (state === 'shop' && plusView !== 'schap') {
+      camTargetPos.set(wide ? 0.85 : 0, portrait ? 1.3 : 1.55, portrait ? -5.5 : -3.3);
+      camTargetLook.set(wide ? 0.85 : 0, portrait ? -1.0 : 0.95, 0);
+    } else if (state === 'shop' && shopTab === 'rug') {
       camTargetPos.set(wide ? -0.4 : 0, 1.45, 2.2);
       camTargetLook.set(wide ? -0.4 : 0, portrait ? 0.7 : 1.15, 0);
     } else if (state === 'shop' && shopTab === 'maatje') {
@@ -4377,7 +4380,15 @@ renderer.setAnimationLoop(() => {
   updateBatches();
   freeTick();
   const p1 = PERF.on ? performance.now() : 0;
+  plusWinkel.visible = state === 'shop';
+  // in de PLUS is de straat weg: alleen de winkel, Jens, z'n maatje en de achtervolger
+  const verborgen = [];
+  if (state === 'shop') {
+    const blijft = new Set([plusWinkel, jens.root, pet, chaser()?.root]);
+    for (const c of scene.children) if (c.visible && !c.isLight && !blijft.has(c)) { c.visible = false; verborgen.push(c); }
+  }
   if (state === 'mini' && mini.scene) renderer.render(mini.scene, mini.cam); else renderer.render(scene, camera);
+  for (const c of verborgen) c.visible = true;
   workAvg = workAvg * 0.95 + (performance.now() - t) * 0.05;
   const p2 = PERF.on ? performance.now() : 0;
   if (photo.take) { photo.take = false; takePhotoNow(); }
@@ -4523,9 +4534,128 @@ function toMenu() {
   showScreen('#menu');
 }
 
-// ---------- winkel ----------
-let shopTab = 'shout';
+// ---------- winkel: de PLUS ----------
+// gangen in de volgorde van de winkelvloer
+const GANGEN = [
+  ['shout', 'Kreten', '📣'], ['shirt', 'Shirts', '👕'], ['head', 'Kapsels & petten', '💇'], ['bril', 'Brillen', '🕶️'],
+  ['hand', 'Snoep & feest', '🥤'], ['rug', 'Capes', '🦸'], ['maatje', 'Dieren', '🐾'], ['skill', 'Sportvoeding', '🦘'],
+];
+const ARTIKEL_ICOON = {
+  shout: { hup: '🙌', gonl: '🦁', bio: '🎵', dbivo: '🏆', hohoho: '🎅' },
+  head: { normaal: '🙂', middenscheiding: '💇', pet: '🧢', manen: '👱', spike: '🦔', bivak: '🥷', kroon: '👑', kuif: '💈', laser: '👁️' },
+  rug: { geen: '🚫', cape: '🦸' },
+  hand: { geen: '✋', cola: '🥤', fanta: '🍊', fietsbel: '🔔', ballon: '🎈', toeter: '📯', fakkel: '🔥', minibeker: '🏆' },
+  skill: { geen: '🦵', dubbel: '🦘' },
+  maatje: { geen: '🧍', duif: '🕊️', hond: '🐶' },
+  bril: { geen: '👀', filter: '😎', lennon: '👓', snor: '🥸' },
+};
+const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', goud: '#e8b923', pas: '#7a4cff' };
+const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a' };
+const shirtje = (k) => `<svg class="shirtje" viewBox="0 0 40 36"><path d="M13 2 4 7 1 16l7 2 2-5v21h20V13l2 5 7-2-3-9-9-5c-1 3-4 5-7 5s-6-2-7-5Z" fill="${k}" stroke="rgba(0,0,0,.45)" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+const icoon = (tab, id) => tab === 'shirt' ? shirtje(SHIRT_KLEUR[id] || '#fff') : ARTIKEL_ICOON[tab]?.[id] || GANGEN.find((g) => g[0] === tab)[2];
+const pakKleur = (tab, id) => tab === 'shirt' ? '#e9ece4' : PAK_KLEUR[tab];
+const prijs = (n) => n.toLocaleString('nl-NL');
+
+// de winkel zelf, in 3D om Jens heen
+const plusWinkel = new THREE.Group();
+plusWinkel.visible = false;
+scene.add(plusWinkel);
+let plusGebouwd = false;
+function schapTex(seed) {
+  let r = seed * 9301 + 49297;
+  const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 192;
+  const x = c.getContext('2d');
+  x.fillStyle = '#d9dcd6'; x.fillRect(0, 0, 256, 192);
+  const kleuren = ['#e2231a', '#ffd23f', '#2e8b3d', '#1d3c8f', '#ff7a00', '#f2f2f2', '#7a4cff', '#8a5a2b', '#00a3d9', '#f06aa8'];
+  for (let p = 0; p < 4; p++) {
+    const bodem = 44 + p * 48;
+    let px = 2;
+    while (px < 250) {
+      const w = 8 + Math.floor(rnd() * 14), h = 16 + Math.floor(rnd() * 22), k = kleuren[Math.floor(rnd() * kleuren.length)];
+      const soort = rnd();
+      x.fillStyle = k;
+      if (soort < 0.25) { x.fillRect(px + 2, bodem - h + 6, w - 4, h - 6); x.fillRect(px + w / 2 - 2, bodem - h, 4, 6); } // fles
+      else x.fillRect(px, bodem - h, w, h);
+      x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(px + 1, bodem - h * 0.6, w - 2, 3);
+      x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(px + w - 2, bodem - h, 2, h);
+      px += w + 1;
+    }
+    x.fillStyle = '#8f9690'; x.fillRect(0, bodem, 256, 4);
+    x.fillStyle = '#ffd400';
+    for (let t = 6; t < 250; t += 30) x.fillRect(t, bodem, 9, 4);
+  }
+  const t = new THREE.CanvasTexture(c);
+  psxTex(t);
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+function bouwPlus() {
+  plusGebouwd = true;
+  const B = (color, extra) => new THREE.MeshBasicMaterial({ color, fog: false, ...extra });
+  const vlak = (w, h, mat, x, y, z, ry = 0, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h, Math.ceil(w), Math.ceil(h)), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); plusWinkel.add(m); return m; };
+  const groen = B('#84c225'), donker = B('#4f7d12'), wit = B('#f4f4f0'), metaal = B('#9aa19b');
+  // vloer met witte en grijze tegels
+  const tegel = canvasTex(64, 64, (x) => { x.fillStyle = '#e9e9e4'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#cfd1cb'; x.fillRect(0, 0, 32, 32); x.fillRect(32, 32, 32, 32); x.fillStyle = 'rgba(0,0,0,.12)'; x.fillRect(0, 0, 64, 1); x.fillRect(0, 0, 1, 64); });
+  tegel.wrapS = tegel.wrapT = THREE.RepeatWrapping; tegel.repeat.set(6, 8);
+  vlak(12, 16, B('#fff', { map: tegel }), 0, 0.02, 0, 0, -Math.PI / 2);
+  vlak(12, 16, B('#e8e8e2'), 0, 3.3, 0, 0, Math.PI / 2);
+  for (let z = -6; z <= 6; z += 3) for (const lx of [-2.2, 2.2]) plusWinkel.add(mesh(box(0.3, 0.05, 2.2), B('#ffffff'), lx, 3.27, z));
+  // muren: groen met een donkere plint
+  for (const [w, x, z, ry] of [[12, 0, 8, Math.PI], [12, 0, -8, 0], [16, -6, 0, Math.PI / 2], [16, 6, 0, -Math.PI / 2]]) {
+    vlak(w, 1, groen, x, 2.8, z, ry);
+    vlak(w, 2.3, wit, x, 1.15, z, ry);
+    vlak(w, 0.3, donker, x, 0.15, z + (z ? -Math.sign(z) * 0.01 : 0), ry);
+  }
+  // wandschappen achter en opzij
+  const schappen = [0, 1, 2].map((i) => schapTex(i + 1));
+  const schapMat = (i, rep) => { const t = schappen[i].clone(); t.needsUpdate = true; t.repeat.set(rep, 1); return B('#fff', { map: t }); };
+  vlak(11.6, 2.1, schapMat(0, 5), 0, 1.15, 7.95, Math.PI);
+  vlak(11, 2.1, schapMat(1, 5), -5.95, 1.15, 1.5, Math.PI / 2);
+  vlak(11, 2.1, schapMat(2, 5), 5.95, 1.15, 1.5, -Math.PI / 2);
+  // twee gangen achter Jens: dubbelzijdige schappen met een bord erboven
+  const gondel = (gx, nr) => {
+    const g = new THREE.Group();
+    g.add(mesh(box(0.7, 2, 4.6), metaal, 0, 1, 0));
+    for (const kant of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 1.9, 5, 2), schapMat((nr + kant + 3) % 3, 2));
+      m.position.set(kant * 0.36, 1, 0); m.rotation.y = kant * Math.PI / 2; g.add(m);
+    }
+    const bord = canvasTex(128, 48, (x) => { x.fillStyle = '#84c225'; x.fillRect(0, 0, 128, 48); x.fillStyle = '#fff'; x.font = 'bold 30px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.fillText(String(nr), 22, 36); x.font = 'bold 15px Arial, sans-serif'; x.fillText(GANGEN[nr - 1][1].toUpperCase(), 84, 30); }, 192);
+    const b = mesh(box(1.5, 0.55, 0.06), [metaal, metaal, metaal, metaal, B('#fff', { map: bord }), B('#fff', { map: bord })], 0, 2.75, -2.2);
+    b.rotation.y = Math.PI;
+    g.add(b);
+    g.position.set(gx, 0, 3.9);
+    plusWinkel.add(g);
+  };
+  gondel(-2.4, 1); gondel(2.4, 2);
+  // aanbiedingseiland vlak achter Jens
+  plusWinkel.add(mesh(box(1.4, 0.7, 0.9), B('#e2231a'), 0, 0.35, 5.6));
+  for (let i = 0; i < 9; i++) plusWinkel.add(mesh(box(0.26, 0.3, 0.26), B(['#ffd23f', '#f2f2f2', '#ff7a00'][i % 3]), -0.45 + (i % 3) * 0.45, 0.85, 5.35 + Math.floor(i / 3) * 0.25));
+  const aanb = canvasTex(128, 40, (x) => { x.fillStyle = '#ffd400'; x.fillRect(0, 0, 128, 40); x.fillStyle = '#e2231a'; x.font = 'bold 26px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('1+1 GRATIS', 64, 31); }, 192);
+  const a = mesh(box(1.3, 0.4, 0.04), B('#fff', { map: aanb }), 0, 1.45, 5.6); a.rotation.y = Math.PI; plusWinkel.add(a);
+  // voorkant: groot logo en de kassa's
+  const logo = psxTex(new THREE.TextureLoader().load('img/plus-logo.png'));
+  vlak(1.8, 1.8, B('#fff', { map: logo }), 0, 2.15, -7.95);
+  for (const kx of [-3.4, 3.4]) {
+    const k = new THREE.Group();
+    k.add(mesh(box(0.9, 0.85, 2.6), B('#3a3d3a'), 0, 0.425, 0));
+    k.add(mesh(box(0.7, 0.03, 2.2), B('#111'), 0, 0.86, 0.1));
+    k.add(mesh(box(0.35, 0.35, 0.3), B('#d8d8d8'), 0.15, 1.05, -1.0));
+    k.add(mesh(box(0.06, 1.6, 0.06), metaal, -0.4, 1.65, -1.2));
+    k.add(mesh(box(0.4, 0.3, 0.05), groen, -0.4, 2.5, -1.2));
+    k.position.set(kx, 0, -5.4);
+    plusWinkel.add(k);
+  }
+}
+
+let shopTab = 'shout', plusView = 'vloer';
 const shopSel = {};
+let mandje = [];
+const inMandje = (tab, id) => mandje.some((m) => m.tab === tab && m.id === id);
+const artikel = (tab, id) => SHOP[tab].items.find((i) => i.id === id);
+const mandTotaal = () => mandje.reduce((t, m) => t + artikel(m.tab, m.id).price, 0);
 function openShop() {
   audioInit();
   stopGameover();
@@ -4534,7 +4664,10 @@ function openShop() {
   state = 'shop';
   $('#hud').classList.add('hidden');
   if (wasOver) jens.root.rotation.set(0, 0, 0);
+  if (!plusGebouwd) bouwPlus();
   for (const k of Object.keys(SHOP)) shopSel[k] = save.eq[k];
+  mandje = mandje.filter((m) => !owns(m.tab, m.id));
+  plusView = 'vloer';
   showScreen('#shop');
   renderShop();
 }
@@ -4542,18 +4675,49 @@ $('#shopBtn').addEventListener('click', openShop);
 $('#overShop').addEventListener('click', openShop);
 $('#shopBack').addEventListener('click', () => { applyOutfit(); toMenu(); });
 function previewOutfit() {
-  applyOutfit({ ...save.eq, [shopTab]: shopSel[shopTab] });
+  if (plusView === 'kassa') {
+    const pas = { ...save.eq };
+    for (const m of mandje) pas[m.tab] = m.id;
+    applyOutfit(pas);
+  } else if (plusView === 'schap') applyOutfit({ ...save.eq, [shopTab]: shopSel[shopTab] });
+  else applyOutfit();
+}
+function naarPlus(view, tab) {
+  plusView = view;
+  if (tab) shopTab = tab;
+  tone(view === 'kassa' ? 880 : 660, 0.05, 'square', 0.04);
+  previewOutfit();
+  renderShop();
+  $('#shop .shop-panel').scrollTop = 0;
 }
 function renderShop() {
-  $('#shopBekers').textContent = save.bekers.toLocaleString('nl-NL');
-  $('#tabs').innerHTML = Object.entries(SHOP).map(([k, s]) => `<button class="tab ${k === shopTab ? 'sel' : ''}" data-tab="${k}">${s.label}</button>`).join('');
-  $('#items').innerHTML = SHOP[shopTab].items.map((it) => {
-    const own = owns(shopTab, it.id), eq = save.eq[shopTab] === it.id, sel = shopSel[shopTab] === it.id;
-    const status = eq ? '✓ Aan' : own ? 'Gekocht' : `🏆 ${it.price.toLocaleString('nl-NL')}`;
-    return `<button class="item ${own ? 'owned' : ''} ${eq ? 'eq' : ''} ${sel ? 'sel' : ''} ${!own && save.bekers < it.price ? 'cant' : ''}" data-id="${it.id}"><b>${it.name}</b><small>${status}</small></button>`;
+  $('#shopBekers').textContent = prijs(save.bekers);
+  $('#mandN').textContent = mandje.length;
+  $('#plusMand').classList.toggle('vol', mandje.length > 0);
+  for (const v of ['vloer', 'schap', 'kassa']) $('#plus' + v[0].toUpperCase() + v.slice(1)).classList.toggle('hidden', plusView !== v);
+  $('#shopBack').classList.toggle('hidden', plusView !== 'vloer');
+  const gang = GANGEN.findIndex((g) => g[0] === shopTab);
+  $('#plusTitel').textContent = plusView === 'schap' ? `Gang ${gang + 1} · ${GANGEN[gang][1]}` : plusView === 'kassa' ? 'Kassa' : 'PLUS Jens Run';
+  $('#plusSub').textContent = plusView === 'schap' ? 'Pak iets van het schap' : plusView === 'kassa' ? 'Afrekenen met je bekers' : 'Kies een gang of ga naar de kassa';
+  if (plusView === 'vloer') renderVloer();
+  else if (plusView === 'schap') renderSchap();
+  else renderKassa();
+}
+function renderVloer() {
+  $('#plusGangen').innerHTML = GANGEN.map(([k, naam, ic], i) => {
+    const nieuw = SHOP[k].items.filter((it) => !owns(k, it.id) && it.price < 99999 && it.price <= save.bekers).length;
+    return `<button class="gang" data-gang="${k}"><span class="gang-nr">${i + 1}</span><span class="gang-ic">${ic}</span><b>${naam}</b><small>${SHOP[k].items.length} artikelen${nieuw ? ` · <em>${nieuw} te koop</em>` : ''}</small><span class="gang-plank"></span></button>`;
   }).join('');
-  const it = SHOP[shopTab].items.find((i) => i.id === shopSel[shopTab]);
-  const own = owns(shopTab, it.id), eq = save.eq[shopTab] === it.id;
+  $('#naarKassa').innerHTML = `<span class="kassa-ic">🛒</span><b>Kassa</b><small>${mandje.length ? `${mandje.length} in je mandje · 🏆 ${prijs(mandTotaal())}` : 'Je mandje is nog leeg'}</small>`;
+}
+function renderSchap() {
+  $('#items').innerHTML = SHOP[shopTab].items.map((it) => {
+    const own = owns(shopTab, it.id), eq = save.eq[shopTab] === it.id, sel = shopSel[shopTab] === it.id, mand = inMandje(shopTab, it.id), slot = it.price >= 99999;
+    const kaart = eq ? '✓ Aan' : own ? 'In huis' : slot ? '🔒' : `🏆 ${prijs(it.price)}`;
+    return `<button class="pak ${own ? 'owned' : ''} ${eq ? 'eq' : ''} ${sel ? 'sel' : ''} ${mand ? 'mand' : ''} ${slot && !own ? 'slot' : ''}" data-id="${it.id}" style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos"><i>${icoon(shopTab, it.id)}</i><b>${it.name}</b></span><span class="pak-kaart">${kaart}</span></button>`;
+  }).join('');
+  const it = artikel(shopTab, shopSel[shopTab]);
+  const own = owns(shopTab, it.id), eq = save.eq[shopTab] === it.id, mand = inMandje(shopTab, it.id);
   $('#siName').textContent = it.name;
   const btn = $('#siBtn');
   btn.disabled = false;
@@ -4561,21 +4725,32 @@ function renderShop() {
   if (eq) { btn.textContent = '✓ In gebruik'; btn.disabled = true; $('#siStatus').textContent = 'Dit heb je aan.'; }
   else if (own) { btn.textContent = 'Aantrekken'; $('#siStatus').textContent = 'Al gekocht.'; }
   else if (it.price >= 99999) { btn.textContent = it.pass ? '🔒 Seizoenspas' : '🔒 Plakboek'; btn.disabled = true; $('#siStatus').textContent = it.pass ? 'Te verdienen met de seizoenspas (🎟️ in het menu).' : 'Alleen te verdienen door het plakboek vol te maken.'; }
-  else if (save.bekers >= it.price) { btn.textContent = `Kopen · 🏆 ${it.price.toLocaleString('nl-NL')}`; btn.classList.add('buy'); $('#siStatus').textContent = 'Je hebt genoeg bekers.'; }
-  else { btn.textContent = `🏆 ${it.price.toLocaleString('nl-NL')}`; btn.disabled = true; $('#siStatus').textContent = `Je mist nog ${(it.price - save.bekers).toLocaleString('nl-NL')} bekers.`; }
+  else if (mand) { btn.textContent = 'Terugleggen'; $('#siStatus').textContent = 'Ligt in je mandje. Afrekenen doe je bij de kassa.'; }
+  else { btn.textContent = `🧺 In mandje · 🏆 ${prijs(it.price)}`; btn.classList.add('buy'); $('#siStatus').textContent = mandTotaal() + it.price > save.bekers ? `Let op: je hebt ${prijs(save.bekers)} bekers.` : 'Leg het in je mandje.'; }
 }
-$('#tabs').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-tab]');
-  if (!b) return;
-  shopTab = b.dataset.tab;
-  applyOutfit();
-  previewOutfit();
-  renderShop();
+let pinBezig = false;
+function renderKassa() {
+  const tot = mandTotaal(), kan = tot <= save.bekers;
+  $('#bonRegels').innerHTML = mandje.length ? mandje.map((m, i) => { const it = artikel(m.tab, m.id); return `<li><span>${icoon(m.tab, m.id)} ${it.name}</span><b>${prijs(it.price)}</b><button data-weg="${i}" aria-label="Weghalen">✕</button></li>`; }).join('') : '<li class="leeg">Nog niks gescand. Loop een gang in en pak iets van het schap.</li>';
+  $('#bonTotaal').textContent = prijs(tot);
+  $('#bonSaldo').textContent = prijs(save.bekers);
+  $('#bonNa').textContent = kan ? prijs(save.bekers - tot) : '—';
+  const pin = $('#pinBtn');
+  pin.disabled = !mandje.length || !kan || pinBezig;
+  pin.textContent = !mandje.length ? 'Mandje is leeg' : kan ? `💳 PINNEN · 🏆 ${prijs(tot)}` : 'Saldo ontoereikend';
+  $('#pinMsg').textContent = mandje.length && !kan ? `Je komt ${prijs(tot - save.bekers)} bekers tekort. Leg iets terug.` : '';
+}
+$('#plusGangen').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gang]');
+  if (b) naarPlus('schap', b.dataset.gang);
 });
+$('#naarKassa').addEventListener('click', () => naarPlus('kassa'));
+$('#plusMand').addEventListener('click', () => naarPlus('kassa'));
+for (const b of document.querySelectorAll('.plus-terug')) b.addEventListener('click', () => naarPlus('vloer'));
 $('#items').addEventListener('click', (e) => {
   const b = e.target.closest('[data-id]');
   if (!b) return;
-  const it = SHOP[shopTab].items.find((i) => i.id === b.dataset.id);
+  const it = artikel(shopTab, b.dataset.id);
   shopSel[shopTab] = it.id;
   previewOutfit();
   if (shopTab === 'shout') { lastSpeak = 0; singBusyUntil = 0; shout(it, true); }
@@ -4584,18 +4759,54 @@ $('#items').addEventListener('click', (e) => {
   renderShop();
 });
 $('#siBtn').addEventListener('click', () => {
-  const it = SHOP[shopTab].items.find((i) => i.id === shopSel[shopTab]);
-  if (!owns(shopTab, it.id)) {
-    if (save.bekers < it.price) return;
-    save.bekers -= it.price;
-    save.owned[shopTab + ':' + it.id] = true;
-    sfx.power();
-    bubble(jens.head, pick(['Strak!', 'Lekker man', 'Dit is hem', 'Zo ga ik de stad in']), '', 1.2, 0.5);
-  } else sfx.beker();
-  save.eq[shopTab] = it.id;
-  persist();
-  applyOutfit();
+  const it = artikel(shopTab, shopSel[shopTab]);
+  if (owns(shopTab, it.id)) {
+    sfx.beker();
+    save.eq[shopTab] = it.id;
+    persist();
+    applyOutfit();
+  } else if (inMandje(shopTab, it.id)) {
+    mandje = mandje.filter((m) => !(m.tab === shopTab && m.id === it.id));
+    tone(440, 0.08, 'square', 0.05);
+  } else {
+    mandje.push({ tab: shopTab, id: it.id });
+    tone(1200, 0.05, 'square', 0.05); tone(1600, 0.07, 'square', 0.05, null, 0.05);
+    const m = $('#plusMand'); m.classList.remove('hup'); void m.offsetWidth; m.classList.add('hup');
+  }
   renderShop();
+});
+$('#bonRegels').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-weg]');
+  if (!b || pinBezig) return;
+  mandje.splice(+b.dataset.weg, 1);
+  tone(440, 0.08, 'square', 0.05);
+  previewOutfit();
+  renderShop();
+});
+$('#pinBtn').addEventListener('click', () => {
+  const tot = mandTotaal();
+  if (!mandje.length || tot > save.bekers || pinBezig) return;
+  pinBezig = true;
+  renderKassa();
+  // elk artikel gaat piepend over de scanner
+  const regels = [...document.querySelectorAll('#bonRegels li')];
+  regels.forEach((li, i) => setTimeout(() => { li.classList.add('gescand'); tone(1850, 0.09, 'square', 0.06); }, 180 + i * 230));
+  setTimeout(() => {
+    save.bekers -= tot;
+    const gekocht = mandje;
+    for (const m of mandje) { save.owned[m.tab + ':' + m.id] = true; save.eq[m.tab] = m.id; shopSel[m.tab] = m.id; }
+    mandje = [];
+    persist();
+    applyOutfit();
+    sfx.power();
+    bubble(jens.head, pick(['Strak!', 'Lekker man', 'Bonnetje mag weg', 'Zo ga ik de stad in', 'Bedankt PLUS']), '', 1.4, 0.5);
+    pinBezig = false;
+    renderShop();
+    $('#bonRegels').innerHTML = gekocht.map((m) => `<li><span>${icoon(m.tab, m.id)} ${artikel(m.tab, m.id).name}</span><b>${prijs(artikel(m.tab, m.id).price)}</b></li>`).join('') + '<li class="leeg betaald">✓ BETAALD · Bedankt en tot ziens bij de PLUS!</li>';
+    $('#bonTotaal').textContent = prijs(tot);
+    $('#bonSaldo').textContent = prijs(save.bekers + tot);
+    $('#bonNa').textContent = prijs(save.bekers);
+  }, 400 + regels.length * 230);
 });
 
 // ---------- ranglijst ----------
@@ -9367,7 +9578,7 @@ const ACH = [
   { id: 'week', icon: '🗓️', name: 'Weekstrijder', desc: 'Doe mee aan een weekuitdaging', test: (s) => s.weekly >= 1 },
   { id: 'snapdeler', icon: '👻', name: 'Snap gedeeld', desc: 'Deel een snap van de fiets', test: (s) => s.snapShare >= 1 },
   { id: 'maatje', icon: '🐕', name: 'Beste maatje', desc: 'Neem een maatje mee', test: () => save.eq.maatje && save.eq.maatje !== 'geen' },
-  { id: 'verzamelaar', icon: '🛍️', name: 'Verzamelaar', desc: 'Koop 12 dingen in de winkel', test: () => Object.keys(save.owned).length >= 12 },
+  { id: 'verzamelaar', icon: '🛍️', name: 'Verzamelaar', desc: 'Koop 12 dingen bij de PLUS', test: () => Object.keys(save.owned).length >= 12 },
 ];
 let achDirty = false;
 function recordStat(name, amount = 1, max = null) {
@@ -10719,7 +10930,7 @@ function collectKaart(o) {
   $('#note').innerHTML = `${s.icon} Sticker: <b>${escHtml(s.name)}</b>${isNew ? ' · NIEUW!' : ' · dubbel'}${s.rare ? ' ✨' : ''}`;
   if (isNew && PLAK.every((p) => save.plak[p.id]) && !save.owned['shirt:goud']) {
     save.owned['shirt:goud'] = true; persist();
-    setTimeout(() => toast('📒 PLAKBOEK VOL!<small>Je hebt het Gouden NEC-shirt verdiend (winkel → shirt)</small>', 3.2), 800);
+    setTimeout(() => toast('📒 PLAKBOEK VOL!<small>Je hebt het Gouden NEC-shirt verdiend (PLUS → gang 2, Shirts)</small>', 3.2), 800);
   }
 }
 function renderPlakboek() {
@@ -10810,7 +11021,7 @@ scene.add(kamer);
 let kamerBuilt = false;
 const STATIONS = [
   { id: 'menu', name: 'Menumuziek' },
-  { id: 'shop', name: '📻 Winkelmuziek' },
+  { id: 'shop', name: '📻 PLUS-muziek' },
   { id: 'game', name: '📻 Jens Run Theme' },
   { id: 'uit', name: 'Radio uit' },
 ];

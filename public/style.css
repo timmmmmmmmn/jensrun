@@ -1270,3 +1270,108 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 .fl-terug { margin-right: 4px; }
 .fm-live .fm-float-h h2 { flex: 1; }
 .fl-uitleg { font-size: 14px; line-height: 1.35; color: var(--muted); }
+
+/* ---------- de PLUS (winkel) ---------- */
+.panel.plus { --pg: #84c225; --pgd: #4f7d12; --pr: #e2231a; background: #f6f7f2; color: #1c2414; padding: 0 0 18px; gap: 12px; overflow-x: hidden; }
+.panel.plus > *:not(.plus-head) { margin: 0 20px; }
+.plus-head { display: flex; align-items: center; gap: 12px; background: var(--pg); padding: 12px 18px; position: sticky; top: 0; z-index: 2; box-shadow: 0 3px 0 var(--pgd); }
+.plus-head img { width: 54px; height: 54px; border-radius: 10px; }
+.plus-titel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.plus-titel h2 { color: #fff; font-size: 24px; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 0 rgba(0,0,0,.18); }
+.plus-titel small { color: #f1ffe0; font-weight: 600; font-size: 14px; }
+.plus .wallet { background: #fff; color: #1c2414; border-radius: 999px; padding: 6px 12px; font-weight: 700; }
+.plus-mand { position: relative; background: #fff; color: #1c2414; border: 0; border-radius: 999px; padding: 6px 12px; font-size: 17px; font-weight: 700; cursor: pointer; }
+.plus-mand b { display: inline-block; min-width: 1.2em; }
+.plus-mand.vol { background: var(--pr); color: #fff; }
+.plus-mand.hup { animation: mandHup .35s ease-out; }
+@keyframes mandHup { 40% { transform: scale(1.25) rotate(-8deg); } }
+.plus-terug { align-self: flex-start; background: none; border: 0; color: var(--pgd); font-weight: 700; font-size: 16px; padding: 2px 0; cursor: pointer; }
+.plus-terug:hover { text-decoration: underline; }
+.plus-vloer, .plus-schap, .plus-kassa { display: flex; flex-direction: column; gap: 12px; }
+.plus-vloer.hidden, .plus-schap.hidden, .plus-kassa.hidden { display: none; }
+/* winkelvloer: tegels met gangen erop */
+.plus-vloer { background: #e9e9e4 repeating-conic-gradient(#dcddd6 0 25%, transparent 0 50%) 0 0 / 44px 44px; border-radius: 16px; padding: 14px; }
+.plus-gangen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.gang { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 26px 6px 18px; background: #fff; border: 0; border-radius: 12px; box-shadow: 0 3px 0 #c5c8bf; color: #1c2414; cursor: pointer; overflow: hidden; transition: transform .12s; }
+.gang:hover { transform: translateY(-3px); box-shadow: 0 6px 0 #c5c8bf; }
+.gang-nr { position: absolute; top: 0; left: 0; right: 0; background: var(--pg); color: #fff; font-family: var(--title); font-size: 15px; padding: 2px 0; letter-spacing: 1px; }
+.gang-nr::before { content: 'GANG '; }
+.gang-ic { font-size: 30px; line-height: 1.1; }
+.gang b { font-size: 15px; line-height: 1.1; text-align: center; }
+.gang small { font-size: 12px; color: #6b7263; font-weight: 600; text-align: center; }
+.gang small em { font-style: normal; color: var(--pr); }
+.gang-plank { position: absolute; left: 0; right: 0; bottom: 0; height: 9px; background: repeating-linear-gradient(90deg, #ffd400 0 12px, #9aa19b 12px 30px); }
+.plus-kassaknop { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; text-align: left; background: #3a3d3a; color: #fff; border: 0; border-radius: 12px; padding: 12px 16px; box-shadow: 0 3px 0 #1f211f; cursor: pointer; }
+.plus-kassaknop:hover { background: #474b47; }
+.kassa-ic { grid-row: span 2; font-size: 30px; }
+.plus-kassaknop b { font-family: var(--title); font-size: 20px; letter-spacing: 1px; }
+.plus-kassaknop small { color: #c9d6b8; font-weight: 600; font-size: 14px; }
+/* schap: artikelen op planken */
+.plus-planken { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); grid-auto-rows: 150px; gap: 0 10px; padding: 8px 10px 0; background: #cfd3cb repeating-linear-gradient(180deg, transparent 0 140px, #8f9690 140px 150px); border-radius: 12px; box-shadow: inset 0 0 0 6px #9aa19b; }
+.pak { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: none; border: 0; padding: 0 0 10px; cursor: pointer; color: #1c2414; }
+.pak-doos { width: 92%; height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: linear-gradient(90deg, rgba(0,0,0,.08), transparent 30%, transparent 75%, rgba(0,0,0,.14)), var(--pak); border-radius: 8px 8px 3px 3px; box-shadow: 0 2px 0 rgba(0,0,0,.25); padding: 6px; transition: transform .12s; overflow: hidden; }
+.pak-doos i { font-style: normal; font-size: 32px; line-height: 1; filter: drop-shadow(0 2px 0 rgba(0,0,0,.2)); }
+.pak-doos b { background: #fff; color: #1c2414; font-size: 12px; line-height: 1.15; border-radius: 4px; padding: 2px 4px; text-align: center; max-height: 3.5em; overflow: hidden; }
+.pak:hover .pak-doos { transform: translateY(-6px); }
+.pak.sel .pak-doos { transform: translateY(-8px); box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--pr); }
+.pak-kaart { position: absolute; bottom: -2px; background: #ffd400; color: #111; font-family: var(--title); font-size: 15px; letter-spacing: .5px; padding: 1px 8px; border-radius: 2px; box-shadow: 0 1px 0 rgba(0,0,0,.3); white-space: nowrap; }
+.pak.owned .pak-kaart { background: #fff; color: var(--pgd); }
+.pak.eq .pak-kaart { background: var(--pg); color: #fff; }
+.pak.slot .pak-doos { filter: grayscale(.7) brightness(.85); }
+.pak.mand .pak-doos::after { content: '🧺'; position: absolute; top: 4px; right: 10%; font-size: 18px; background: #fff; border-radius: 50%; width: 28px; height: 28px; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.plus .shop-info { background: #fff !important; color: #1c2414; box-shadow: 0 2px 0 #d8dbd2; }
+.plus .shop-info small { color: #6b7263; }
+.plus #siBtn { background: #e9ebe4; color: #1c2414; border: 0; border-radius: 10px; box-shadow: none; text-shadow: none; }
+.plus #siBtn.buy { background: var(--pr); color: #fff; }
+/* kassa: bonnetje */
+.bon { position: relative; background: #fff; color: #222; font-family: 'Courier New', ui-monospace, monospace; padding: 18px 18px 22px; box-shadow: 0 4px 14px rgba(0,0,0,.12); --zz: radial-gradient(circle at 6px 0, transparent 6px, #fff 6.5px) 0 0 / 12px 8px repeat-x; }
+.bon::after { content: ''; position: absolute; left: 0; right: 0; bottom: -8px; height: 8px; background: var(--zz); }
+.bon-kop { text-align: center; border-bottom: 2px dashed #bbb; padding-bottom: 8px; margin-bottom: 8px; }
+.bon-kop b { display: block; font-size: 18px; letter-spacing: 2px; }
+.bon-kop small { font-size: 12px; color: #777; }
+#bonRegels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#bonRegels li { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+#bonRegels li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bonRegels li button { background: none; border: 0; color: #b33; font-size: 15px; cursor: pointer; padding: 0 2px; }
+#bonRegels li.gescand { animation: scan .25s; color: var(--pgd, #4f7d12); }
+@keyframes scan { 0% { background: rgba(226,35,26,.25); } }
+#bonRegels li.leeg { color: #777; font-size: 14px; white-space: normal; display: block; text-align: center; padding: 6px 0; }
+#bonRegels li.betaald { color: #2e7d12; font-weight: 700; font-size: 15px; }
+.bon-tot { display: flex; justify-content: space-between; border-top: 2px dashed #bbb; margin-top: 10px; padding-top: 8px; font-size: 18px; font-weight: 700; }
+.bon-tot i, .bon-saldo i { font-style: normal; }
+.bon-saldo { display: flex; justify-content: space-between; font-size: 14px; color: #666; }
+.btn.big.pin { background: var(--pr); border: 0; border-radius: 14px; box-shadow: 0 4px 0 #9b120c; color: #fff; text-shadow: none; }
+.btn.big.pin:disabled { background: #b9bdb3; box-shadow: 0 4px 0 #8d9188; opacity: 1; cursor: default; }
+.pin-msg { color: var(--pr); font-weight: 700; text-align: center; min-height: 0; }
+.pin-msg:empty { display: none; }
+.plus #shopBack { background: var(--pgd); border: 0; border-radius: 14px; box-shadow: 0 4px 0 #2f4b0a; text-shadow: none; }
+@media (max-width: 700px) {
+  #shop .shop-panel.plus { max-height: 66%; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .panel.plus > *:not(.plus-head) { margin: 0 14px; }
+  .plus-head { padding: 10px 14px; gap: 8px; border-radius: 24px 24px 0 0; }
+  .plus-head img { width: 40px; height: 40px; }
+  .plus-titel h2 { font-size: 19px; }
+  .plus-titel small { display: none; }
+  .plus-mand, .plus .wallet { padding: 5px 9px; font-size: 15px; }
+  .plus-vloer { padding: 10px; }
+  .plus-gangen { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .gang { padding: 22px 2px 14px; }
+  .gang-nr { font-size: 12px; }
+  .gang-nr::before { content: ''; }
+  .gang-ic { font-size: 24px; }
+  .gang b { font-size: 12px; }
+  .gang small { display: none; }
+  .plus-planken { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 132px; gap: 0 6px; padding: 6px 6px 0; background: #cfd3cb repeating-linear-gradient(180deg, transparent 0 122px, #8f9690 122px 132px); }
+  .pak-doos { height: 90px; }
+  .pak-doos i { font-size: 26px; }
+  .pak-doos b { font-size: 11px; }
+}
+.pak-doos .shirtje { width: 46px; height: 42px; filter: drop-shadow(0 2px 0 rgba(0,0,0,.2)); }
+#bonRegels .shirtje { width: 18px; height: 16px; vertical-align: -3px; }
+@media (max-width: 700px) { .pak-doos .shirtje { width: 38px; height: 34px; } }
+@media (max-width: 700px) {
+  #shop { align-items: flex-end; justify-content: center; }
+  .plus-planken { grid-auto-rows: 142px; background: #cfd3cb repeating-linear-gradient(180deg, transparent 0 132px, #8f9690 132px 142px); }
+  .pak-doos { height: 102px; padding: 4px; }
+  .pak-doos b { font-size: 10.5px; max-height: 3.6em; }
+}

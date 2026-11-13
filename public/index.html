@@ -119,7 +119,7 @@
       <nav class="fm-tabs">
         <button class="on">Spelen</button>
         <button data-go="#passBtn">Seizoenspas</button>
-        <button data-go="#shopBtn">Winkel</button>
+        <button data-go="#shopBtn">PLUS</button>
         <button data-go="#kamerBtn">De Hub</button>
         <button data-go="#boardBtn">Ranglijst</button>
         <button data-go="#krantBtn">Krant</button>
@@ -190,7 +190,7 @@
       <small id="fmArtFoot" class="hint"></small>
     </div></div>
     <nav class="m-nav">
-      <button data-go="#shopBtn"><i>👕</i>Winkel</button>
+      <button data-go="#shopBtn"><i>🛒</i>PLUS</button>
       <button data-go="#samenBtn" id="mSamen" class="bell" data-n=""><i>👥</i>Samen</button>
       <button data-go="#storyBtn" class="m-mid"><i>📖</i>Verhaal</button>
       <button data-go="#kamerBtn"><i>🏠</i>De Hub</button>
@@ -218,20 +218,40 @@
     </div>
   </div>
 
-  <!-- SHOP -->
+  <!-- SHOP: de PLUS -->
   <div id="shop" class="screen hidden">
-    <div class="panel shop-panel">
-      <div class="shop-head">
-        <h2>Winkel</h2>
+    <div class="panel shop-panel plus">
+      <div class="plus-head">
+        <img src="img/plus-logo.png" alt="PLUS">
+        <div class="plus-titel"><h2 id="plusTitel">PLUS Jens Run</h2><small id="plusSub"></small></div>
+        <button id="plusMand" class="plus-mand" aria-label="Mandje">🧺 <b id="mandN">0</b></button>
         <div class="wallet">🏆 <b id="shopBekers">0</b></div>
       </div>
-      <div id="tabs" class="tabs"></div>
-      <div id="items" class="items"></div>
-      <div class="shop-info">
-        <div><b id="siName"></b><small id="siStatus"></small></div>
-        <button id="siBtn" class="btn"></button>
+      <div id="plusVloer" class="plus-vloer">
+        <div id="plusGangen" class="plus-gangen"></div>
+        <button id="naarKassa" class="plus-kassaknop"></button>
       </div>
-      <button id="shopBack" class="btn big">KLAAR</button>
+      <div id="plusSchap" class="plus-schap hidden">
+        <button class="plus-terug">← Winkelvloer</button>
+        <div id="items" class="plus-planken"></div>
+        <div class="shop-info">
+          <div><b id="siName"></b><small id="siStatus"></small></div>
+          <button id="siBtn" class="btn"></button>
+        </div>
+      </div>
+      <div id="plusKassa" class="plus-kassa hidden">
+        <button class="plus-terug">← Verder winkelen</button>
+        <div class="bon">
+          <div class="bon-kop"><b>PLUS JENS RUN</b><small>Filiaal Nijmegen · bekers only</small></div>
+          <ul id="bonRegels"></ul>
+          <div class="bon-tot"><span>TOTAAL</span><b>🏆 <i id="bonTotaal">0</i></b></div>
+          <div class="bon-saldo"><span>Saldo</span><i id="bonSaldo">0</i></div>
+          <div class="bon-saldo"><span>Na betalen</span><i id="bonNa">0</i></div>
+        </div>
+        <button id="pinBtn" class="btn big pin"></button>
+        <small id="pinMsg" class="pin-msg"></small>
+      </div>
+      <button id="shopBack" class="btn big">🚪 NAAR BUITEN</button>
     </div>
   </div>
 
@@ -286,7 +306,7 @@
       </form>
       <button id="againBtn" class="btn big">NOG EEN KEER</button>
       <div class="row">
-        <button id="overShop" class="btn alt">👕 Winkel</button>
+        <button id="overShop" class="btn alt">🛒 PLUS</button>
         <button id="overMenu" class="btn alt">Menu</button>
       </div>
     </div>
