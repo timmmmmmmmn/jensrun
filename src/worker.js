@@ -676,7 +676,8 @@ export class Room {
       const pub = await this.state.storage.get('pub');
       if (list.length >= 2 && pub) {
         const lopend = await this.state.storage.getAlarm();
-        const at = pub === 'jacht' || list.length >= 4 ? Date.now() + 1500 : (lopend || Date.now() + 10000);
+        // Shane jaagt: de leider kiest wie Shane is; doet hij niks, dan kiest het lot na 12 seconden
+        const at = pub === 'jacht' ? (lopend || Date.now() + 12000) : list.length >= 4 ? Date.now() + 1500 : (lopend || Date.now() + 10000);
         if (!lopend || at < lopend) await this.state.storage.setAlarm(at);
         this.send({ t: 'soon', at });
       }
@@ -686,6 +687,7 @@ export class Room {
     if (!me) return;
     if (m.t === 'start' && me.host) {
       await this.state.storage.put('startedAt', Date.now());
+      await this.state.storage.deleteAlarm();
       // Shane jaagt: de host kiest wie Shane is
       const shane = m.mode === 'jacht' ? String(m.shane || '').slice(0, 40) : undefined;
       this.send({ t: 'go', mode: String(m.mode || 'fiets'), shane, seed: newSeed(), at: Date.now() + 3500 });
