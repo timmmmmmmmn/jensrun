@@ -1218,3 +1218,22 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 .fl-code input { flex: 1; min-width: 0; width: 64px; padding: 0 10px; border: 0; border-radius: 10px; background: rgba(255,255,255,.1); color: #fff; font: inherit; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
 .fl-code input::placeholder { color: var(--muted); letter-spacing: 0; }
 .fl-code .btn { flex: none; padding-left: 12px; padding-right: 12px; }
+
+/* ---------- Jesse (de muziek) rechtsonder in het hoofdmenu: popt omhoog en blijft staan ---------- */
+.fm-jesse { position: absolute; right: max(22px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: min(220px, 18vw); display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; transform-origin: 80% 100%; }
+.fm-jesse img { width: 100%; display: block; filter: drop-shadow(0 0 3px #000) drop-shadow(0 10px 18px rgba(0,0,0,.55)); image-rendering: auto; }
+.fm-jesse span { position: relative; margin-top: -6px; padding: 5px 11px; border-radius: 10px; background: rgba(0,0,0,.72); box-shadow: 0 0 0 2px #000; color: #fff; font-family: var(--title); font-size: clamp(12px, 1.25vw, 16px); letter-spacing: .3px; white-space: nowrap; }
+.fm-jesse span b { color: var(--yellow); font-weight: inherit; }
+.fm-jesse.pop { animation: jessePop .75s cubic-bezier(.2, 1.5, .45, 1) both; }
+@keyframes jessePop { 0% { transform: translateY(115%) scale(.85); opacity: 0; } 40% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+@media (max-width: 700px) {
+  .fm-jesse { width: 92px; right: 10px; bottom: calc(330px + env(safe-area-inset-bottom)); }
+  .fm-jesse { width: 104px; align-items: center; }
+  .fm-jesse span { margin-top: 2px; font-size: 11px; padding: 4px 6px; white-space: normal; text-align: center; line-height: 1.25; border-radius: 8px; }
+}
+@media (max-height: 640px) and (min-width: 701px) { .fm-jesse { width: min(150px, 14vw); } }
+/* ---------- credits in de instellingen ---------- */
+.credits { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(0,0,0,.35); text-align: left; }
+.credits img { width: 64px; height: 64px; object-fit: cover; object-position: 50% 15%; border-radius: 12px; background: #000; image-rendering: auto; }
+.credits div { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.credits b { font-family: var(--title); font-size: 17px; letter-spacing: .3px; }

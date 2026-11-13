@@ -298,7 +298,6 @@ function audioInit() {
     queueClip('dbivo', 'audio/dbivo.mp3');
     for (let i = 1; i <= 6; i++) queueClip('shane' + i, `audio/shane/${i}.mp3`);
     queueClip('gameover', 'audio/gameover.mp3');
-    queueClip('levelgehaald', 'audio/levelgehaald.mp3');
     queueClip('steve', 'audio/steve.mp3');
     loadVoices();
     musicInit();
@@ -505,22 +504,27 @@ function singBio() {
 }
 // muziek: één afspeler die van nummer wisselt. Vroeger streamden alle nummers tegelijk op volume 0:
 // dat kost veel en browsers leggen zulke streams soms stil, waardoor de muziek ineens wegviel.
-const music = { eltune: 'audio/radio/eltune.mp3', chip: 'audio/radio/chiptune.mp3', menu: 'audio/menu.mp3', story: 'audio/story.mp3', verhaalmenu: 'audio/verhaalmenu.mp3', nederland: 'audio/nederland.mp3', game: 'audio/game.mp3' };
+// alle muziek is van Jessegrill: menu (ook het verhaal), winkel, intro bij elke start en daarna het spelnummer
+const music = { menu: 'audio/menu.mp3', shop: 'audio/shop.mp3', intro: 'audio/intro.mp3', game: 'audio/game.mp3' };
 const musicEl = new Audio(), musicGain = {}, musicPos = {};
-let musicCur = null, musicLoaded = null;
+let musicCur = null, musicLoaded = null, introKlaar = false, inPotje = false;
 musicEl.loop = true; musicEl.preload = 'auto'; musicEl.crossOrigin = 'anonymous';
 musicEl.addEventListener('loadedmetadata', () => { const t = musicPos[musicLoaded] || 0; if (t > 0 && t < musicEl.duration - 1) musicEl.currentTime = t; });
 function musicSwitch(k) {
   if (musicCur && musicLoaded === musicCur && musicEl.currentTime > 0) musicPos[musicCur] = musicEl.currentTime;
   musicCur = k;
   if (!k) { musicEl.pause(); return; }
+  musicEl.loop = k !== 'intro'; // de intro speelt één keer, daarna het spelnummer
   if (musicLoaded !== k) { musicLoaded = k; musicEl.src = music[k]; }
   musicEl.play().catch(() => {});
 }
+// opnieuw starten (ook vanuit pauze): weer eerst de intro
+function introOpnieuw() { introKlaar = false; musicRestart('intro'); musicRestart('game'); }
 function musicRestart(k) { musicPos[k] = 0; if (musicLoaded === k) { try { musicEl.currentTime = 0; } catch (e) { /* nog niet geladen */ } } }
 // een stream die stukgaat (netwerk, telefoon die iets anders deed): even later op dezelfde plek verder
 function musicReload() { if (!musicCur) return; const k = musicCur; musicPos[k] = musicEl.currentTime || musicPos[k] || 0; musicLoaded = null; musicCur = null; musicSwitch(k); }
 musicEl.addEventListener('error', () => setTimeout(musicReload, 1500));
+musicEl.addEventListener('ended', () => { if (musicCur === 'intro') introKlaar = true; });
 // elke aanraking of toets: audio weer aanzetten (browsers staan starten alleen toe na een klik)
 for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, () => {
   if (!ac) return;
@@ -562,13 +566,19 @@ function updateMusic(dt) {
     return;
   }
   // tijdens game over / level gehaald speelt alleen dat muziekje; in een level eigen muziek
-  const storyMenu = curScreen === '#levels' || curScreen === '#lvldone' || (curScreen === '#fame' && curLevel);
-  let want = newsPlaying ? null : state === 'cutscene' && !gameoverSrc ? 'verhaalmenu' : state === 'run' || state === 'lkamer' || state === 'aanloop' || (state === 'mini' && !mini.paused && !mini.over) ? (curLevel ? (campaign === 'nederland' ? 'nederland' : 'story') : 'game') : gameoverSrc || state === 'paused' || state === 'dying' || state === 'photo' || state === 'replay' ? null : storyMenu ? 'verhaalmenu' : 'menu';
-  if (want === 'menu' && save.radio && save.radio !== 'menu') want = save.radio === 'uit' ? null : save.radio;
+  // elk potje (run, asbest, verhaal, minigame) begint met de intro en gaat dan over in het spelnummer
+  const speelt = state === 'run' || state === 'lkamer' || state === 'aanloop' || (state === 'mini' && !mini.paused && !mini.over);
+  const potje = speelt || state === 'paused' || (state === 'mini' && !mini.over);
+  if (potje && !inPotje) introOpnieuw();
+  inPotje = potje;
+  if (musicCur === 'intro' && (musicEl.ended || musicEl.currentTime > 9)) introKlaar = true;
+  let want = newsPlaying ? null : state === 'cutscene' && !gameoverSrc ? 'menu' : speelt ? (introKlaar ? 'game' : 'intro') : gameoverSrc || state === 'paused' || state === 'dying' || state === 'photo' || state === 'replay' ? null : curScreen === '#shop' ? 'shop' : 'menu';
+  if (want === 'menu' && save.radio && save.radio !== 'menu') want = save.radio === 'uit' ? null : music[save.radio] ? save.radio : 'menu';
   const boost = want === 'game' ? musicBoost() : 0;
   const g = musicGain.main.gain;
   if (want && !save.sound) want = null;
-  // wisselen: eerst uitfaden, dan pas het andere nummer
+  // wisselen: eerst uitfaden, dan pas het andere nummer (van intro naar spelnummer meteen, zonder gat)
+  if (want === 'game' && musicCur === 'intro') { musicSwitch('game'); return; }
   if (want !== musicCur) {
     g.value = damp(g.value, 0, 10, dt);
     if (g.value < 0.03 || musicEl.paused) { g.value = 0; musicSwitch(want); }
@@ -3263,7 +3273,7 @@ function startRun() {
   missionEvent('games');
   stickerCombo = 0;
   stopGameover();
-  musicRestart(curLevel ? (campaign === 'nederland' ? 'nederland' : 'story') : 'game');
+  introOpnieuw();
   if (!curLevel) { themaIdx = Math.floor(Math.random() * FEEST_ROTATIE.length); feest = FEEST_ROTATIE[themaIdx]; themaT = THEMA_SECS; } else feest = null;
   rollWeather();
   if (weekly?.rule.id === 'regen') { weather = 'regen'; seedPrecip('regen'); }
@@ -4298,6 +4308,8 @@ let curScreen = null;
 function showScreen(sel) {
   if (newsJob && sel !== '#over') newsCancel();
   curScreen = sel;
+  // Jesse popt elke keer opnieuw omhoog als je in het hoofdmenu komt
+  if (sel === '#menu') { const j = $('#fmJesse'); j.classList.remove('pop'); void j.offsetWidth; j.classList.add('pop'); }
   for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer', '#blok']) $(s).classList.toggle('hidden', s !== sel);
   for (const f of ['#fmModes', '#fmArt', '#fmLive']) $(f).classList.add('hidden');
   if (sel === '#menu') { renderWall(); renderFm(); }
@@ -5967,7 +5979,6 @@ function winLevel() {
   const firstKing = curLevel.boss && !rec.cleared, firstCup = curLevel.goffert && !rec.cleared;
   save.story[curLevel.id] = { cleared: true, stars: Math.max(rec.stars || 0, stars), best: Math.max(rec.best || 0, s) };
   persist();
-  playGameover('levelgehaald');
   missionEvent('level');
   passAddXp(dist);
   syncProfile();
@@ -10337,7 +10348,7 @@ const SPEAK_MAP = { hup: 'hup', 'go nederland': 'gonl', 'die beker is van ons': 
 //  SPLASHSCREEN: laadbalk terwijl de belangrijkste bestanden binnenkomen
 // =====================================================================
 {
-  const files = ['img/menu-bg.jpg', 'img/jens-face.png', 'icons/icon-512.png', 'audio/menu.mp3', 'audio/game.mp3', 'audio/dbivo.mp3', 'audio/gameover.mp3'];
+  const files = ['img/menu-bg.jpg', 'img/jens-face.png', 'icons/icon-512.png', 'audio/menu.mp3', 'audio/intro.mp3', 'audio/game.mp3', 'audio/shop.mp3', 'audio/dbivo.mp3', 'audio/gameover.mp3'];
   let done = 0;
   const bar = $('#splashBar'), press = $('#start .press');
   press.style.visibility = 'hidden';
@@ -10686,8 +10697,8 @@ scene.add(kamer);
 let kamerBuilt = false;
 const STATIONS = [
   { id: 'menu', name: 'Menumuziek' },
-  { id: 'eltune', name: '📻 Eltune' },
-  { id: 'chip', name: '📻 Chiptune' },
+  { id: 'shop', name: '📻 Winkelmuziek' },
+  { id: 'game', name: '📻 Jens Run Theme' },
   { id: 'uit', name: 'Radio uit' },
 ];
 if (!save.radio) save.radio = 'menu';
@@ -12667,6 +12678,7 @@ function startMini(kind) {
   Object.assign(mini, { kind, t: 0, score: 0, paused: false, over: false, keys: {}, parts: [], ptr: null, s: null });
   mini.cam = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 260);
   state = 'mini';
+  introOpnieuw();
   $('#hud').classList.add('hidden');
   showScreen('#mini');
   $('#mini').className = 'mini mini-' + kind;
@@ -14191,4 +14203,4 @@ const ARC = {
   },
 };
 
-window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur; }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
