@@ -179,7 +179,7 @@ async function api(req, env, url) {
       WHERE r.created >= ? AND r.created < ? ORDER BY r.score DESC LIMIT 3`).all();
     const lang = await q(`SELECT p.name, r.dist FROM runs r JOIN players p ON p.id = r.player_id WHERE r.created >= ? AND r.created < ? ORDER BY r.dist DESC LIMIT 1`).first();
     const vaak = await q(`SELECT p.name, COUNT(*) AS n FROM runs r JOIN players p ON p.id = r.player_id WHERE r.created >= ? AND r.created < ? GROUP BY r.player_id ORDER BY n DESC LIMIT 1`).first();
-    const dood = await q(`SELECT p.name, r.reason, r.street FROM runs r JOIN players p ON p.id = r.player_id WHERE r.created >= ? AND r.created < ? AND r.reason IN ('vlucht','gevloerd','gat','afzetting','auto') ORDER BY CASE r.reason WHEN 'vlucht' THEN 0 WHEN 'gevloerd' THEN 1 ELSE 2 END, RANDOM() LIMIT 1`).first();
+    const dood = await q(`SELECT p.name, r.reason, r.street FROM runs r JOIN players p ON p.id = r.player_id WHERE r.created >= ? AND r.created < ? AND r.reason IN ('vlucht','gevloerd','afgrond','gat','afzetting','auto') ORDER BY CASE r.reason WHEN 'vlucht' THEN 0 WHEN 'gevloerd' THEN 1 ELSE 2 END, RANDOM() LIMIT 1`).first();
     return json({ runs: agg.runs, meters: agg.meters, top, lang, vaak, dood });
   }
 
