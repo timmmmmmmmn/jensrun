@@ -4130,7 +4130,7 @@ function updateRun(dt) {
   if (baseSpeed < (curLevel ? curLevel.maxSpeed : 30) && !wild) baseSpeed += dt * (!curLevel && runTime < 30 ? 0.33 : baseSpeed < 17 ? 0.3 : 0.12);
   // fiets: 2x zo snel aan het begin, maar later nooit meer dan ~30 (of 15% boven lopen)
   const fietsMul = jacht ? baseSpeed * 1.3 : Math.max(baseSpeed * 1.15, Math.min(baseSpeed * 2, 30)); // in de jacht is de fiets geen ontsnapping
-  const target = (brommerT > 0 ? baseSpeed * 1.55 : fietsT > 0 ? fietsMul : baseSpeed) * hillSpeed() * (seg?.active ? SEG_DEFS[seg.type].mul : 1) * jachtMul();
+  const target = (brommerT > 0 ? baseSpeed * 1.55 : fietsT > 0 ? fietsMul : baseSpeed) * hillSpeed() * (seg?.active ? SEG_DEFS[seg.type].mul : 1) * jachtMul() * (wild?.open && dist < wild.s0 + wild.L ? WILD_MUL : 1);
   speed = damp(speed, target, introT < 1 ? 2.5 : 4, dt);
   const m = speed * dt;
   dist += m;
@@ -5604,7 +5604,7 @@ function updDuizelig(dt) {
 }
 // ---------- Loslopend wild: springt voor Jens de weg op en breekt hem open; daarna 15-20 s van eilandje naar eilandje boven een afgrond ----------
 var nextWild = 1200, wild = null;
-const WILD_H = 2.7, SPRONG_T = 2 * 9.4 / 26; // zo lang hangt Jens in de lucht bij een gewone sprong
+const WILD_MUL = 0.75, WILD_H = 2.7, SPRONG_T = 2 * 9.4 / 26; // zo lang hangt Jens in de lucht bij een gewone sprong
 const wildMat = markShared(new THREE.MeshBasicMaterial({ map: (() => { const t = psxTex(new THREE.TextureLoader().load('img/loslopend-wild.png')); t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; return t; })(), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }));
 const wildGeo = markShared(new THREE.PlaneGeometry(WILD_H * 269 / 640, WILD_H).translate(0, WILD_H / 2, 0));
 const eilandMat = { top: M('#55585e'), aarde: M('#6e5238'), rots: M('#4a3a2c') };
@@ -5657,7 +5657,7 @@ function wildGrond() {
   if (!wild?.open) return 0;
   const d = dist - wild.s0;
   if (d < 0 || d > wild.L) return 0;
-  for (const e of wild.eilanden) if (!e.dead && Math.abs(player.x - e.x) < e.ew / 2 + 0.5 && Math.abs(e.z) < e.ed / 2 + 0.6) return 1;
+  for (const e of wild.eilanden) if (!e.dead && Math.abs(player.x - e.x) < e.ew / 2 + 0.5 && Math.abs(e.z) < e.ed / 2 + 0.6) { if (e.pad && player.y <= 0.05) wild.op = Math.max(wild.op ?? -1, wild.route.indexOf(e)); return 1; }
   return -1;
 }
 function wildBoven() { return !!wild?.open && dist > wild.s0 - 4 && dist < wild.s0 + wild.L + 4; }
@@ -5715,7 +5715,7 @@ function bouwEilanden(w) {
 }
 function spawnWild() {
   const side = Math.random() < 0.5 ? -1 : 1;
-  const v = baseSpeed; // ligt vast tot de breuk voorbij is
+  const v = baseSpeed * WILD_MUL; // boven de afgrond ren je wat langzamer: meer tijd om te kijken
   const w = { s0: dist + 40, L: Math.round(v * rand(15, 20)), v, open: false, eilanden: [], side };
   wild = w;
   // alles wat op het stuk dat breekt zou staan gaat weg, en er komt niets nieuws tot het voorbij is
@@ -5723,6 +5723,7 @@ function spawnWild() {
   for (const o of objs) { if (o.z < zA + 3 && o.kind !== 'landmark' && o.kind !== 'sign') o.dead = true; if (o.linus) o.dead = true; }
   spawnZ = -(w.s0 - dist + w.L + 6);
   bouwEilanden(w);
+  w.route = w.eilanden.filter((e) => e.pad); w.op = 0;
   const g = makeLoslopendWild();
   const x0 = side * (ROAD_W / 2 + 1.3);
   addObj('deco', g, x0, zA + 1.5, 0, 0, 0, { y: 0.14, wild: true, fase: 'wacht', t: 0, len: 2,
@@ -5781,8 +5782,35 @@ function wildOpen(w, x) {
   }
   burst(new THREE.Vector3(x, 0.4, zA + 1), 30, 6, [eilandMat.aarde, eilandMat.top], 1.2);
 }
+// rode cirkel op het eilandje waar je naartoe moet springen (en een vagere op het eiland daarna)
+const doelRingen = [0, 1].map((i) => {
+  const rood = new THREE.MeshBasicMaterial({ color: '#ff2a2a', fog: false, transparent: true, opacity: i ? 0.45 : 1 });
+  const m = new THREE.Mesh(torG(0.95, 0.13, 4, 20).rotateX(Math.PI / 2), rood);
+  m.add(new THREE.Mesh(new THREE.CircleGeometry(0.82, 18).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ff2a2a', fog: false, transparent: true, opacity: i ? 0.12 : 0.3, depthWrite: false })));
+  // pijl erboven: ook van ver te zien, ook als er bekers voor hangen
+  const pijl = new THREE.Mesh(coneG(0.42, 0.8, 4).rotateX(Math.PI), rood);
+  pijl.position.y = 2.6; m.add(pijl); m.userData.pijl = pijl;
+  m.visible = false; scene.add(m);
+  return m;
+});
+function updDoelRingen(w) {
+  const t = now();
+  for (let i = 0; i < 2; i++) {
+    const ring = doelRingen[i], e = w?.open && state === 'run' ? w.route[(w.op ?? 0) + 1 + i] : null;
+    ring.visible = !!e && !e.dead && e.z - e.ed / 2 < 1;
+    if (!ring.visible) continue;
+    // in de baan die het dichtst bij Jens ligt (brede eilanden), een paar meter het eiland op
+    let x = e.x;
+    if (e.ew > 3) { const l = LANES.filter((lx) => Math.abs(lx - e.x) < e.ew / 2); x = l.reduce((a, b) => (Math.abs(b - player.x) < Math.abs(a - player.x) ? b : a), l[0] ?? e.x); }
+    const z = Math.min(e.z, e.z + e.ed / 2 - 2.2);
+    ring.position.set(x, 0.04, z);
+    ring.scale.setScalar(i ? 0.8 : 1 + Math.sin(t * 8) * 0.12);
+    ring.userData.pijl.position.y = 2.6 + Math.sin(t * 6) * 0.25; ring.userData.pijl.rotation.y = t * 2;
+  }
+}
 function updWild(dt) {
   const w = wild;
+  updDoelRingen(w);
   if (!w) return;
   if (!w.open) { afgrond.visible = false; return; }
   const zA = -(w.s0 - dist), zB = zA - w.L;
