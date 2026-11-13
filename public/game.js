@@ -5716,7 +5716,7 @@ function bouwEilanden(w) {
 function spawnWild() {
   const side = Math.random() < 0.5 ? -1 : 1;
   const v = baseSpeed * WILD_MUL; // boven de afgrond ren je wat langzamer: meer tijd om te kijken
-  const w = { s0: dist + 40, L: Math.round(v * rand(15, 20)), v, open: false, eilanden: [], side };
+  const w = { s0: dist + 40, L: Math.round(v * rand(5, 10)), v, open: false, eilanden: [], side };
   wild = w;
   // alles wat op het stuk dat breekt zou staan gaat weg, en er komt niets nieuws tot het voorbij is
   const zA = -(w.s0 - dist);
