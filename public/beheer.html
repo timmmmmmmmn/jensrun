@@ -29,6 +29,19 @@
   #nPrev { max-width: 260px; border-radius: 10px; }
   .nthumb { width: 72px; height: 44px; object-fit: cover; border-radius: 6px; display: block; }
   tr.oud td { opacity: .45; }
+  button.ban { background: #7a1fa2; padding: 6px 10px; }
+  button.to { background: #d97706; padding: 6px 10px; }
+  td .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; border-radius: 6px; padding: 1px 6px; }
+  .tag.ban { background: #7a1fa2; } .tag.timeout { background: #d97706; }
+  small.ip { color: var(--muted); font-family: ui-monospace, monospace; }
+  dialog { border: 0; border-radius: 14px; padding: 18px; width: min(420px, calc(100% - 32px)); box-sizing: border-box; }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog .nform { padding: 0; margin: 0; }
+  dialog .chk { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+  dialog .chk input { flex: 0 0 auto; margin: 0; }
+  [hidden] { display: none !important; }
+  dialog .hint { color: var(--muted); font-size: 13px; margin: 0; }
 </style>
 </head>
 <body>
@@ -62,6 +75,27 @@
     <p id="wallNow">–</p>
     <button id="clearWall" class="del">Muur leegmaken</button>
   </div>
+  <h2 id="bansH" hidden>Bans en time-outs</h2>
+  <div class="wrap"><table id="bans" hidden>
+    <thead><tr><th>Naam</th><th>Soort</th><th>Bericht</th><th>Tot</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <dialog id="banDlg">
+    <form method="dialog" class="nform" id="banForm">
+      <h2 id="banTitle" style="margin:0">Ban</h2>
+      <label class="chk"><input type="radio" name="kind" value="timeout" checked> Time-out (tijdelijk niet spelen)</label>
+      <label class="chk"><input type="radio" name="kind" value="ban"> Ban (voor altijd, tot je hem opheft)</label>
+      <div class="row nrow" id="banDurRow">
+        <label>Hoelang <input id="banDur" type="number" min="1" value="1"></label>
+        <label>&nbsp;<select id="banUnit"><option value="1">minuten</option><option value="60" selected>uur</option><option value="1440">dagen</option><option value="10080">weken</option></select></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="banDev" checked> Ook dit apparaat</label>
+      <label class="chk"><input type="checkbox" id="banIp"> Ook dit IP-adres <small class="ip" id="banIpTxt"></small></label>
+      <p class="hint">Let op: op school-wifi of thuis delen mensen hetzelfde IP-adres, dan blokkeer je hen ook.</p>
+      <label>Bericht dat de speler ziet <textarea id="banMsg" rows="3" maxlength="300" placeholder="Bijvoorbeeld: Je hebt valsgespeeld. Morgen mag je weer."></textarea></label>
+      <div class="row"><button value="ok" id="banOk">Blokkeren</button><button value="cancel" formnovalidate style="background:#999">Annuleren</button></div>
+    </form>
+  </dialog>
   <h2 id="fameH" hidden>Wall of Fame</h2>
   <div class="wrap"><table id="fame" hidden>
     <thead><tr><th>Naam</th><th>Verhaal</th><th>Score</th><th>Datum</th><th></th></tr></thead>
@@ -90,8 +124,9 @@ async function load() {
     $('#tbl').hidden = false;
     $('#tbl tbody').innerHTML = rows.map((r) => `<tr>
       <td>${esc(r.name)} <button class="ren" data-ren="${esc(r.id)}" data-name="${esc(r.name)}" title="Naam aanpassen">Naam</button>${r.email ? `<br><small>${esc(r.email)}</small> <button class="pw" data-pw="${esc(r.id)}" data-name="${esc(r.name)}">Wachtwoord</button>` : ''}</td><td class="n">${r.fiets ?? ''}</td><td class="n">${r.telefoon ?? ''}</td><td class="n">${r.terror ?? ''}</td><td class="n">${r.school ?? ''}</td>
-      <td>${new Date(r.created).toLocaleDateString('nl-NL')}</td>
-      <td><button class="del" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Verwijder</button></td></tr>`).join('');
+      <td>${new Date(r.created).toLocaleDateString('nl-NL')}${r.ip ? `<br><small class="ip">${esc(r.ip)}</small>` : ''}</td>
+      <td><div class="acts"><button class="to" data-ban="${esc(r.id)}" data-name="${esc(r.name)}" data-ip="${esc(r.ip || '')}" data-dev="${r.device ? 1 : ''}" data-kind="timeout">Time-out</button><button class="ban" data-ban="${esc(r.id)}" data-name="${esc(r.name)}" data-ip="${esc(r.ip || '')}" data-dev="${r.device ? 1 : ''}" data-kind="ban">Ban</button><button class="del" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Verwijder</button></div></td></tr>`).join('');
+    await loadBans();
     const cfg = await call('/api/admin/config');
     $('#cfg').hidden = false;
     $('#dates').value = (cfg.wedstrijden || []).join('\n');
@@ -110,6 +145,59 @@ $('#fame').onclick = async (e) => {
   try { await call('/api/admin/fame/delete', { method: 'POST', body: JSON.stringify({ id: b.dataset.fame, c: b.dataset.c }) }); load(); }
   catch (err) { $('#msg').textContent = err.message; }
 };
+// ---------- bans en time-outs ----------
+const fmtTot = (t) => new Date(t).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+async function loadBans() {
+  const { rows, now } = await call('/api/admin/bans');
+  $('#bans').hidden = false; $('#bansH').hidden = false;
+  $('#bans tbody').innerHTML = rows.length ? rows.map((r) => {
+    const oud = r.until != null && r.until < now;
+    const op = [r.device ? 'apparaat' : '', r.ip ? 'IP ' + r.ip : ''].filter(Boolean).join(', ');
+    return `<tr class="${oud ? 'oud' : ''}"><td>${esc(r.name || '?')}${op ? `<br><small class="ip">+ ${esc(op)}</small>` : ''}</td>
+      <td><span class="tag ${r.kind}">${r.kind === 'ban' ? 'Ban' : 'Time-out'}</span></td><td>${esc(r.message)}</td>
+      <td>${r.until == null ? 'altijd' : fmtTot(r.until) + (oud ? ' (voorbij)' : '')}</td>
+      <td><button class="del" data-unban="${esc(r.id)}" data-name="${esc(r.name || '')}">${oud ? 'Weg' : 'Opheffen'}</button></td></tr>`;
+  }).join('') : '<tr><td colspan="5">Niemand geblokkeerd</td></tr>';
+}
+$('#bans').onclick = async (e) => {
+  const b = e.target.closest('[data-unban]');
+  if (!b || !confirm(`Blokkade van ${b.dataset.name} opheffen?`)) return;
+  try { await call('/api/admin/unban', { method: 'POST', body: JSON.stringify({ id: b.dataset.unban }) }); loadBans(); }
+  catch (err) { $('#msg').textContent = err.message; }
+};
+let banFor = null;
+const banKind = () => document.querySelector('#banForm [name=kind]:checked').value;
+function banKindChanged() {
+  const ban = banKind() === 'ban';
+  $('#banDurRow').hidden = ban;
+  $('#banOk').textContent = ban ? 'Bannen' : 'Time-out geven';
+}
+for (const r of document.querySelectorAll('#banForm [name=kind]')) r.onchange = banKindChanged;
+$('#tbl').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ban]');
+  if (!b) return;
+  banFor = b.dataset;
+  $('#banTitle').textContent = b.dataset.name;
+  document.querySelector(`#banForm [name=kind][value=${b.dataset.kind}]`).checked = true;
+  $('#banDev').checked = !!b.dataset.dev; $('#banDev').disabled = !b.dataset.dev;
+  $('#banIp').checked = b.dataset.kind === 'ban' && !!b.dataset.ip; $('#banIp').disabled = !b.dataset.ip;
+  $('#banIpTxt').textContent = b.dataset.ip || '(nog onbekend)';
+  $('#banMsg').value = '';
+  banKindChanged();
+  $('#banDlg').showModal();
+});
+$('#banDlg').addEventListener('close', async () => {
+  if ($('#banDlg').returnValue !== 'ok' || !banFor) return;
+  const kind = banKind();
+  try {
+    const r = await fetch('/api/admin/ban', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify({
+      id: banFor.ban, kind, minutes: Number($('#banDur').value) * Number($('#banUnit').value), device: $('#banDev').checked, ip: $('#banIp').checked, message: $('#banMsg').value }) });
+    const d = await r.json();
+    if (!r.ok) { $('#msg').textContent = d.error || 'Fout ' + r.status; return; }
+    $('#msg').textContent = `${banFor.name} ${kind === 'ban' ? 'is verbannen' : 'heeft een time-out'}${d.device || d.ip ? ' (ook ' + [d.device && 'apparaat', d.ip && 'IP'].filter(Boolean).join(' en ') + ')' : ''}`;
+    loadBans();
+  } catch (err) { $('#msg').textContent = err.message; }
+});
 $('#load').onclick = load;
 $('#key').onkeydown = (e) => { if (e.key === 'Enter') load(); };
 $('#tbl').addEventListener('click', async (e) => {

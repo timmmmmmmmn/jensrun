@@ -254,7 +254,17 @@ function loadSave() {
 const save = loadSave();
 if (!save.set) save.set = { music: 100, sfx: 100, voice: 100, quality: 'normaal' };
 for (const slot of Object.keys(SHOP)) if (!SHOP[slot].items.some((i) => i.id === save.eq[slot])) save.eq[slot] = SHOP[slot].items[0].id;
-if (!save.playerId) save.playerId = crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) => (c ^ (Math.random() * 16) >> (c / 4)).toString(16));
+const newUuid = () => crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) => (c ^ (Math.random() * 16) >> (c / 4)).toString(16));
+if (!save.playerId) save.playerId = newUuid();
+// eigen id per apparaat, los van de save (blijft bij inloggen op een ander account): voor bans
+const devId = (() => {
+  let d = null;
+  try { d = localStorage.getItem('jr-dev'); } catch (e) { /* geen opslag */ }
+  if (!/^[a-f0-9-]{36}$/.test(d || '')) d = (document.cookie.match(/(?:^|; )jrdev=([a-f0-9-]{36})/) || [])[1] || newUuid();
+  try { localStorage.setItem('jr-dev', d); } catch (e) { /* geen opslag */ }
+  document.cookie = `jrdev=${d}; max-age=157680000; path=/; samesite=lax`;
+  return d;
+})();
 function persist() {
   save.updatedAt = Date.now();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* geen opslag */ }
@@ -3242,6 +3252,7 @@ window.addEventListener('pagehide', muteBackground);
 //  run flow
 // =====================================================================
 function startRun() {
+  if (showBlok()) return;
   if (MODES[mode]?.mini) { startMini(mode); return; }
   if (jacht?.klaar) jachtStop();
   audioInit();
@@ -4268,7 +4279,7 @@ let curScreen = null;
 function showScreen(sel) {
   if (newsJob && sel !== '#over') newsCancel();
   curScreen = sel;
-  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer']) $(s).classList.toggle('hidden', s !== sel);
+  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer', '#blok']) $(s).classList.toggle('hidden', s !== sel);
   for (const f of ['#fmModes', '#fmArt', '#fmLive']) $(f).classList.add('hidden');
   if (sel === '#menu') { renderWall(); renderFm(); }
   glasSluit(true);
@@ -4473,9 +4484,10 @@ $('#siBtn').addEventListener('click', () => {
 
 // ---------- ranglijst ----------
 async function apiCall(path, data) {
-  const r = await fetch(path, data ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) } : {});
+  const r = await fetch(path, data ? { method: 'POST', headers: { 'content-type': 'application/json', 'x-jr-dev': devId }, body: JSON.stringify(data) } : { headers: { 'x-jr-dev': devId } });
   let j = {};
   try { j = await r.json(); } catch (e) { /* leeg */ }
+  if (r.status === 403 && j.block) setBlok(j.block);
   return { status: r.status, ok: r.ok, ...j };
 }
 function forgetName() { save.name = null; persist(); }
@@ -4551,6 +4563,39 @@ $('#boardBtn').addEventListener('click', () => { boardMode = mode; showScreen('#
 $('#boardBack').addEventListener('click', () => showScreen('#menu'));
 // controleer of onze naam nog bestaat
 // naam ophalen: de beheerder kan een naam hebben aangepast
+// ---------- ban of time-out van de beheerder ----------
+let blok = null, blokTimer = 0;
+const blokActief = () => blok && (blok.until == null || blok.until > Date.now());
+function setBlok(b) {
+  blok = b || null;
+  // midden in een run niet ingrijpen: de volgende start wordt tegengehouden (en scores weigert de server al)
+  if (blokActief() && curScreen === '#menu') { showBlok(); return; }
+  if (!blokActief() && curScreen === '#blok') showScreen('#menu');
+}
+function checkBlok() {
+  apiCall('/api/status?id=' + save.playerId).then((r) => { if (r.ok) setBlok(r.block); }).catch(() => {});
+}
+function blokTijd() {
+  if (!blokActief()) { clearInterval(blokTimer); if (curScreen === '#blok') showScreen('#menu'); return; }
+  if (blok.until == null) { $('#blokTijd').textContent = ''; return; }
+  const s = Math.ceil((blok.until - Date.now()) / 1000), d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
+  $('#blokTijd').textContent = 'Je kunt weer spelen over ' + (d ? `${d}d ${h}u` : h ? `${h}u ${m}m` : `${m}m ${s % 60}s`);
+}
+// geeft true als er niet gespeeld mag worden (en laat dan het scherm zien)
+function showBlok() {
+  if (!blokActief()) return false;
+  if (live) liveClose();
+  const ban = blok.kind === 'ban';
+  $('#blokTitle').textContent = ban ? 'Je bent verbannen' : 'Time-out';
+  $('#blokMsg').textContent = blok.message || '';
+  showScreen('#blok');
+  clearInterval(blokTimer); blokTijd(); blokTimer = setInterval(blokTijd, 1000);
+  return true;
+}
+$('#blokOk').addEventListener('click', () => showScreen('#menu'));
+checkBlok();
+setInterval(() => { if (!document.hidden) checkBlok(); }, 90000);
+
 if (save.name) apiCall('/api/me?id=' + save.playerId).then((r) => { if (r.status === 404) forgetName(); else if (r.ok && r.name && r.name !== save.name) { save.name = r.name; persist(); } }).catch(() => {});
 persist();
 
@@ -11438,7 +11483,7 @@ function liveConnect(code, quick) {
   if (!/^[A-Z0-9]{4}$/.test(code)) { note('Een kamercode heeft 4 tekens'); return; }
   liveClose();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/api/live/${code}`);
+  const ws = new WebSocket(`${proto}://${location.host}/api/live/${code}?id=${save.playerId}&dev=${devId}`);
   live = { ws, code, quick, players: [], ghosts: new Map(), results: new Map(), started: false };
   let verbonden = false;
   ws.onopen = () => { verbonden = true; jachtPogingen = 0; liveSend({ t: 'hello', name: liveName(), pid: save.playerId }); };
@@ -12382,6 +12427,7 @@ function fxDing() {
   return dingN;
 }
 function startMini(kind) {
+  if (showBlok()) return;
   audioInit();
   stopGameover();
   resetRun();

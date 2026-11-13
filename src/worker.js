@@ -60,6 +60,29 @@ async function body(req) {
   try { return await req.json(); } catch { return {}; }
 }
 
+// ---------- bans en time-outs ----------
+// apparaat-id komt mee als header (eigen id per apparaat, verandert niet bij inloggen)
+const devOf = (req, url) => req.headers.get('x-jr-dev') || url.searchParams.get('dev') || '';
+const ipOf = (req) => req.headers.get('cf-connecting-ip') || '';
+// paden waar een geblokkeerde speler niks meer mag
+const BLOCK_PATHS = new Set(['/api/register', '/api/score', '/api/weekly', '/api/fame', '/api/wall', '/api/react']);
+async function activeBlock(db, id, dev, ip) {
+  id = ID_RE.test(id || '') ? id : null;
+  dev = ID_RE.test(dev || '') ? dev : null;
+  ip = ip || null;
+  if (!id && !dev && !ip) return null;
+  // een ban gaat voor een time-out, en de langste time-out wint
+  return db.prepare(`SELECT kind, message, until FROM bans WHERE (until IS NULL OR until > ?1)
+    AND ((?2 IS NOT NULL AND player_id = ?2) OR (?3 IS NOT NULL AND device = ?3) OR (?4 IS NOT NULL AND ip = ?4))
+    ORDER BY kind = 'ban' DESC, until IS NULL DESC, until DESC LIMIT 1`).bind(Date.now(), id, dev, ip).first();
+}
+async function markSeen(db, id, dev, ip) {
+  if (!ID_RE.test(id || '')) return;
+  await db.prepare(`INSERT INTO seen (player_id, device, ip, updated) SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM players WHERE id = ?1)
+    ON CONFLICT (player_id) DO UPDATE SET device = COALESCE(?2, device), ip = COALESCE(?3, ip), updated = ?4`)
+    .bind(id, ID_RE.test(dev || '') ? dev : null, ip || null, Date.now()).run();
+}
+
 function isAdmin(req, env) {
   const key = req.headers.get('x-admin-key') || '';
   return env.ADMIN_KEY && key.length > 0 && key === env.ADMIN_KEY;
@@ -68,6 +91,19 @@ function isAdmin(req, env) {
 async function api(req, env, url) {
   const path = url.pathname;
   const db = env.DB;
+
+  if (req.method === 'POST' && BLOCK_PATHS.has(path)) {
+    const b = await req.clone().json().catch(() => ({}));
+    const blk = await activeBlock(db, b.id, devOf(req, url), ipOf(req));
+    if (blk) return json({ error: blk.message, block: blk }, 403);
+  }
+
+  // bij het opstarten en af en toe: is deze speler (of dit apparaat/IP) geblokkeerd?
+  if (path === '/api/status' && req.method === 'GET') {
+    const id = url.searchParams.get('id') || '', dev = devOf(req, url), ip = ipOf(req);
+    await markSeen(db, id, dev, ip);
+    return json({ block: await activeBlock(db, id, dev, ip) });
+  }
 
   if (path === '/api/me' && req.method === 'GET') {
     const id = url.searchParams.get('id') || '';
@@ -87,6 +123,7 @@ async function api(req, env, url) {
     const taken = await db.prepare('SELECT 1 FROM players WHERE name_key = ?').bind(key).first();
     if (taken) return json({ error: 'Die naam is al bezet.' }, 409);
     await db.prepare('INSERT INTO players (id, name, name_key, created) VALUES (?, ?, ?, ?)').bind(b.id, name, key, Date.now()).run();
+    await markSeen(db, b.id, devOf(req, url), ipOf(req));
     return json({ name });
   }
 
@@ -253,6 +290,7 @@ async function api(req, env, url) {
     const code = path.slice(10).toUpperCase();
     if (!/^[A-Z0-9]{4}$/.test(code)) return json({ error: 'code' }, 400);
     if (req.headers.get('Upgrade') !== 'websocket') return json({ error: 'websocket' }, 426);
+    if (await activeBlock(db, url.searchParams.get('id'), devOf(req, url), ipOf(req))) return json({ error: 'geblokkeerd' }, 403);
     return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
   }
 
@@ -466,6 +504,7 @@ async function api(req, env, url) {
     }
     if (path === '/api/admin/players' && req.method === 'GET') {
       const { results } = await db.prepare(`SELECT p.id, p.name, p.created, (SELECT email FROM accounts a WHERE a.player_id = p.id) AS email,
+        (SELECT ip FROM seen WHERE seen.player_id = p.id) AS ip, (SELECT device FROM seen WHERE seen.player_id = p.id) AS device,
         MAX(CASE WHEN s.mode = 'fiets' THEN s.score END) AS fiets,
         MAX(CASE WHEN s.mode = 'telefoon' THEN s.score END) AS telefoon,
         MAX(CASE WHEN s.mode = 'terror' THEN s.score END) AS terror,
@@ -520,6 +559,34 @@ async function api(req, env, url) {
       await db.prepare(`DELETE FROM ${b.c === 'nl' ? 'fame_nl' : 'fame'} WHERE player_id = ?`).bind(b.id).run();
       return json({ ok: true });
     }
+    if (path === '/api/admin/bans' && req.method === 'GET') {
+      // actieve bans en time-outs, plus wat de afgelopen week verlopen is
+      const { results } = await db.prepare('SELECT * FROM bans WHERE until IS NULL OR until > ? ORDER BY created DESC LIMIT 200').bind(Date.now() - 7 * 864e5).all();
+      return json({ rows: results, now: Date.now() });
+    }
+    if (path === '/api/admin/ban' && req.method === 'POST') {
+      const b = await body(req);
+      if (!ID_RE.test(b.id || '')) return json({ error: 'id' }, 400);
+      const p = await db.prepare('SELECT p.name, s.device, s.ip FROM players p LEFT JOIN seen s ON s.player_id = p.id WHERE p.id = ?').bind(b.id).first();
+      if (!p) return json({ error: 'onbekend' }, 404);
+      const kind = b.kind === 'timeout' ? 'timeout' : 'ban';
+      let until = null;
+      if (kind === 'timeout') {
+        const minutes = Number(b.minutes);
+        if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 366 * 24 * 60) return json({ error: 'Kies hoe lang de time-out duurt.' }, 400);
+        until = Date.now() + minutes * 60000;
+      }
+      const message = String(b.message || '').trim().slice(0, 300) || (kind === 'ban' ? 'Je bent verbannen uit Jens Run.' : 'Je hebt een time-out.');
+      const device = b.device ? p.device : null, ip = b.ip ? p.ip : null;
+      await db.prepare('INSERT INTO bans (id, kind, player_id, name, device, ip, message, until, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(hex(crypto.getRandomValues(new Uint8Array(8))), kind, b.id, p.name, device, ip, message, until, Date.now()).run();
+      return json({ ok: true, device: !!device, ip: !!ip });
+    }
+    if (path === '/api/admin/unban' && req.method === 'POST') {
+      const b = await body(req);
+      await db.prepare('DELETE FROM bans WHERE id = ?').bind(String(b.id || '')).run();
+      return json({ ok: true });
+    }
     if (path === '/api/admin/delete' && req.method === 'POST') {
       const b = await body(req);
       if (!ID_RE.test(b.id || '')) return json({ error: 'id' }, 400);
@@ -533,6 +600,7 @@ async function api(req, env, url) {
         db.prepare('DELETE FROM accounts WHERE player_id = ?').bind(b.id),
         db.prepare('DELETE FROM sessions WHERE player_id = ?').bind(b.id),
         db.prepare('DELETE FROM saves WHERE player_id = ?').bind(b.id),
+        db.prepare('DELETE FROM seen WHERE player_id = ?').bind(b.id),
         db.prepare('DELETE FROM players WHERE id = ?').bind(b.id),
       ]);
       return json({ ok: true });
