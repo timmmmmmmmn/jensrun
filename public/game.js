@@ -270,7 +270,9 @@ function persist() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* geen opslag */ }
   if (typeof scheduleSync === 'function') scheduleSync();
 }
-const owns = (slot, id) => SHOP[slot].items.find((i) => i.id === id)?.price === 0 || save.owned[slot + ':' + id];
+// PLUS token gevonden: de hele PLUS is voor altijd gratis (stats gaan mee met de account-sync)
+const plusGratis = () => (save.stats?.plus || 0) > 0;
+const owns = (slot, id) => plusGratis() || SHOP[slot].items.find((i) => i.id === id)?.price === 0 || save.owned[slot + ':' + id];
 
 // =====================================================================
 //  audio
@@ -4701,7 +4703,7 @@ function renderShop() {
   $('#shopBack').classList.toggle('hidden', plusView !== 'vloer');
   const gang = GANGEN.findIndex((g) => g[0] === shopTab);
   $('#plusTitel').textContent = plusView === 'schap' ? `Gang ${gang + 1} · ${GANGEN[gang][1]}` : plusView === 'kassa' ? 'Kassa' : 'PLUS Jens Run';
-  $('#plusSub').textContent = plusView === 'schap' ? 'Pak iets van het schap' : plusView === 'kassa' ? 'Afrekenen met je bekers' : 'Kies een gang of ga naar de kassa';
+  $('#plusSub').textContent = plusView === 'schap' ? 'Pak iets van het schap' : plusView === 'kassa' ? 'Afrekenen met je bekers' : plusGratis() ? '🛒 PLUS token: alles is gratis!' : 'Kies een gang of ga naar de kassa';
   if (plusView === 'vloer') renderVloer();
   else if (plusView === 'schap') renderSchap();
   else renderKassa();
@@ -4716,7 +4718,7 @@ function renderVloer() {
 function renderSchap() {
   $('#items').innerHTML = SHOP[shopTab].items.map((it) => {
     const own = owns(shopTab, it.id), eq = save.eq[shopTab] === it.id, sel = shopSel[shopTab] === it.id, mand = inMandje(shopTab, it.id), slot = it.price >= 99999;
-    const kaart = eq ? '✓ Aan' : own ? 'In huis' : slot ? '🔒' : `🏆 ${prijs(it.price)}`;
+    const kaart = eq ? '✓ Aan' : own ? (plusGratis() && !save.owned[shopTab + ':' + it.id] && it.price ? 'Gratis' : 'In huis') : slot ? '🔒' : `🏆 ${prijs(it.price)}`;
     return `<button class="pak ${own ? 'owned' : ''} ${eq ? 'eq' : ''} ${sel ? 'sel' : ''} ${mand ? 'mand' : ''} ${slot && !own ? 'slot' : ''}" data-id="${it.id}" style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos"><i>${icoon(shopTab, it.id)}</i><b>${it.name}</b></span><span class="pak-kaart">${kaart}</span></button>`;
   }).join('');
   const it = artikel(shopTab, shopSel[shopTab]);
@@ -4726,7 +4728,7 @@ function renderSchap() {
   btn.disabled = false;
   btn.classList.remove('buy');
   if (eq) { btn.textContent = '✓ In gebruik'; btn.disabled = true; $('#siStatus').textContent = 'Dit heb je aan.'; }
-  else if (own) { btn.textContent = 'Aantrekken'; $('#siStatus').textContent = 'Al gekocht.'; }
+  else if (own) { btn.textContent = 'Aantrekken'; $('#siStatus').textContent = plusGratis() && !save.owned[shopTab + ':' + it.id] && it.price ? 'Gratis dankzij je PLUS token.' : 'Al gekocht.'; }
   else if (it.price >= 99999) { btn.textContent = it.pass ? '🔒 Seizoenspas' : '🔒 Plakboek'; btn.disabled = true; $('#siStatus').textContent = it.pass ? 'Te verdienen met de seizoenspas (🎟️ in het menu).' : 'Alleen te verdienen door het plakboek vol te maken.'; }
   else if (mand) { btn.textContent = 'Terugleggen'; $('#siStatus').textContent = 'Ligt in je mandje. Afrekenen doe je bij de kassa.'; }
   else { btn.textContent = `🧺 In mandje · 🏆 ${prijs(it.price)}`; btn.classList.add('buy'); $('#siStatus').textContent = mandTotaal() + it.price > save.bekers ? `Let op: je hebt ${prijs(save.bekers)} bekers.` : 'Leg het in je mandje.'; }
@@ -9581,7 +9583,7 @@ const ACH = [
   { id: 'week', icon: '🗓️', name: 'Weekstrijder', desc: 'Doe mee aan een weekuitdaging', test: (s) => s.weekly >= 1 },
   { id: 'snapdeler', icon: '👻', name: 'Snap gedeeld', desc: 'Deel een snap van de fiets', test: (s) => s.snapShare >= 1 },
   { id: 'maatje', icon: '🐕', name: 'Beste maatje', desc: 'Neem een maatje mee', test: () => save.eq.maatje && save.eq.maatje !== 'geen' },
-  { id: 'plustoken', icon: '🛒', name: 'PLUS token', desc: 'Vind de PLUS token (1 op de 500 potjes)', test: (s) => (s.plus || 0) >= 1 },
+  { id: 'plustoken', icon: '🛒', name: 'PLUS token', desc: 'Vind de PLUS token: de hele PLUS gratis', test: (s) => (s.plus || 0) >= 1 },
   { id: 'verzamelaar', icon: '🛍️', name: 'Verzamelaar', desc: 'Koop 12 dingen bij de PLUS', test: () => Object.keys(save.owned).length >= 12 },
 ];
 let achDirty = false;
@@ -10833,13 +10835,14 @@ function spawnPlusToken(lane, z) {
 }
 function collectPlusToken(o) {
   o.dead = true;
-  const n = 1000;
-  runBekers += n; save.bekers += n; score += 10000 * scoreMult();
-  save.plusTokens = (save.plusTokens || 0) + 1; persist();
-  recordStat('plus');
-  missionEvent('bekers', n);
+  const eerste = !plusGratis();
+  score += 10000 * scoreMult();
+  recordStat('plus'); mandje = [];
+  // prestatie meteen stil toekennen: anders verdrukt die melding de grote toast
+  if (!save.ach.plustoken) { save.ach.plustoken = Date.now(); save.bekers += 100; syncProfile(); }
+  persist();
   hype('🛒 PLUS TOKEN!', 'mega');
-  toast(`🛒 PLUS TOKEN GEVONDEN!<small>+${n} bekers · 1 op de 500 · je hebt er nu ${save.plusTokens}</small>`, 3.2);
+  toast(eerste ? '🛒 PLUS TOKEN GEVONDEN!<small>De hele PLUS is nu voor altijd gratis!</small>' : `🛒 PLUS TOKEN GEVONDEN!<small>Al je ${save.stats.plus}e · de PLUS was al gratis</small>`, 3.6);
   fxFlash('#7ed957', 0.5); sfx.power(); buzz([40, 40, 40, 40, 120]);
   for (let i = 0; i < 4; i++) burst(new THREE.Vector3(o.x, 1.4, o.z), 8, 2.5, fwMats[i % fwMats.length], 1);
   bubble(jens.head, 'DE PLUS TOKEN!!', 'shout', 1.8, 0.5);
