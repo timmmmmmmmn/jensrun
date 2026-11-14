@@ -2984,6 +2984,7 @@ function resetRun() {
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
   path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(800, 1200); nextLinus = rand(900, 1300);
+  plusToken = Math.random() < 1 / 500 ? rand(300, 2000) : 0;
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
   replayBuf = []; replayLen = 0; player.usedDouble = false; player.dubbelCD = 0;
@@ -3107,7 +3108,8 @@ function spawnRow(z) {
       if (type !== 'auto' && Math.random() < 0.25) spawnCoinsArc(lanes[i], z);
     }
     freeLane = lanes[nBlock];
-    if (ahead > nextPower && brommerT <= 0 && bekerT <= 0 && weekly?.rule.id !== 'geenpower') {
+    if (plusToken && ahead > plusToken && !jacht) { plusToken = 0; spawnPlusToken(freeLane, z); }
+    else if (ahead > nextPower && brommerT <= 0 && bekerT <= 0 && weekly?.rule.id !== 'geenpower') {
       nextPower = ahead + rand(200, 340);
       // de eerste is altijd een mystery kist: meteen iets spannends
       const type = firstPower ? 'kist' : pick(['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'kist', 'kist', 'kist']);
@@ -3848,6 +3850,7 @@ function collide() {
       if (Math.abs(px - o.x) < 1.1 && dz < 1.1) { o.dead = true; activatePower(o.type); }
       continue;
     }
+    if (o.kind === 'plustoken') { if (Math.abs(px - o.x) < 1.1 && dz < 1.1) collectPlusToken(o); continue; }
     if (o.kind === 'schat') { if (Math.abs(px - o.x) < 0.9 && dz < 0.9 && Math.abs(py + 0.9 - o.y) < 1.2) collectSchat(o); continue; }
     if (o.kind === 'kaart') { if (Math.abs(px - o.x) < 1.0 && dz < 1.0) collectKaart(o); continue; }
     if (o.kind === 'fork') continue;
@@ -9578,6 +9581,7 @@ const ACH = [
   { id: 'week', icon: '🗓️', name: 'Weekstrijder', desc: 'Doe mee aan een weekuitdaging', test: (s) => s.weekly >= 1 },
   { id: 'snapdeler', icon: '👻', name: 'Snap gedeeld', desc: 'Deel een snap van de fiets', test: (s) => s.snapShare >= 1 },
   { id: 'maatje', icon: '🐕', name: 'Beste maatje', desc: 'Neem een maatje mee', test: () => save.eq.maatje && save.eq.maatje !== 'geen' },
+  { id: 'plustoken', icon: '🛒', name: 'PLUS token', desc: 'Vind de PLUS token (1 op de 500 potjes)', test: (s) => (s.plus || 0) >= 1 },
   { id: 'verzamelaar', icon: '🛍️', name: 'Verzamelaar', desc: 'Koop 12 dingen bij de PLUS', test: () => Object.keys(save.owned).length >= 12 },
 ];
 let achDirty = false;
@@ -10802,6 +10806,44 @@ function collectSchat(o) {
   toast(`🏆 GOUDEN BEKER!<small>+${n} bekers</small>`, 1.8);
   sfx.power(); buzz([30, 30, 60]);
   verslaggever('schat', true);
+}
+
+// =====================================================================
+//  PLUS TOKEN: 1 op de 500 potjes ligt er ergens tussen 300 en 2000 m één
+// =====================================================================
+let plusToken = 0; // afstand waarop hij komt in dit potje, 0 = niet in dit potje
+let plusLogoTex = null;
+function spawnPlusToken(lane, z) {
+  if (!plusLogoTex) plusLogoTex = psxTex(new THREE.TextureLoader().load('img/plus-logo.png'));
+  const g = new THREE.Group(), munt = new THREE.Group();
+  const goud = new THREE.MeshBasicMaterial({ color: '#ffc928' });
+  const rand_ = mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.14, 12), goud); rand_.rotation.x = Math.PI / 2; munt.add(rand_);
+  for (const k of [1, -1]) { const v = mesh(new THREE.CircleGeometry(0.52, 12), new THREE.MeshBasicMaterial({ map: plusLogoTex }), 0, 0, k * 0.075); if (k < 0) v.rotation.y = Math.PI; munt.add(v); }
+  g.add(munt);
+  // lichtzuil: van ver door de mist te zien
+  const zuil = mesh(new THREE.CylinderGeometry(0.4, 0.4, 40, 8, 1, true), new THREE.MeshBasicMaterial({ color: '#7ed957', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }), 0, 19, 0);
+  g.add(zuil);
+  addObj('plustoken', g, LANES[lane], z, 0, 0, 0, { y: 1.2, upd(o, dt) {
+    munt.rotation.y += dt * 4; munt.position.y = Math.sin(now() * 3) * 0.15;
+    zuil.material.opacity = 0.24 + Math.sin(now() * 6) * 0.08;
+    if (Math.random() < 0.25) burst(new THREE.Vector3(o.x + rand(-0.6, 0.6), o.y + rand(-0.4, 0.6), o.z), 1, 0.6, fwMats[Math.floor(Math.random() * fwMats.length)], 0.5);
+    if (!o.gezien && o.z > -60) { o.gezien = true; note('Er glinstert iets groens in de verte…'); }
+    if (!o.gemist && o.z > 2) { o.gemist = true; note('De PLUS token is weg… 1 op de 500, volgende keer beter.'); }
+  } });
+}
+function collectPlusToken(o) {
+  o.dead = true;
+  const n = 1000;
+  runBekers += n; save.bekers += n; score += 10000 * scoreMult();
+  save.plusTokens = (save.plusTokens || 0) + 1; persist();
+  recordStat('plus');
+  missionEvent('bekers', n);
+  hype('🛒 PLUS TOKEN!', 'mega');
+  toast(`🛒 PLUS TOKEN GEVONDEN!<small>+${n} bekers · 1 op de 500 · je hebt er nu ${save.plusTokens}</small>`, 3.2);
+  fxFlash('#7ed957', 0.5); sfx.power(); buzz([40, 40, 40, 40, 120]);
+  for (let i = 0; i < 4; i++) burst(new THREE.Vector3(o.x, 1.4, o.z), 8, 2.5, fwMats[i % fwMats.length], 1);
+  bubble(jens.head, 'DE PLUS TOKEN!!', 'shout', 1.8, 0.5);
+  liveEv('plus');
 }
 
 // =====================================================================
@@ -12342,6 +12384,7 @@ function evText(m) {
   if (m.k === 'struikel') return `😂 ${n} struikelt`;
   if (m.k === 'meter') return `📏 ${n} haalt ${Number(m.n).toLocaleString('nl-NL')} m`;
   if (m.k === 'school') return `🏫 ${n} gaat het Montessori in`;
+  if (m.k === 'plus') return `🛒 ${n} vindt de PLUS TOKEN!`;
   if (m.k === 'record') return `🏅 ${n} heeft een nieuw record`;
   if (m.k === 'wild') return `🦒 ${n} krijgt loslopend wild op z'n pad`;
   return '';
@@ -14566,4 +14609,4 @@ const ARC = {
   },
 };
 
-window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, spawnPlusToken, set plusToken(v) { plusToken = v; }, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
