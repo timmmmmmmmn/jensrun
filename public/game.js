@@ -2734,6 +2734,7 @@ const POWER_LOOK = {
   'beker-van-ons': { ring: '#ff8a00', label: 'DE BEKER IS VAN ONS', bg: '#ff8a00', sx: 2.2 },
   nitraat: { ring: '#e2231a', label: 'DUM BUM NITRAAT', bg: '#c8202b', sx: 2.0 },
   kist: { ring: '#b18cff', label: 'MYSTERY KIST', bg: '#6a2a9a', sx: 1.8 },
+  darko: { ring: '#c8202b', label: 'DARKO · NEC #6', bg: '#1f7a3a', sx: 1.7 },
 };
 function makePower(type) {
   const g = new THREE.Group();
@@ -2746,6 +2747,8 @@ function makePower(type) {
     g.add(makeSjaalPower());
   } else if (type === 'fiets') {
     const f = makeBike('#c8202b'); f.scale.setScalar(0.75); f.position.y = -0.4; f.rotation.y = 0.8; g.add(f);
+  } else if (type === 'darko') {
+    const bal = makeBal(); bal.scale.setScalar(2.4); g.add(bal);
   } else if (type === 'kist') {
     const k = new THREE.Group();
     k.add(mesh(box(0.8, 0.6, 0.6), M('#7a3ab0', { emissive: '#2a0a4a' })));
@@ -3032,7 +3035,7 @@ function resetRun() {
   speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
-  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(800, 1200); nextLinus = rand(900, 1300); nextDarko = rand(700, 1100);
+  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(800, 1200); nextLinus = rand(900, 1300); nextDarko = rand(700, 1100); stopDarkoPower();
   plusToken = Math.random() < 1 / 500 ? rand(300, 2000) : 0;
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
@@ -3161,7 +3164,7 @@ function spawnRow(z) {
     else if (ahead > nextPower && brommerT <= 0 && bekerT <= 0 && weekly?.rule.id !== 'geenpower') {
       nextPower = ahead + rand(200, 340);
       // de eerste is altijd een mystery kist: meteen iets spannends
-      const type = firstPower ? 'kist' : pick(['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'kist', 'kist', 'kist']);
+      const type = firstPower ? 'kist' : pick(['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'kist', 'kist', 'kist', 'darko', 'darko']);
       firstPower = false;
       addObj('power', makePower(type), LANES[freeLane], z, 0, 0, 0, { y: 1.0, type });
     } else if (Math.random() < (early ? 1 : 0.65)) {
@@ -3173,7 +3176,7 @@ function spawnRow(z) {
   if (!early && !path && ahead > nextJules) { nextJules = ahead + rand(1200, 1800); spawnJules(z - 4); }
   if (!early && !path && !jacht && !wild && ahead > nextWild && !seg && !hill && !bos && !ebos && !schoolPhase && !schoolBlock && mode !== 'school') { nextWild = ahead + rand(1100, 1600); spawnWild(); return; }
   if (!early && !path && !jacht && !wild && ahead > nextLinus && !linusActief()) { nextLinus = ahead + rand(900, 1400); spawnLinus(); }
-  if (!early && !path && !jacht && !wild && ahead > nextDarko && !darkoActief() && !linusActief()) { nextDarko = ahead + rand(1300, 2000); spawnDarko(); }
+  if (!early && !path && !jacht && !wild && ahead > nextDarko && !darkoActief() && !linusActief() && darkoT <= 0) { nextDarko = ahead + rand(1300, 2000); spawnDarko(); }
   if (!early && !path && ahead > nextVrienden) { nextVrienden = ahead + rand(900, 1500); spawnVrienden(z - 5); }
   if (!early && !path && ahead > nextReporter) { nextReporter = ahead + rand(900, 1500); spawnReporter(z - 9); }
   if (ahead > nextSign) {
@@ -3325,6 +3328,7 @@ function updateHud() {
   if (wkT > 0) html += `<div class="power wk"><span>🏆 De WK beker: 2× bekers</span><div class="bar"><i style="width:${Math.round((wkT / 10) * 100)}%"></i></div></div>`;
   if (sjaalT > 0) html += `<div class="power"><span>🧣 NEC-sjaal – bekermagneet</span><div class="bar"><i style="width:${Math.round((sjaalT / SJAAL_TIME) * 100)}%"></i></div></div>`;
   if (fietsT > 0) html += `<div class="power"><span>🚲 Fiets – 2× snel, halve schade</span><div class="bar"><i style="width:${Math.round((fietsT / fietsMax) * 100)}%"></i></div></div>`;
+  if (darkoT > 0) html += `<div class="power"><span>⚽ Darko – trapt alles uit de weg</span><div class="bar"><i style="width:${Math.round((darkoT / DARKO_TIME) * 100)}%"></i></div></div>`;
   if (brommerT > 0) html += `<div class="power"><span>🛵 Brommer – onaantastbaar</span><div class="bar"><i style="width:${Math.round((brommerT / BROMMER_TIME) * 100)}%"></i></div></div>`;
   if (bekerT > 0) html += `<div class="power beker"><span>🏆 De beker is van ons! 2× punten</span><div class="bar"><i style="width:${Math.round((bekerT / BEKER_TIME) * 100)}%"></i></div></div>`;
   if (html !== hudPowers) { hudPowers = html; $('#powers').innerHTML = html; }
@@ -3705,6 +3709,90 @@ function moveWorld(m, dt) {
 // ---------- nitraat afsteken ----------
 const fireMats = ['#fff3a0', '#ffd23f', '#ff8a00', '#ff3b1a', '#5a5a5a', '#8a8a8a'].map((c) => new THREE.MeshBasicMaterial({ color: c, fog: false }));
 const SLOOPBAAR = new Set(['kliko', 'fietswrak', 'auto', 'afzetting', 'vrouw', 'deco']);
+// ---------- Darko (power-up): 8 seconden rent hij met je mee en trapt hij ballen tegen wat in jouw baan staat ----------
+const DARKO_TIME = 8;
+let darkoT = 0, darkoKick = 0, darkoMan = null;
+const ballen = [];
+const balTex = canvasTex(64, 32, (x) => {
+  x.fillStyle = '#f4f4f4'; x.fillRect(0, 0, 64, 32);
+  x.fillStyle = '#141414';
+  for (const [cx, cy] of [[8, 8], [24, 22], [40, 8], [56, 22], [8, 28], [40, 28]]) { x.beginPath(); for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; x.lineTo(cx + Math.cos(a) * 4.5, cy + Math.sin(a) * 4.5); } x.fill(); }
+});
+const balMat = markShared(new THREE.MeshLambertMaterial({ map: balTex }));
+const balGeo = markShared(sphG(0.17, 8, 6));
+function makeBal() { return new THREE.Mesh(balGeo, balMat); }
+function startDarkoPower() {
+  darkoT = DARKO_TIME; darkoKick = 0.5;
+  if (!darkoMan) { darkoMan = makeDarko(); scene.add(darkoMan.root); }
+  darkoMan.root.visible = true;
+  darkoMan.root.position.set(player.x + (player.x > 0 ? -1.3 : 1.3), 0, 8);
+  darkoMan.weg = false;
+  bubble(darkoMan.head, pick(['Ik help je, Jens!', 'Laat mij maar!', 'Aan de kant!']), '', 1.5);
+  toast('⚽ DARKO KOMT HELPEN!<small>8 seconden trapt hij alles uit de weg</small>', 1.8);
+  goodShout(true);
+}
+function stopDarkoPower() {
+  darkoT = 0;
+  for (const b of ballen) scene.remove(b.mesh);
+  ballen.length = 0;
+  if (darkoMan) darkoMan.root.visible = false;
+}
+function updDarkoPower(dt) {
+  for (let i = ballen.length - 1; i >= 0; i--) {
+    const b = ballen[i], tg = b.target && !b.target.hit && !b.target.dead ? b.target : null;
+    b.t += dt; b.z -= 30 * dt;
+    if (tg) b.x = damp(b.x, tg.x, 9, dt);
+    const endZ = tg ? tg.z : -40, prog = clamp((b.z0 - b.z) / Math.max(1, b.z0 - endZ), 0, 1);
+    b.mesh.position.set(b.x, 0.3 + Math.sin(prog * Math.PI) * 1.4, b.z);
+    b.mesh.rotation.x -= dt * 20;
+    if (b.z <= endZ + 0.3 || b.t > 2) {
+      if (tg) {
+        tg.hit = true;
+        tg.fly = { vx: rand(-4, 4), vy: rand(7, 11), vz: rand(-6, -2), r: rand(-10, 10) };
+        onDestroyed(tg);
+        score += 100 * scoreMult() * (bekerT > 0 ? 2 : 1);
+        missionEvent('sloop', 1); recordStat('darkobal');
+        noise(0.08, 0.4); tone(140, 0.12, 'sine', 0.2, 70); buzz(25);
+        burst(new THREE.Vector3(tg.x, 1, tg.z), 10, 4, sparkMats, 0.5);
+      }
+      scene.remove(b.mesh); ballen.splice(i, 1);
+    }
+  }
+  if (!darkoMan?.root.visible) return;
+  const p = darkoMan, r = p.root;
+  if (darkoT <= 0 || (state !== 'run' && state !== 'paused')) {
+    // klaar: hij laat zich terugzakken en is weg
+    r.position.z += dt * 7;
+    pose(p, 'run', dt, 0.8);
+    if (r.position.z > 16) r.visible = false;
+    return;
+  }
+  if (state !== 'run') return;
+  darkoT -= dt;
+  const side = player.x > 0 ? -1 : 1;
+  r.position.x = damp(r.position.x, player.x + side * 1.3, 4, dt);
+  r.position.z = damp(r.position.z, -1.6, 3, dt);
+  r.visible = !indoor && !wildBoven();
+  pose(p, 'run', dt, clamp(speed / 12, 0.8, 1.6));
+  darkoKick -= dt;
+  if (darkoKick > 0 || r.position.z > 2) return;
+  // het eerstvolgende obstakel in jouw baan
+  let target = null;
+  for (const o of objs) {
+    if (!(SLOOPBAAR.has(o.kind) || o.gen) || o.hit || o.dead || o.kind === 'deco') continue;
+    if (o.z > -3 || o.z < -38 || Math.abs(o.x - player.x) > o.w / 2 + 0.6) continue;
+    if (ballen.some((b) => b.target === o)) continue;
+    if (!target || o.z > target.z) target = o;
+  }
+  if (!target) { darkoKick = 0.2; return; }
+  darkoKick = 0.75;
+  p.legR && (p.legR.rotation.x = -1.2); // trap
+  const m = makeBal();
+  m.position.set(r.position.x, 0.3, r.position.z - 0.4);
+  scene.add(m);
+  ballen.push({ mesh: m, x: r.position.x, z: r.position.z - 0.4, z0: r.position.z - 0.4, t: 0, target });
+  tone(220, 0.06, 'square', 0.08, 110);
+}
 function throwNitraat() {
   if (state !== 'run' || nitraten <= 0) return;
   nitraten--;
@@ -4044,7 +4132,7 @@ function activatePower(type) {
   liveEv('power', type);
   if (type === 'kist') { buzz([30, 40, 30]); missionEvent('power'); fxFlash('#b18cff', 0.3); mysteryKist(); return; }
   buzz([30, 40, 30]);
-  fxFlash({ brommer: '#5ad1ff', 'beker-van-ons': '#ffd23f', sjaal: '#7dff6a', fiets: '#ff5a3a' }[type] || '#ffffff', 0.28);
+  fxFlash({ brommer: '#5ad1ff', 'beker-van-ons': '#ffd23f', sjaal: '#7dff6a', fiets: '#ff5a3a', darko: '#c8202b' }[type] || '#ffffff', 0.28);
   missionEvent('power');
   sfx.power();
   flash(false);
@@ -4061,6 +4149,7 @@ function activatePower(type) {
     return;
   }
   if (type === 'fiets') { startFiets(); goodShout(true); verslaggever('fiets', true); return; }
+  if (type === 'darko') { startDarkoPower(); return; }
   if (type === 'sjaal') { sjaalT = SJAAL_TIME; jensSjaal.visible = true; toast('🧣 NEC-SJAAL!<small>Alle bekers komen naar je toe</small>', 1.8); return; }
   if (type === 'brommer') {
     if (fietsT > 0) stopFiets();
@@ -4261,6 +4350,7 @@ function updateRun(dt) {
   if (dist > nextMilestone) {
     // 500 m en daarna elke 1000 m: een mijlpaal, dus in het eiland (met de oude melding als terugval)
     const mijl = nextMilestone, mm = `${mijl.toLocaleString('nl-NL')} m`;
+    if (mijl === 1000 && save.eq.head === 'wild') recordStat('wildepieken');
     if (mijl % 1000 === 0 || mijl === 500) {
       if (mijl % 1000 === 0) (mijl % 5000 === 0 ? jingle.fanfare(1.26) : jingle.fanfare());
       eiland('📏', `${mijl.toLocaleString('nl-NL')} METER!`, pick(MIJL_TEKST), () => (mijl % 1000 === 0 ? hype(`${mijl.toLocaleString('nl-NL')} METER!`, mijl % 5000 === 0 ? 'mega' : '', '') : toast(`${mijl} m!`, 1.2)), mm);
@@ -4366,6 +4456,7 @@ function updateRun(dt) {
   updateExtras3(dt, m);
   updateRocket(dt, m);
   updateShots(dt);
+  updDarkoPower(dt);
   updateParticles(dt, m);
   updateFireworks(dt, m);
   spawnZ += m;
@@ -5939,6 +6030,7 @@ function spawnDarko() {
         o.klapt = true;
         if (state === 'run') {
           const n = 25;
+          recordStat('darko');
           runBekers += n; save.bekers += n; score += 10 * n * scoreMult();
           noise(0.06, 0.5); tone(1200, 0.08, 'square', 0.07); sfx.beker(); buzz(30);
           bubble(p.head, pick(['High five!', 'Lekker, Jens!', 'Gaan!']), '', 1.2);
@@ -5981,7 +6073,7 @@ function spawnLinus() {
         o.klapt = true;
         const geraakt = o.raak && brommerT <= 0 && state === 'run';
         if (geraakt) { duizelig(); bubble(p.head, pick(['HEBBES!', 'BAM!', 'Pak aan!']), '', 1.2); }
-        else { noise(0.15, 0.12); bubble(p.head, pick(['Mis!', 'Nee man!', 'Te snel...']), '', 1.2); toast('🥖 Linus sloeg mis!', 1.4); }
+        else { noise(0.15, 0.12); bubble(p.head, pick(['Mis!', 'Nee man!', 'Te snel...']), '', 1.2); eiland('😮', 'Linus ontweken!', 'Het stokbrood zwiepte langs je hoofd', () => toast('🥖 Linus sloeg mis!', 1.4), 'ONTWEKEN'); }
       }
       if (o.klap > 0.7) o.weg = true;
     } });
@@ -6262,7 +6354,10 @@ function updWild(dt) {
     afgrondTex.repeat.set(lang / 8, 1);
   }
   if (brommerT > 0 && wildBoven()) { brommerT = 0; moped.visible = false; engineStop(); }
-  if (dist > w.s0 + w.L + 12) wildEind();
+  if (dist > w.s0 + w.L + 12) {
+    if (state === 'run' && w.open) eiland('🦘', 'Wild overleefd!', `${w.L} m over de afgrond, van eiland naar eiland`, () => toast('🦘 Wild overleefd!', 1.4), 'OVERLEEFD');
+    wildEind();
+  }
 }
 function wildEind() {
   wild = null;
@@ -9122,7 +9217,11 @@ function comboHit(label) {
   comboT = 3.5;
   if (label) { whoosh(label === 'rakelings' ? 0.13 : 0.08); buzz(TRIL[label] || 10); }
   if (label && (label !== 'ontweken' || combo % 5 === 0)) runPop(label === 'over' ? (player.slideT > 0 ? 'ERONDERDOOR!' : 'EROVERHEEN!') : label === 'ontweken' ? 'ONTWEKEN!' : 'RAKELINGS!', 'blue');
-  if (COMBO_HYPE[combo]) hype(COMBO_HYPE[combo], combo >= 30 ? 'mega' : '');
+  // grote combo's in het eiland (de grote tekst als terugval)
+  if (COMBO_HYPE[combo]) {
+    if ([10, 20, 30, 50, 75, 100].includes(combo)) eiland('🔥', `COMBO ×${combo}`, stripEmoji(COMBO_HYPE[combo]).replace(/[!?]+$/, '') + '!', () => hype(COMBO_HYPE[combo], combo >= 30 ? 'mega' : ''), `×${combo}`);
+    else hype(COMBO_HYPE[combo], combo >= 30 ? 'mega' : '');
+  }
   // elke 15 combo: KOORTS, 8 seconden dubbele punten
   if (combo % 15 === 0) { feverT = 8; hype('🔥 KOORTS!<small>8 seconden dubbele punten</small>', 'mega'); fxFlash('#ff8a00', 0.35); buzz(TRIL.koorts); }
   recordStat('combo', 0, combo);
@@ -9768,6 +9867,9 @@ const ACH = [
   { id: 'week', icon: '🗓️', name: 'Weekstrijder', desc: 'Doe mee aan een weekuitdaging', test: (s) => s.weekly >= 1 },
   { id: 'snapdeler', icon: '👻', name: 'Snap gedeeld', desc: 'Deel een snap van de fiets', test: (s) => s.snapShare >= 1 },
   { id: 'maatje', icon: '🐕', name: 'Beste maatje', desc: 'Neem een maatje mee', test: () => save.eq.maatje && save.eq.maatje !== 'geen' },
+  { id: 'darko10', icon: '⚽', name: 'Maatje van Darko', desc: 'Krijg 10 high fives van Darko Nejašmić', test: (s) => (s.darko || 0) >= 10 },
+  { id: 'darkobal', icon: '⚽', name: 'Assist van Darko', desc: 'Laat Darko 25 dingen uit de weg trappen', test: (s) => (s.darkobal || 0) >= 25 },
+  { id: 'wildepieken', icon: '💇', name: 'Wilde pieken', desc: 'Ren 1.000 m in één potje met je Wilde pieken', test: (s) => (s.wildepieken || 0) >= 1 },
   { id: 'plustoken', icon: '🛒', name: 'PLUS token', desc: 'Vind de PLUS token: de hele PLUS gratis', test: (s) => (s.plus || 0) >= 1 },
   { id: 'verzamelaar', icon: '🛍️', name: 'Verzamelaar', desc: 'Koop 12 dingen bij de PLUS', test: () => Object.keys(save.owned).length >= 12 },
 ];
@@ -14806,4 +14908,4 @@ const ARC = {
   },
 };
 
-window.__jr = { eiland, tegenstanderAf, spawnDarko, get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, spawnPlusToken, set plusToken(v) { plusToken = v; }, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { eiland, tegenstanderAf, spawnDarko, startDarkoPower, get darkoT() { return darkoT; }, get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, spawnPlusToken, set plusToken(v) { plusToken = v; }, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
