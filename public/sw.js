@@ -1,8 +1,8 @@
 // Jens Run service worker: online altijd de nieuwste versie (netwerk eerst),
 // offline speelbaar uit de cache. Geluid en plaatjes: cache, en op de achtergrond verversen.
-const CACHE = 'jensrun-v3';
+const CACHE = 'jensrun-v4';
 const CORE = ['/', '/index.html', '/style.css', '/game.js', '/three.module.min.js', '/manifest.webmanifest', '/beker-model.js', '/iconen.js', '/img/iconen.png', '/img/beker.png', '/fonts/anton.woff2', '/fonts/barlow-500.woff2', '/fonts/barlow-700.woff2',
-  '/img/menu-bg.jpg', '/img/jens-face.png', '/icons/icon-192.png'];
+  '/img/menu-bg.jpg', '/img/jens-face.png', '/icons/icon-192.png', '/eiland.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
