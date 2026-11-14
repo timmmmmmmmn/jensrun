@@ -4876,9 +4876,14 @@ async function renderBoard() {
   try {
     const r = await apiCall('/api/leaderboard?mode=' + want);
     if (want !== boardMode) return;
+    const bp = $('#boardPlus');
+    bp.classList.remove('hidden');
+    bp.innerHTML = r.plus?.length
+      ? `<b>🛒 PLUS token gevonden door</b><span>${r.plus.map((n) => `<em class="${n === save.name ? 'me' : ''}">${String(n).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}</em>`).join('')}</span>`
+      : '<b>🛒 PLUS token</b><span>Nog niemand heeft hem gevonden. 1 op de 500 potjes…</span>';
     const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     list.innerHTML = r.rows?.length
-      ? r.rows.map((row, i) => `<li data-name="${esc(row.name)}" class="click ${row.name === save.name ? 'me' : ''}"><span class="pos">${i + 1}</span><span class="nm">${esc(row.name)}</span><span class="sc">${row.score.toLocaleString('nl-NL')}</span></li>`).join('')
+      ? r.rows.map((row, i) => `<li data-name="${esc(row.name)}" class="click ${row.name === save.name ? 'me' : ''}"><span class="pos">${i + 1}</span><span class="nm">${esc(row.name)}${row.plus ? ' <span class="plus-tok" title="Heeft de PLUS token gevonden">🛒</span>' : ''}</span><span class="sc">${row.score.toLocaleString('nl-NL')}</span></li>`).join('')
       : '<li class="empty">Nog niemand. Wordt de eerste!</li>';
   } catch (e) { list.innerHTML = '<li class="empty">Kan de ranglijst niet laden.</li>'; }
 }

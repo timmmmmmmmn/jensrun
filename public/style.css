@@ -215,6 +215,12 @@ p { margin: 0; font-weight: 600; color: #fff; font-size: 18px; }
 .board li .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board li .sc { font-family: var(--title); font-size: 14px; color: var(--yellow); }
 .board li.me { border-color: var(--yellow); }
+.board-plus { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 6px; padding: 8px 10px; background: #e3f5d6; border: 2px solid #7ed957; color: #1e5a12; font-weight: 700; font-size: 14px; }
+.board-plus b { font-family: var(--title); font-weight: 400; letter-spacing: .5px; }
+.board-plus span { display: flex; flex-wrap: wrap; gap: 6px; }
+.board-plus em { font-style: normal; background: #2f8a1f; color: #fff; padding: 2px 8px; }
+.board-plus em.me { background: #ffd23f; color: #1a1a1a; }
+.board li .plus-tok { display: inline-block; background: #e3f5d6; border: 1px solid #7ed957; padding: 0 4px; margin-left: 4px; font-size: 13px; vertical-align: 2px; }
 .board .empty { justify-content: center; color: var(--muted); }
 .namebox { display: flex; flex-direction: column; gap: 6px; }
 .namebox label { font-weight: 700; }

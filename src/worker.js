@@ -186,9 +186,11 @@ async function api(req, env, url) {
   if (path === '/api/leaderboard' && req.method === 'GET') {
     const mode = url.searchParams.get('mode');
     if (!MODES.has(mode)) return json({ error: 'modus' }, 400);
-    const { results } = await db.prepare(`SELECT p.name, s.score, s.dist FROM scores s JOIN players p ON p.id = s.player_id
+    const { results } = await db.prepare(`SELECT p.name, s.score, s.dist, instr(COALESCE(p.profile, ''), '"plustoken"') > 0 AS plus FROM scores s JOIN players p ON p.id = s.player_id
       WHERE s.mode = ? ORDER BY s.score DESC LIMIT 25`).bind(mode).all();
-    return json({ rows: results });
+    // wie de PLUS token (1 op 500 potjes) ooit gevonden heeft, staat in het profiel als prestatie
+    const { results: plus } = await db.prepare(`SELECT name FROM players WHERE instr(COALESCE(profile, ''), '"plustoken"') > 0 ORDER BY name LIMIT 50`).all();
+    return json({ rows: results, plus: plus.map((p) => p.name) });
   }
 
   // ---------- vrienden ----------
