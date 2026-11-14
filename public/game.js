@@ -2454,7 +2454,7 @@ const moon = new THREE.Mesh(new THREE.CircleGeometry(2.8, 8), new THREE.MeshBasi
 moon.position.set(-18, 26, -54); moon.lookAt(0, 0, 0); moon.renderOrder = -9;
 moon.visible = false;
 skyGroup.add(moon);
-let night = false;
+let night = false, randen = false;
 const LOOKS = {
   dag: { top: '#2c6fc8', mid: '#7ab4e8', hor: '#cfd9d8', hs: '#cfdcf0', hg: '#5a4a3a', hi: 1.5, sc: '#fff0cc', si: 3.3, fog: [14, 58], win: 0, lan: 0, cl: '#ffffff', cla: 0.95 },
   avond: { top: '#241c5e', mid: '#c8452e', hor: '#ff9a3a', hs: '#d88a78', hg: '#3a2028', hi: 1.15, sc: '#ff7a2c', si: 3.0, fog: [13, 56], win: 0.75, lan: 3, cl: '#ffb48a', cla: 0.85 },
@@ -2491,11 +2491,14 @@ function applyLook(t) {
   lampGlowMat.opacity = Math.min(1, Math.max(0, (t - 0.7) / 0.8)) * 0.6 + 0.4;
   stars.visible = moon.visible = t > 1.6;
   skyGroup.visible = true;
-  const wasNight = night;
+  const wasNight = night, wasRanden = randen;
   night = t >= 1.6;
+  // randen om obstakels: 's nachts geel, 's avonds lichtgeel (alles is dan oranje en een rode auto valt weg)
+  randen = t >= 0.7;
+  outlineMat.color.set(night ? '#ffd400' : '#fff3b0'); holeRimMat.color.copy(outlineMat.color);
   document.body.style.background = '#' + SKY.getHexString();
   envAfterNight();
-  if (wasNight !== night) updateOutlines();
+  if (wasNight !== night || wasRanden !== randen) updateOutlines();
 }
 // oude aanroepen: aan = nacht, uit = dag
 function setNight(on) { applyLook(on ? 2 : 0); }
@@ -2557,8 +2560,8 @@ function makeOutline(o) {
 }
 function outlineObj(o) {
   if (!(OUTLINE_KINDS.has(o.kind) || o.gen) || o.truck) return;
-  if (!o.outline && night) { o.outline = makeOutline(o); if (o.outline) o.mesh.add(o.outline); }
-  if (o.outline) o.outline.visible = night;
+  if (!o.outline && randen) { o.outline = makeOutline(o); if (o.outline) o.mesh.add(o.outline); }
+  if (o.outline) o.outline.visible = randen;
 }
 function updateOutlines() { if (typeof objs !== 'undefined') for (const o of objs) outlineObj(o); }
 
@@ -2804,7 +2807,7 @@ function addObj(kind, meshObj, x, z, w, d, h, extra = {}) {
   scene.add(meshObj);
   const o = { kind, mesh: meshObj, x, z, w, d, h, y: extra.y ?? 0, ...extra };
   objs.push(o);
-  if (night) outlineObj(o);
+  if (randen) outlineObj(o);
   return o;
 }
 function clearObjs() {
@@ -5893,10 +5896,10 @@ function splatScreen() {
   for (let i = 0; i < 6; i++) { x.fillStyle = '#4f2d10'; const dx = rand(45, 115); x.fillRect(dx, 80, rand(4, 8), rand(40, 78)); blob(dx + 3, 80 + rand(40, 78), 5, '#4f2d10'); }
   for (let i = 0; i < 10; i++) blob(rand(45, 115), rand(45, 115), rand(1.5, 3.5), pick(['#e8c25a', '#c9a227', '#7a4a1e']));
   blob(64, 62, 7, 'rgba(255,255,255,.35)'); blob(70, 58, 3, 'rgba(255,255,255,.55)');
-  const el = document.createElement('div'); el.className = 'splat';
+  // het canvas zelf in beeld (een data-URL maken kostte midden in het rennen ruim 100 ms)
+  const el = c; el.className = 'splat';
   const s = Math.min(innerWidth, innerHeight) * rand(0.45, 0.7);
   el.style.cssText = `width:${s}px;height:${s}px;left:${rand(0, innerWidth - s * 0.7)}px;top:${rand(0, innerHeight - s * 0.7)}px;transform:rotate(${rand(0, 360)}deg)`;
-  el.style.backgroundImage = `url(${c.toDataURL()})`;
   $('#splats').appendChild(el);
   setTimeout(() => el.remove(), 3000);
 }
@@ -13153,7 +13156,8 @@ function warmUp() {
     makeRugzak, makeSchaap, makeSchip, makeScootmobiel, () => makeSign('Javastraat'), makeSjaalPower, makeSmallNitraat, makeSteward, makeStoel, makeTegenligger, makeTerras,
     makeTrekker, makeTrofee, makeTrolleybus, makeTruck, makeUitgang, makeViskrat, () => makeVriend('tim'), () => makeVriend('jesse'), () => makeVriend('patrick'), makeVrouw,
     () => makeWandelaars(3), makeWinkelwagen, makeJos, makeLoslopendWild, makeEiland, () => makeClubFan(CLUBS[0]), () => makeCup(1.15), makeSteve,
-    ...['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets'].map((t) => () => makePower(t)),
+    makeJules, makeLinus, makeDarko, () => makeDarkoBord(1), makeBal,
+    ...['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'darko'].map((t) => () => makePower(t)),
     ...Object.keys(LANDMARKS).filter((k) => typeof LANDMARKS[k] === 'function').map((k) => () => LANDMARKS[k](k === 'stadion' ? ['X', '#c8202b', '#f4f4f4'] : 'WINKELCENTRUM')),
   ];
   makers.forEach(add);
