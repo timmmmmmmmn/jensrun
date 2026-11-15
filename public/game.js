@@ -3027,6 +3027,7 @@ function resetRun() {
   feverT = 0; slomoT = 0; slomoCD = 3; nearRecord = false; hudK = 0; renHype = false; xpScore = 0; nextMicro = 100; bekerRun = 0; speedTier = 0; gainXp(0);
   if (seg) endSeg(); if (waalOn) setWaal(false); segRollT = 30;
   if (wild) wildEind(); nextWild = rand(600, 900);
+  regieReset();
   if (patrickRijder) brommerPatrick(false);
   if (fietsT > 0 || voiceSrc) stopFiets();
   fietsT = 0;
@@ -3153,7 +3154,8 @@ function spawnRow(z) {
     if (!early && !path && ahead > nextFork && !ebos) { nextFork = ahead + 99999; spawnFork(z); spawnCoinsLine(1, z - 6, 4); return; }
     if (!early && ahead > nextSchat) { nextSchat = ahead + rand(700, 1200); spawnSchat(lanes[0], z); spawnCoinsLine(lanes[1], z); return; }
     if (!early && ahead > nextKaart) { nextKaart = ahead + rand(700, 1100); spawnKaart(lanes[0], z); }
-    const nBlock = early || path?.kind === 'straat' || Math.random() < (path?.kind === 'park' ? 0.1 : 0.33) ? 1 : 2;
+    let nBlock = early || path?.kind === 'straat' || Math.random() < (path?.kind === 'park' ? 0.1 : 0.33) ? 1 : 2;
+    if (!early && !path) nBlock = regieBlokken(nBlock, ahead);
     if (path?.kind === 'park') { spawnCoinsLine(lanes[2], z); spawnCoinsArc(lanes[Math.floor(Math.random() * 2)], z); }
     let cars = 0;
     for (let i = 0; i < nBlock; i++) {
@@ -3176,9 +3178,9 @@ function spawnRow(z) {
   }
   if (!early && !path && ahead > nextTruck) { nextTruck = ahead + rand(650, 1100); spawnTruck(z - 3); }
   if (!early && !path && ahead > nextRaam && spawnRaam(z - 6)) nextRaam = ahead + rand(160, 320);
-  if (!early && !path && ahead > nextJules) { nextJules = ahead + rand(1200, 1800); spawnJules(z - 4); }
-  if (!early && !path && !jacht && !wild && ahead > nextWild && !seg && !hill && !bos && !ebos && !schoolPhase && !schoolBlock && mode !== 'school') { nextWild = ahead + rand(1100, 1600); spawnWild(); return; }
-  if (!early && !path && !jacht && !wild && ahead > nextLinus && !linusActief()) { nextLinus = ahead + rand(900, 1400); spawnLinus(); }
+  if (!early && !path && regieKlaar(ahead, nextJules)) { nextJules = regieVolgende(ahead, nextJules, 1200, 1800); spawnJules(z - 4); }
+  if (!early && !path && !jacht && !wild && regieKlaar(ahead, nextWild) && !seg && !hill && !bos && !ebos && !schoolPhase && !schoolBlock && mode !== 'school') { nextWild = regieVolgende(ahead, nextWild, 1100, 1600); spawnWild(); return; }
+  if (!early && !path && !jacht && !wild && regieKlaar(ahead, nextLinus) && !linusActief()) { nextLinus = regieVolgende(ahead, nextLinus, 900, 1400); spawnLinus(); }
   if (!early && !path && !jacht && !wild && ahead > nextDarko && !darkoActief() && !linusActief() && darkoT <= 0) { nextDarko = ahead + rand(1300, 2000); spawnDarko(); }
   if (!early && !path && ahead > nextVrienden) { nextVrienden = ahead + rand(900, 1500); spawnVrienden(z - 5); }
   if (!early && !path && ahead > nextReporter) { nextReporter = ahead + rand(900, 1500); spawnReporter(z - 9); }
@@ -3385,8 +3387,8 @@ function act(a) {
   if (seg?.active && seg.type !== 'kermis' && (a === 'jump' || a === 'slide' || seg.type === 'achtbaan')) return;
   if (a === 'left' && player.lane === 0) { if (!wildBoven()) trySticker(-1); }
   else if (a === 'right' && player.lane === 2) { if (!wildBoven()) trySticker(1); }
-  else if (a === 'left' && player.lane > 0) player.lane--;
-  else if (a === 'right' && player.lane < 2) player.lane++;
+  else if (a === 'left' && player.lane > 0) { breinUitwijk(-1); player.lane--; }
+  else if (a === 'right' && player.lane < 2) { breinUitwijk(1); player.lane++; }
   else if (a === 'jump' && !player.grounded && save.eq.skill === 'dubbel' && !player.usedDouble && !(player.dubbelCD > 0) && brommerT <= 0) {
     player.usedDouble = true; player.dubbelCD = 20;
     player.vy = 8.2;
@@ -3523,6 +3525,7 @@ function stumble(o) {
   if (jacht?.rol === 'shane') return; // Shane rent overal dwars doorheen
   if (invulnT > 0 || o.hit) return;
   liveEv('struikel');
+  spanning(0.5);
   verslaggever('stumble');
   comboBreak();
   buzz(70);
@@ -4349,6 +4352,7 @@ function updateRun(dt) {
   if (!renHype) { renHype = true; if (!curLevel) { hype('REN, JENS!'); fxFlash('#ffffff', 0.25); } }
   introT += dt;
   runTime += dt;
+  regieTick(dt);
   if (shoutCool > 0) shoutCool -= dt;
   if (dist > nextMilestone) {
     // 500 m en daarna elke 1000 m: een mijlpaal, dus in het eiland (met de oude melding als terugval)
@@ -5937,14 +5941,16 @@ function spawnJules(z) {
       o.nextSpray -= dt;
       if (o.nextSpray > 0) return;
       o.nextSpray = 0.35; o.gespoten++;
-      sprayO2(o.x - side * 0.5, o.z);
+      // eerste straal recht op Jens; de tweede op de baan waar het brein denkt dat hij heen vlucht
+      if (o.gespoten === 1) { o.l0 = player.lane; sprayO2(o.x - side * 0.5, o.z, player.x, () => { if (state === 'run') breinLeer(o.l0, side); }); }
+      else sprayO2(o.x - side * 0.5, o.z, LANES[breinDoel(o.l0, side).lane]);
     } });
 }
-function sprayO2(sx, sz) {
+function sprayO2(sx, sz, tx = player.x, klaar) {
   noise(0.35, 0.22);
   const g = new THREE.Group();
   for (let i = 0; i < 9; i++) g.add(new THREE.Mesh(sprayGeo, sprayMat));
-  const tx = player.x, T = 0.4;
+  const T = 0.4;
   addObj('deco', g, sx, sz, 0, 0, 0, { y: 1.45, t: 0,
     upd(o, dt) {
       o.t += dt;
@@ -5955,7 +5961,8 @@ function sprayO2(sx, sz) {
       o.mesh.children.forEach((d, i) => d.position.set(Math.sin(i * 2.4) * k * 0.35, Math.cos(i * 1.7) * k * 0.25, (i / 9 - 0.5) * k * 1.2));
       if (k < 1) return;
       o.dead = true;
-      if (state === 'run' && Math.abs(player.x - tx) < 1 && player.slideT <= 0) wazigZicht();
+      klaar?.();
+      if (state === 'run' && Math.abs(player.x - tx) < 1 && player.slideT <= 0) { if (!canvas.classList.contains('wazig')) spanning(0.3); wazigZicht(); }
     } });
 }
 // O2 in je ogen: het beeld is een paar seconden wazig, met druppels op het scherm
@@ -5984,7 +5991,7 @@ function wazigZicht() {
 var nextLinus = 550;
 var nextDarko = 900;
 const LINUS_ROEP = ['Stokbrood in je nek!', 'Wacht maar, Jens!', 'Vers van de bakker!', 'Ik krijg je wel!'];
-const LINUS_JAAG = 5, DUIZELIG_T = 5;
+const LINUS_JAAG = 5, LINUS_MIK = 0.9, DUIZELIG_T = 5;
 function makeLinus() {
   // lang, dun, blonde krullen, groen shirt
   const p = makePerson({ key: 'linus', skin: '#f1d0bc', hair: '#d6bb84', hairStyle: 'lossekrul', shirt: { base: '#3f7a52', paint() {} }, pants: '#3a4252', shoes: '#ececec',
@@ -6047,25 +6054,33 @@ function linusActief() { return objs.some((o) => o.linus && !o.dead); }
 function spawnLinus() {
   const p = makeLinus();
   const side = Math.random() < 0.5 ? -1 : 1;
-  const raak = Math.random() < 0.5; // half van de keren is Jens niet snel genoeg
-  addObj('deco', p.root, player.x + side * 1.2, 14, 0, 0, 0, { linus: true, t: 0, lz: 14, raak, klap: -1, weg: false,
+  addObj('deco', p.root, player.x + side * 1.2, 14, 0, 0, 0, { linus: true, t: 0, lz: 14, klap: -1, weg: false, mik: null,
     upd(o, dt) {
       o.t += dt;
       // de wereld schuift, Linus niet: hij rent mee achter Jens
       if (o.weg) o.lz += dt * 6;
       else o.lz = damp(o.lz, o.klap >= 0 ? 1.0 : o.t < 1.2 ? 14 - o.t * 10 : 1.7 + Math.sin(o.t * 1.3) * 0.25, 4, dt);
       o.z = o.lz;
-      o.x = damp(o.x, player.x + side * (o.klap >= 0 ? 0.75 : 1.2), 3, dt);
+      // tijdens het mikken blijft hij naast de baan waar Jens stond; bij de klap duikt hij naar de baan die hij gokt
+      o.x = damp(o.x, o.klap >= 0 && o.mik ? LANES[o.mik.doel] + side * 0.75 : o.mik ? LANES[o.mik.l0] + side * 1.2 : player.x + side * 1.2, o.klap >= 0 ? 9 : 3, dt);
       o.mesh.position.set(o.x, 0, o.z);
       o.mesh.visible = !indoor && !seg?.active && !wildBoven();
       pose(p, 'run', dt, state === 'run' ? clamp(speed / 12, 0.8, 1.6) : 0.3);
       if (state !== 'run' && state !== 'paused') o.weg = true;
       if (o.z > 16) { o.dead = true; return; }
       if (o.klap < 0) {
-        p.armR.rotation.x = 2.6 + Math.sin(o.t * 9) * 0.25; p.elR.rotation.x = 0.4; // stokbrood omhoog, zwaaien
+        p.armR.rotation.x = o.mik ? 3.1 : 2.6 + Math.sin(o.t * 9) * 0.25; p.elR.rotation.x = o.mik ? 0.1 : 0.4; // stokbrood omhoog, zwaaien (stil = mikken)
         if (!o.yelled && o.t > 1.3) { o.yelled = true; bubble(p.head, 'Jens, kom hier!', '', 1.5); playClip('linus1', true); } // ingesproken door Linus
         if (!o.yelled2 && o.t > 3.6) { o.yelled2 = true; bubble(p.head, pick(LINUS_ROEP), '', 1.3); }
-        if (o.t > LINUS_JAAG && state === 'run') o.klap = 0;
+        if (!o.mik && o.t > LINUS_JAAG - LINUS_MIK && state === 'run') {
+          // het brein gokt nu al waar Jens heen springt; Jens heeft LINUS_MIK seconden om hem te verrassen
+          const d = breinDoel(player.lane, side);
+          o.mik = { l0: player.lane, doel: d.lane };
+          if (brein.keer >= 2 && d.p > 0.5 && d.lane !== player.lane && Math.random() < 0.6) bubble(p.head, `Jij gaat toch weer naar ${d.lane < player.lane ? 'links' : 'rechts'}!`, '', 1.1);
+          else bubble(p.head, pick(['Hier komt ie!', 'Daar gaat ie!', 'Nu!']), '', 0.9);
+          tone(320, 0.5, 'sawtooth', 0.04, 620);
+        }
+        if (o.mik && o.t > LINUS_JAAG && state === 'run') o.klap = 0;
         return;
       }
       // de klap: stokbrood van boven naar beneden
@@ -6074,7 +6089,10 @@ function spawnLinus() {
       p.armR.rotation.x = 2.9 - k * 2.3; p.elR.rotation.x = 0.1;
       if (k >= 1 && !o.klapt) {
         o.klapt = true;
-        const geraakt = o.raak && brommerT <= 0 && state === 'run';
+        // raak als Jens rechtop staat in de baan waar Linus op gokte; wegduiken of de andere kant op = mis
+        const geraakt = brommerT <= 0 && state === 'run' && player.slideT <= 0 && Math.abs(player.x - LANES[o.mik.doel]) < 0.9;
+        if (state === 'run' && brommerT <= 0) breinLeer(o.mik.l0, side);
+        if (geraakt) spanning(0.3);
         if (geraakt) { duizelig(); bubble(p.head, pick(['HEBBES!', 'BAM!', 'Pak aan!']), '', 1.2); }
         else { noise(0.15, 0.12); bubble(p.head, pick(['Mis!', 'Nee man!', 'Te snel...']), '', 1.2); eiland('😮', 'Linus ontweken!', 'Het stokbrood zwiepte langs je hoofd', () => toast('🥖 Linus sloeg mis!', 1.4), 'ONTWEKEN'); }
       }
@@ -6107,6 +6125,81 @@ function updDuizelig(dt) {
   if (!sterren.visible) { canvas.classList.remove('duizelig'); duizeligT = 0; return; }
   const t = now() * 4;
   sterren.children.forEach((sp, i) => { const a = t + i * Math.PI * 2 / 5; sp.position.set(Math.cos(a) * 0.42, 0.38 + Math.sin(a * 2) * 0.04, Math.sin(a) * 0.42); });
+}
+// ---------- Regisseur + brein: het spel reageert op hoe jij rent, in plaats van met een dobbelsteen ----------
+// Eerlijk voor de ranglijst: de regisseur schuift alleen met het MOMENT (even rust na een klap, eerder actie als het
+// saai wordt) en betaalt alles terug, dus over een run komen er evenveel obstakels en tegenstanders als zonder hem.
+// Het brein leert alleen binnen één run en begint voor iedereen met dezelfde kennis (niets in localStorage).
+// In live races, levels en Shane jaagt doet de regisseur niets: daar moet iedereen precies dezelfde kaart hebben.
+const regie = { spanning: 0, rustig: 0, schuld: 0, schuldSinds: 0, laatste: -1e9 };
+const regieAan = () => !mapSeed && !curLevel && !jacht && !live;
+function regieReset() { Object.assign(regie, { spanning: 0, rustig: 0, schuld: 0, schuldSinds: 0, laatste: -1e9 }); breinReset(); }
+function spanning(n) { regie.spanning = Math.min(1, regie.spanning + n); regie.rustig = 0; }
+function regieTick(dt) {
+  regie.spanning *= Math.exp(-dt / 9);
+  if (nearT > 0) regie.spanning = Math.max(regie.spanning, 0.6); // de achtervolger zit in je nek
+  regie.rustig = regie.spanning < 0.12 ? regie.rustig + dt : 0;
+}
+// dubbele blokkades: na een klap wordt er een enkele van gemaakt (schuld), die komt binnen 260 m terug
+function regieBlokken(n, ahead) {
+  if (!regieAan()) return n;
+  if (n === 2 && regie.spanning > 0.5 && regie.schuld < 3) { if (!regie.schuld) regie.schuldSinds = ahead; regie.schuld++; return 1; }
+  if (n === 1 && regie.schuld > 0 && (regie.spanning < 0.2 || ahead - regie.schuldSinds > 260)) { regie.schuld--; regie.schuldSinds = ahead; return 2; }
+  return n;
+}
+// is een geplande tegenstander (Jules, Linus, wild) aan de beurt? Na een klap wacht hij even (hooguit 160 m),
+// als het lang rustig is komt hij eerder (hooguit 120 m), en nooit twee vlak na elkaar
+function regieKlaar(ahead, gepland) {
+  if (!regieAan()) return ahead > gepland;
+  if (ahead > gepland + 160) return true;
+  if (ahead - regie.laatste < 140) return false;
+  if (ahead > gepland) return regie.spanning < 0.45;
+  return ahead > gepland - 120 && regie.rustig > 14;
+}
+// de volgende rekent vanaf het geplande punt, zodat eerder en later elkaar weer opheffen
+function regieVolgende(ahead, gepland, a, b) {
+  if (!regieAan()) return ahead + rand(a, b);
+  regie.laatste = ahead;
+  return Math.max(gepland + rand(a, b), ahead + a * 0.6);
+}
+// Brein: een klein Bayesiaans modelletje. Bij elke aanval van opzij (Linus, Jules) kijkt het wat Jens deed:
+// blijven staan, wegduiken, van de aanvaller weg of ernaartoe. Plus een links/rechts-gewoonte uit al het
+// gewone uitwijken voor obstakels. Linus en Jules mikken op de baan waar Jens volgens het brein heen gaat.
+const BREIN_PRIOR = { blijf: 1.2, duik: 1.2, weg: 1.8, naar: 0.6 }; // zo reageren de meeste mensen
+const brein = { n: { ...BREIN_PRIOR }, links: 2, rechts: 2, keer: 0 };
+function breinReset() { brein.n = { ...BREIN_PRIOR }; brein.links = brein.rechts = 2; brein.keer = 0; }
+// side: kant van de aanvaller (-1 links, 1 rechts)
+function breinKans(lane, side) {
+  const opties = [];
+  const add = (k, l, duik) => {
+    if (l < 0 || l > 2) return;
+    let w = brein.n[k];
+    if (l !== lane) w *= 2 * (l < lane ? brein.links : brein.rechts) / (brein.links + brein.rechts);
+    opties.push({ k, lane: l, duik, w });
+  };
+  add('blijf', lane, false); add('duik', lane, true); add('weg', lane - side, false); add('naar', lane + side, false);
+  const tot = opties.reduce((t, o) => t + o.w, 0);
+  for (const o of opties) o.p = o.w / tot;
+  return opties;
+}
+function breinDoel(lane, side) {
+  const per = [0, 0, 0];
+  for (const o of breinKans(lane, side)) if (!o.duik) per[o.lane] += o.p;
+  let best = lane, bw = -1;
+  for (let l = 0; l < 3; l++) { const w = per[l] * rand(0.9, 1.1); if (w > bw) { bw = w; best = l; } } // bij twijfel een beetje toeval
+  return { lane: best, p: per[best] };
+}
+// wat deed Jens na een aanval die in baan l0 begon?
+function breinLeer(l0, side) {
+  const k = player.lane === l0 ? (player.slideT > 0 ? 'duik' : 'blijf') : Math.sign(player.lane - l0) === -side ? 'weg' : 'naar';
+  brein.n[k] += 1; brein.keer++;
+}
+// een obstakel recht voor je in de middelste baan: kies je links of rechts?
+function breinUitwijk(dir) {
+  const voor = objs.find((o) => !o.dead && !o.hit && o.w && o.w < ROAD_W - 1 && !NO_COMBO.has(o.kind) && o.z < 0 && o.z > -30 && Math.abs(o.x - LANES[player.lane]) < o.w / 2 + 0.3);
+  if (!voor) return;
+  if (player.lane === 1) { if (dir < 0) brein.links++; else brein.rechts++; }
+  if (voor.z > -5) spanning(0.12); // last-second: dat was op het nippertje
 }
 // ---------- Loslopend wild: springt voor Jens de weg op en breekt hem open; daarna 15-20 s van eilandje naar eilandje boven een afgrond ----------
 var nextWild = 1200, wild = null;
@@ -6358,6 +6451,7 @@ function updWild(dt) {
   }
   if (brommerT > 0 && wildBoven()) { brommerT = 0; moped.visible = false; engineStop(); }
   if (dist > w.s0 + w.L + 12) {
+    if (state === 'run' && w.open) spanning(0.35);
     if (state === 'run' && w.open) eiland('🦘', 'Wild overleefd!', `${w.L} m over de afgrond, van eiland naar eiland`, () => toast('🦘 Wild overleefd!', 1.4), 'OVERLEEFD');
     wildEind();
   }
@@ -14912,4 +15006,4 @@ const ARC = {
   },
 };
 
-window.__jr = { eiland, tegenstanderAf, spawnDarko, startDarkoPower, get darkoT() { return darkoT; }, get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, spawnPlusToken, set plusToken(v) { plusToken = v; }, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
+window.__jr = { regie, brein, breinKans, breinDoel, eiland, tegenstanderAf, spawnDarko, startDarkoPower, get darkoT() { return darkoT; }, get jacht() { return jacht; }, get live() { return live; }, jachtPower, camera, jens, player, spawnCoinsLine, renderer, scene, instPools, lkTest() { lkKans = true; }, lkEnter: enterLk, exitSchool, startMini, comboHit, slomo, set scoreTest(v) { score = v; }, get mini() { return mini; }, openArcade, startArcade, get arc() { return arc; }, breakdown() { const c = {}; for (const top of scene.children) { if (!top.visible) continue; let n = 0; top.traverseVisible((o) => { if (o.isMesh || o.isSprite || o.isPoints || o.isLine) n++; }); const k = top.userData.kind || (objs.find((o) => o.mesh === top)?.kind) || (houses['-1'].concat(houses['1']).some((h) => h.g === top) ? 'huis' : decor.some((d) => d.items.includes(top)) ? 'decor:' + decor.find((d) => d.items.includes(top)).kind : top === jens.root ? 'jens' : feestDecor.some((d) => d.items.includes(top)) ? 'feest' : top.type + (top.children.length ? '' : ':' + (top.geometry?.type || ''))); c[k] = (c[k] || 0) + n; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 18); }, get calls() { return renderer.info.render.calls; }, set themaT(v) { themaT = v; }, get feest() { return feest; }, get snapInfo() { return JSON.stringify({ snapOn, snapDeath, fly: !!deathFly, cls: document.querySelector('#snap').className }); }, startEbos, get ebos() { return ebos; }, verslaggever, spawnTruck, spawnRaam, spawnReporter, splatScreen, spawnJules, spawnLinus, spawnWild, get wild() { return wild; }, get muziek() { return musicCur + (speeltBuf() ? ' (buffer' + (bufNu.game ? ' tempo ' + bufNu.game.step + ' pr ' + bufNu.game.src.playbackRate.value.toFixed(2) : '') + ')' : ''); }, get achtervolger() { return chaser(); }, get dist() { return dist; }, get duizeligT() { return duizeligT; }, openKamer, newsTexts, KOP_TOTAAL, mem: () => ({ ...renderer.info.memory, heap: Math.round((performance.memory?.usedJSHeapSize || 0) / 1e6) }), progs: () => renderer.info.programs.length, introTest: (i, t) => { NEWS_INTROS[i](newsCtx, t, { head: "BOEM: JENS OPNIEUW GESIGNALEERD OP DE JAVASTRAAT", street: "Javastraat" }); return [NEWS_INTROS.length, newsCanvas.toDataURL()]; }, startSeg, get seg() { return seg; }, openPass, openKrant, playCut, spawnVrienden, fp, klasPeople, kamer, applyLook, applyOutfit, get calls2() { return renderer.info.render.calls; }, openPhoto, startReplay, get replayN() { return replayBuf.length; }, spawnFork, spawnSchat, spawnKaart, spawnPlusToken, set plusToken(v) { plusToken = v; }, get hill() { return hill; }, set nextHill(v) { nextHill = v; }, get dayMix() { return dayMix; }, set sunsetFrom(v) { sunsetFrom = v; }, startBos, get bos() { return bos; }, startWeekly, thisWeek, get lastSnap() { return lastSnap; }, get pet() { return pet; }, setWeather: (w) => { weather = w; seedPrecip(w === 'regen' ? 'regen' : w === 'sneeuw' ? 'sneeuw' : curFeest()?.confetti ? 'confetti' : null); applyLook(phaseT); }, setFeest: (f) => { feest = f; applyFeest(); applyLook(phaseT); }, get combo() { return combo; }, get nearT() { return nearT; }, get speed() { return speed; }, get baseSpeed() { return baseSpeed; }, die: (r) => die(r), kings: () => scene.children.filter((c) => c.userData.isKing).length, setCampaign: (c) => { campaign = c; }, get mult() { return save.mult; }, decor, get score() { return score; }, enterSchool, spawnMontessori, get indoor() { return indoor; }, get fietsT() { return fietsT; }, moveWorld, spawnLandmark, pauseGame, startLevel, openLevels, warp: (n) => { dist += n; }, get tasks() { return tasks; }, get boss() { return boss; }, get takedowns() { return takedowns; }, music, musicGain, get gameover() { return !!gameoverSrc; }, die: (r) => die(r), startShow, setNight, objs, shots, get score() { return score; }, vrouw: () => addObj('vrouw', makeVrouw(), 0, -28, 0.8, 0.6, 1.8), act, startRun, activatePower, openShop, get state() { return state; }, save, set god(v) { invulnT = v ? 1e9 : 0; } };
