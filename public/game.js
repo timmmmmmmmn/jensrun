@@ -511,7 +511,7 @@ function singBio() {
 // muziek: één afspeler die van nummer wisselt. Vroeger streamden alle nummers tegelijk op volume 0:
 // dat kost veel en browsers leggen zulke streams soms stil, waardoor de muziek ineens wegviel.
 // alle muziek is van Jessegrill: menu (ook het verhaal), winkel, intro bij elke start en daarna het spelnummer
-const music = { menu: 'audio/menu.mp3', shop: 'audio/shop.mp3', intro: 'audio/intro.mp3', game: 'audio/game.mp3' };
+const music = { menu: 'audio/menu.mp3', shop: 'audio/shop.mp3', intro: 'audio/intro.mp3', game: 'audio/game.mp3', school: 'audio/schooltijd.mp3' };
 const musicEl = new Audio(), musicGain = {}, musicPos = {};
 let musicCur = null, musicLoaded = null, introKlaar = false, inPotje = false;
 musicEl.loop = true; musicEl.preload = 'auto'; musicEl.crossOrigin = 'anonymous';
@@ -651,6 +651,7 @@ function updateMusic(dt) {
   if (want === 'menu' && save.radio && save.radio !== 'menu') want = save.radio === 'uit' ? null : music[save.radio] ? save.radio : 'menu';
   const boost = want === 'game' ? musicBoost() : 0;
   const g = musicGain.main.gain;
+  if (curScreen === '#school') want = 'school';
   if (want && !save.sound) want = null;
   // wisselen: eerst uitfaden, dan pas het andere nummer (van intro naar spelnummer meteen, zonder gat)
   if (want === 'game' && musicCur === 'intro') { musicSwitch('game'); return; }
@@ -4226,6 +4227,12 @@ function updateCamera(dt) {
       const y = shirt ? 1.25 : 1.72;
       camTargetPos.set(off, y + (portrait ? 0.15 : 0.05), shirt ? -1.75 : -0.95);
       camTargetLook.set(off, y - (portrait ? (shirt ? 0.55 : 0.32) : 0), 0);
+    } else if (schoolRent()) {
+      // groot en recht van voren, laag zodat hij op je neerkijkt; breed scherm: Jens rechts, slot links
+      const x = wide ? 0.75 : 0;
+      // telefoon: hoog richten zodat zijn hoofd onder het slot uitkomt
+      camTargetPos.set(px + x, portrait ? 0.95 : 1.15, portrait ? -2.5 : -2.3);
+      camTargetLook.set(px + x, portrait ? 1.85 : 1.3, 0);
     } else if (state === 'menu') {
       if (portrait) { camTargetPos.set(px + 0.7, 1.75, -4.7); camTargetLook.set(px + 0.05, 0.62, 1.6); } // mobiel menu: Jens in het midden
       else {
@@ -4252,7 +4259,7 @@ function updateCamera(dt) {
   camLook.y = damp(camLook.y, camTargetLook.y, k, dt);
   camLook.z = damp(camLook.z, camTargetLook.z, k, dt);
   camera.position.copy(camPos);
-  menuDisc.visible = state === 'menu';
+  menuDisc.visible = state === 'menu' && !schoolRent();
   if (menuDisc.visible) menuDisc.rotation.y += dt * 0.5;
   if (shakeT > 0) {
     shakeT -= dt;
@@ -4575,15 +4582,17 @@ renderer.setAnimationLoop(() => {
   else if (state === 'cutscene') updateCut(dt);
   else if (state === 'menu' || state === 'shop' || state === 'over') {
     if (state !== 'over') {
-      pose(jens, mode === 'telefoon' ? 'phoneIdle' : 'idle', dt);
+      // op slot onder schooltijd: Jens rent recht op je af, de straat schuift onder hem door
+      if (schoolRent()) { speed = 11; pose(jens, 'run', dt); }
+      else pose(jens, mode === 'telefoon' ? 'phoneIdle' : 'idle', dt);
       jens.root.position.set(0, 0, 0);
       jens.root.rotation.set(0, 0, 0);
       kamer.visible = false;
     } else pose(jens, deathReason === 'gat' || deathReason === 'gepakt' ? 'grabbed' : 'idle', dt);
-    moveWorld(0, dt);
+    moveWorld(schoolRent() ? speed * dt : 0, dt);
   }
   if (state !== 'paused') {
-    updateChaser(dt, state === 'run');
+    updateChaser(dt, state === 'run' || schoolRent());
     updDuizelig(dt);
     updWild(dt);
   }
@@ -4619,6 +4628,12 @@ renderer.setAnimationLoop(() => {
 let curScreen = null;
 function showScreen(sel) {
   if (newsJob && sel !== '#over') newsCancel();
+  // onder schooltijd is het hoofdmenu het slot
+  if (sel === '#menu' && schoolDicht()) sel = '#school';
+  if (sel === '#school' && curScreen !== '#school') {
+    $('#schoolPas').value = ''; $('#schoolFout').textContent = '';
+    $('#schoolPasBox').classList.add('hidden'); $('#schoolPasOpen').classList.remove('hidden');
+  }
   curScreen = sel;
   // Jesse popt elke keer opnieuw omhoog als je in het hoofdmenu komt
   if (sel === '#menu') { const j = $('#fmJesse'); j.classList.remove('pop'); void j.offsetWidth; j.classList.add('pop'); }
@@ -5165,13 +5180,12 @@ function zetSchoolPas(code) {
   schoolPas = code || null;
   try { if (schoolPas) localStorage.setItem('jr-pas', schoolPas); else localStorage.removeItem('jr-pas'); } catch (e) { /* geen opslag */ }
 }
-const schoolDicht = () => schoolAan && !schoolPas && schoolUur();
+function schoolDicht() { return schoolAan && !schoolPas && schoolUur(); }
+const schoolRent = () => state === 'menu' && curScreen === '#school';
 // geeft true als er niet gespeeld mag worden (en laat dan het scherm zien)
 function showSchool() {
   if (!schoolDicht()) return false;
   if (live) liveClose();
-  $('#schoolPas').value = '';
-  $('#schoolFout').textContent = '';
   showScreen('#school');
   return true;
 }
@@ -5191,6 +5205,7 @@ async function schoolProbeer() {
   } catch (e) { $('#schoolFout').textContent = 'Geen verbinding, probeer het zo nog eens.'; }
 }
 $('#schoolOk').addEventListener('click', schoolProbeer);
+$('#schoolPasOpen').addEventListener('click', () => { $('#schoolPasOpen').classList.add('hidden'); $('#schoolPasBox').classList.remove('hidden'); $('#schoolPas').focus(); });
 $('#schoolPas').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') schoolProbeer(); });
 setInterval(schoolCheck, 20000);
 checkBlok();

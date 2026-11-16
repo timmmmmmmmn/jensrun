@@ -265,15 +265,28 @@
     </div>
   </div>
 
-  <!-- SCHOOLTIJD -->
+  <!-- SCHOOLTIJD: groot slot, Jens rent op je af (3D erachter) -->
   <div id="school" class="screen hidden">
-    <div class="panel small">
-      <h2>Schooltijd</h2>
-      <p>Doordeweeks is Jens Run dicht van 9:00 tot 14:30. Daarna kun je weer rennen.</p>
-      <p>Heb je een wachtwoord gekregen? Dan mag je toch spelen.</p>
-      <input id="schoolPas" type="password" placeholder="Wachtwoord" autocomplete="off" maxlength="40" style="width:100%;box-sizing:border-box;font:inherit;padding:10px 12px;margin-bottom:8px">
-      <p id="schoolFout" style="color:#ff6b6b;min-height:1.2em;margin:0 0 8px"></p>
-      <button id="schoolOk" class="btn">Spelen</button>
+    <div class="slot-kop">
+      <svg class="slot" viewBox="0 0 120 150" aria-hidden="true">
+        <path class="slot-beugel" d="M30 70V45a30 30 0 0 1 60 0v25" fill="none" stroke="#c9ced6" stroke-width="14" stroke-linecap="round"/>
+        <rect x="10" y="66" width="100" height="80" rx="14" fill="#ffc400" stroke="#000" stroke-width="5"/>
+        <rect x="18" y="74" width="84" height="10" rx="5" fill="#ffe45a"/>
+        <circle cx="60" cy="100" r="11" fill="#1d1306"/>
+        <path d="M55 104h10l4 26H51z" fill="#1d1306"/>
+      </svg>
+      <h2 class="slot-titel">Op slot</h2>
+      <p class="slot-tekst">Je mag nu niet spelen. Doordeweeks is Jens Run dicht van 9:00 tot 14:30.</p>
+    </div>
+    <div class="slot-pas">
+      <button id="schoolPasOpen" class="btn alt">Ik heb een wachtwoord</button>
+      <div id="schoolPasBox" class="hidden">
+        <div class="slot-rij">
+          <input id="schoolPas" type="password" placeholder="Wachtwoord" autocomplete="off" maxlength="40">
+          <button id="schoolOk" class="btn big">Spelen</button>
+        </div>
+        <p id="schoolFout"></p>
+      </div>
     </div>
   </div>
 
