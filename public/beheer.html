@@ -79,6 +79,12 @@
     <h2>Schooltijd (ma t/m vr 9:00 tot 14:30 dicht)</h2>
     <div class="nform">
       <label class="chk" style="flex-direction:row;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="sAan" style="flex:0 0 auto;margin:0"> Jens Run dicht onder schooltijd <small id="sNu" class="ip"></small></label>
+      <p class="hint" style="margin:0">Alleen op het netwerk van school (eduroam) zit Jens Run op slot. Open deze pagina op het schoolwifi en druk op <b>Dit netwerk toevoegen</b>. Thuis of op 4G kun je dan gewoon spelen.</p>
+      <p id="sHier" class="hint" style="margin:0"></p>
+      <div class="row"><button id="sNetHier">Dit netwerk toevoegen</button></div>
+      <div class="row nrow"><label>Of zelf een IP-adres of blok <input id="sNet" placeholder="bijv. 213.34.130.160/28 of org:Montessori"></label></div>
+      <div class="row"><button id="sNetAdd" style="background:#555">Toevoegen</button></div>
+      <div class="wrap"><table id="sNetTbl"><thead><tr><th>Netwerk</th><th>Van</th><th></th></tr></thead><tbody></tbody></table></div>
       <div class="row nrow">
         <label>Wachtwoord <input id="sCode" maxlength="40" autocomplete="off" placeholder="Bijvoorbeeld: friet42"></label>
         <label>Voor wie (mag leeg) <input id="sLabel" maxlength="60" placeholder="Naam"></label>
@@ -183,10 +189,14 @@ $('#bans').onclick = async (e) => {
 };
 // ---------- schooltijd-wachtwoorden ----------
 async function loadSchool() {
-  const { rows, aan, nu, now } = await call('/api/admin/schoolpas');
+  const { rows, aan, nu, now, netten, hier } = await call('/api/admin/schoolpas');
   $('#schoolBox').hidden = false;
   $('#sAan').checked = aan;
-  $('#sNu').textContent = aan && nu ? '(nu dicht)' : '(nu open)';
+  const hierOp = hier.school;
+  $('#sNu').textContent = !aan || !nu ? '(nu open)' : netten.length ? '(nu dicht op het schoolnetwerk)' : '(nog geen schoolnetwerk: nergens dicht)';
+  $('#sHier').textContent = hier.ip ? `Jij zit nu op ${hier.ip}${hier.org ? ' (' + hier.org + ')' : ''}${hierOp ? ', dat is het schoolnetwerk.' : '.'}` : '';
+  $('#sNetTbl tbody').innerHTML = netten.length ? netten.map((n) => `<tr><td><code>${esc(n.net)}</code></td><td>${esc(n.label || '')}<br><small class="ip">${fmtTot(n.added)}</small></td>
+    <td><button class="del" data-net="${esc(n.net)}">Verwijder</button></td></tr>`).join('') : '<tr><td colspan="3">Nog geen netwerk: Jens Run zit dan nergens op slot</td></tr>';
   $('#sTbl tbody').innerHTML = rows.length ? rows.map((r) => {
     const oud = r.until != null && r.until < now;
     return `<tr class="${oud ? 'oud' : ''}"><td><code>${esc(r.code)}</code></td><td>${esc(r.label || '')}</td>
@@ -195,6 +205,17 @@ async function loadSchool() {
       <td><button class="del" data-pas="${esc(r.code)}">Verwijder</button></td></tr>`;
   }).join('') : '<tr><td colspan="5">Nog geen wachtwoorden</td></tr>';
 }
+async function netPost(data) {
+  try {
+    const r = await fetch('/api/admin/schoolpas', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify(data) });
+    const d = await r.json();
+    if (!r.ok) { $('#msg').textContent = d.error || 'Fout ' + r.status; return; }
+    loadSchool();
+  } catch (e) { $('#msg').textContent = e.message; }
+}
+$('#sNetHier').onclick = () => netPost({ net: 'hier' });
+$('#sNetAdd').onclick = () => { netPost({ net: $('#sNet').value }); $('#sNet').value = ''; };
+$('#sNetTbl').onclick = (e) => { const b = e.target.closest('[data-net]'); if (b && confirm(`Netwerk ${b.dataset.net} verwijderen?`)) netPost({ netWeg: b.dataset.net }); };
 $('#sAan').onchange = async () => {
   try { await call('/api/admin/schoolpas', { method: 'POST', body: JSON.stringify({ aan: $('#sAan').checked }) }); loadSchool(); }
   catch (e) { $('#msg').textContent = e.message; }

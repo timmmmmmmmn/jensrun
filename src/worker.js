@@ -97,6 +97,47 @@ async function schoolAan(db) {
   const r = await db.prepare("SELECT value FROM config WHERE key = 'schooltijd'").first();
   return r ? JSON.parse(r.value) !== false : true;
 }
+// alleen op het netwerk van school (eduroam van het Montessori): de beheerder zet de adressen erin.
+// een browser kan de wifinaam niet zien, het IP-adres waarmee school naar buiten gaat wel
+async function schoolNetten(db) {
+  const r = await db.prepare("SELECT value FROM config WHERE key = 'schoolnet'").first();
+  return r ? JSON.parse(r.value) : [];
+}
+function ipBits(ip) {
+  if (ip.includes(':')) {
+    // IPv6: :: uitklappen tot 8 groepen van 16 bits
+    const [a, b = ''] = ip.split('::');
+    const kop = a ? a.split(':') : [], staart = b ? b.split(':') : [];
+    const groepen = ip.includes('::') ? [...kop, ...Array(8 - kop.length - staart.length).fill('0'), ...staart] : kop;
+    if (groepen.length !== 8) return null;
+    return groepen.map((g) => parseInt(g || '0', 16).toString(2).padStart(16, '0')).join('');
+  }
+  const d = ip.split('.').map(Number);
+  if (d.length !== 4 || d.some((x) => !(x >= 0 && x <= 255))) return null;
+  return d.map((x) => x.toString(2).padStart(8, '0')).join('');
+}
+function ipInNet(ip, net) {
+  const [adres, len] = net.split('/');
+  const a = ipBits(ip), b = ipBits(adres);
+  if (!a || !b || a.length !== b.length) return false;
+  const n = len === undefined ? a.length : Number(len);
+  return a.slice(0, n) === b.slice(0, n);
+}
+// het blok dat we opslaan als de beheerder op 'dit netwerk toevoegen' drukt: IPv6 krijgt per apparaat
+// een eigen adres binnen het blok van school, dus dan de eerste 48 bits
+function netVan(ip) {
+  if (!ip.includes(':')) return ip;
+  const bits = ipBits(ip);
+  if (!bits) return ip;
+  const g = []; for (let i = 0; i < 3; i++) g.push(parseInt(bits.slice(i * 16, i * 16 + 16), 2).toString(16));
+  return g.join(':') + '::/48';
+}
+// 'org:Montessori' = elk adres waarvan de eigenaar (volgens Cloudflare) zo heet, ook IPv6
+const netPast = (req, ip, net) => (net.startsWith('org:') ? (req.cf?.asOrganization || '').toLowerCase().includes(net.slice(4).toLowerCase()) : !!ip && ipInNet(ip, net));
+async function opSchoolNet(req, db) {
+  const ip = ipOf(req);
+  return (await schoolNetten(db)).some((n) => netPast(req, ip, n.net));
+}
 async function pasGeldig(db, raw) {
   const code = pasCode(raw);
   if (!code) return false;
@@ -104,7 +145,7 @@ async function pasGeldig(db, raw) {
 }
 // null = mag spelen; anders de reden waarom niet
 async function schoolDicht(req, db, url) {
-  if (!schoolUur() || !(await schoolAan(db))) return null;
+  if (!schoolUur() || !(await schoolAan(db)) || !(await opSchoolNet(req, db))) return null;
   if (await pasGeldig(db, req.headers.get('x-jr-pas') || url.searchParams.get('pas'))) return null;
   return { error: 'Onder schooltijd is Jens Run dicht.', school: true };
 }
@@ -133,7 +174,7 @@ async function api(req, env, url) {
     const id = url.searchParams.get('id') || '', dev = devOf(req, url), ip = ipOf(req);
     await markSeen(db, id, dev, ip);
     const pas = req.headers.get('x-jr-pas');
-    return json({ block: await activeBlock(db, id, dev, ip), school: { aan: await schoolAan(db), pas: pas ? await pasGeldig(db, pas) : null } });
+    return json({ block: await activeBlock(db, id, dev, ip), school: { aan: await schoolAan(db), net: await opSchoolNet(req, db), pas: pas ? await pasGeldig(db, pas) : null } });
   }
   // wachtwoord intypen op het schooltijd-scherm
   if (path === '/api/schoolpas' && req.method === 'POST') {
@@ -604,10 +645,25 @@ async function api(req, env, url) {
     }
     if (path === '/api/admin/schoolpas' && req.method === 'GET') {
       const { results } = await db.prepare('SELECT * FROM schoolpas ORDER BY created DESC').all();
-      return json({ rows: results, aan: await schoolAan(db), nu: schoolUur(), now: Date.now() });
+      const ip = ipOf(req);
+      return json({ rows: results, aan: await schoolAan(db), nu: schoolUur(), now: Date.now(), netten: await schoolNetten(db),
+        hier: { ip, net: ip ? netVan(ip) : '', org: req.cf?.asOrganization || '', school: await opSchoolNet(req, db) } });
     }
     if (path === '/api/admin/schoolpas' && req.method === 'POST') {
       const b = await body(req);
+      if (b.net !== undefined || b.netWeg !== undefined) {
+        let netten = await schoolNetten(db);
+        if (b.netWeg !== undefined) netten = netten.filter((n) => n.net !== b.netWeg);
+        else {
+          const ip = ipOf(req);
+          const net = String(b.net === 'hier' ? (ip ? netVan(ip) : '') : b.net).trim();
+          const [adres, len] = net.split('/'), bits = ipBits(adres || '');
+          if (net.startsWith('org:') ? net.length < 8 : !bits || (len !== undefined && !(Number(len) >= 8 && Number(len) <= bits.length))) return json({ error: 'Dat is geen geldig IP-adres, blok of org:naam (bijv. 145.100.1.2, 2001:610:1::/48 of org:Montessori).' }, 400);
+          if (!netten.some((n) => n.net === net)) netten.push({ net, label: String(b.label || (b.net === 'hier' ? req.cf?.asOrganization : '') || '').slice(0, 60), added: Date.now() });
+        }
+        await db.prepare("INSERT INTO config (key, value) VALUES ('schoolnet', ?1) ON CONFLICT (key) DO UPDATE SET value = ?1").bind(JSON.stringify(netten.slice(0, 50))).run();
+        return json({ ok: true });
+      }
       if (typeof b.aan === 'boolean') {
         await db.prepare("INSERT INTO config (key, value) VALUES ('schooltijd', ?1) ON CONFLICT (key) DO UPDATE SET value = ?1").bind(JSON.stringify(b.aan)).run();
         return json({ ok: true });

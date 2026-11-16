@@ -267,7 +267,7 @@ const devId = (() => {
   return d;
 })();
 // schooltijd-wachtwoord van de beheerder (zie showSchool)
-let schoolPas = null, schoolAan = true;
+let schoolPas = null, schoolAan = true, schoolNet = false; // schoolNet: zit je nu op het netwerk van school (zegt de server)
 try { schoolPas = localStorage.getItem('jr-pas') || null; schoolAan = localStorage.getItem('jr-school-aan') !== '0'; } catch (e) { /* geen opslag */ }
 function persist() {
   save.updatedAt = Date.now();
@@ -5148,6 +5148,7 @@ function checkBlok() {
     setBlok(r.block);
     if (r.school) {
       schoolAan = r.school.aan !== false;
+      schoolNet = !!r.school.net;
       try { localStorage.setItem('jr-school-aan', schoolAan ? '1' : '0'); } catch (e) { /* geen opslag */ }
       if (r.school.pas === false) zetSchoolPas(null);
       schoolCheck();
@@ -5184,7 +5185,7 @@ function zetSchoolPas(code) {
   schoolPas = code || null;
   try { if (schoolPas) localStorage.setItem('jr-pas', schoolPas); else localStorage.removeItem('jr-pas'); } catch (e) { /* geen opslag */ }
 }
-function schoolDicht() { return schoolAan && !schoolPas && schoolUur(); }
+function schoolDicht() { return schoolAan && schoolNet && !schoolPas && schoolUur(); }
 const schoolRent = () => state === 'menu' && curScreen === '#school';
 // geeft true als er niet gespeeld mag worden (en laat dan het scherm zien)
 function showSchool() {
@@ -5399,6 +5400,9 @@ $('#schoolPas').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.
 setInterval(schoolCheck, 20000);
 checkBlok();
 setInterval(() => { if (!document.hidden) checkBlok(); }, 90000);
+// ander netwerk (school in of uit): meteen opnieuw vragen
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkBlok(); });
+addEventListener('online', checkBlok);
 
 if (save.name) apiCall('/api/me?id=' + save.playerId).then((r) => { if (r.status === 404) forgetName(); else if (r.ok && r.name && r.name !== save.name) { save.name = r.name; persist(); } }).catch(() => {});
 persist();
