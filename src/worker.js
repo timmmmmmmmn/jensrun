@@ -138,6 +138,20 @@ async function opSchoolNet(req, db) {
   const ip = ipOf(req);
   return (await schoolNetten(db)).some((n) => netPast(req, ip, n.net));
 }
+// VPN's, proxies en iCloud Private Relay komen uit datacenters in plaats van van een thuis- of telefoonprovider.
+// Onder schooltijd telt dat als school, anders omzeil je het slot met één knop
+const VPN_ASN = new Set([
+  9009, 60068, 212238, 136787, // M247 en Datacamp (NordVPN, Surfshark, ExpressVPN, PIA, CyberGhost...)
+  39351, 51167, 209854, 207137, 62240, 147049, 49981, 197540, 46562, 51852, 43350, 41378, 202425, 49453, 400328, // Mullvad/31173, Contabo, Proton, Clouvider, Packethub e.d.
+  16276, 24940, 14061, 63949, 20473, 60781, 28753, 213230, // OVH, Hetzner, DigitalOcean, Linode, Vultr, Leaseweb
+  16509, 14618, 8075, 15169, 396982, // Amazon, Microsoft, Google
+  13335, 36183, 54113, 21859, // Cloudflare WARP, Akamai/Fastly (Private Relay), Zenlayer
+]);
+const VPN_NAAM = /vpn|proxy|hosting|datacent|data cent|server|vps|colo|cloud|proton|mullvad|nord|surfshark|express|m247|datacamp|leaseweb|hetzner|ovh|contabo|choopa|vultr|linode|akamai|fastly|zenlayer/i;
+function vpnLijkt(req) {
+  const asn = Number(req.cf?.asn), org = req.cf?.asOrganization || '';
+  return VPN_ASN.has(asn) || VPN_NAAM.test(org);
+}
 async function pasGeldig(db, raw) {
   const code = pasCode(raw);
   if (!code) return false;
@@ -145,7 +159,7 @@ async function pasGeldig(db, raw) {
 }
 // null = mag spelen; anders de reden waarom niet
 async function schoolDicht(req, db, url) {
-  if (!schoolUur() || !(await schoolAan(db)) || !(await opSchoolNet(req, db))) return null;
+  if (!schoolUur() || !(await schoolAan(db)) || !(vpnLijkt(req) || (await opSchoolNet(req, db)))) return null;
   if (await pasGeldig(db, req.headers.get('x-jr-pas') || url.searchParams.get('pas'))) return null;
   return { error: 'Onder schooltijd is Jens Run dicht.', school: true };
 }
@@ -174,7 +188,7 @@ async function api(req, env, url) {
     const id = url.searchParams.get('id') || '', dev = devOf(req, url), ip = ipOf(req);
     await markSeen(db, id, dev, ip);
     const pas = req.headers.get('x-jr-pas');
-    return json({ block: await activeBlock(db, id, dev, ip), school: { aan: await schoolAan(db), net: await opSchoolNet(req, db), pas: pas ? await pasGeldig(db, pas) : null } });
+    return json({ block: await activeBlock(db, id, dev, ip), school: { aan: await schoolAan(db), net: vpnLijkt(req) || (await opSchoolNet(req, db)), vpn: vpnLijkt(req), pas: pas ? await pasGeldig(db, pas) : null } });
   }
   // wachtwoord intypen op het schooltijd-scherm
   if (path === '/api/schoolpas' && req.method === 'POST') {

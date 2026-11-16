@@ -267,8 +267,13 @@ const devId = (() => {
   return d;
 })();
 // schooltijd-wachtwoord van de beheerder (zie showSchool)
-let schoolPas = null, schoolAan = true, schoolNet = false; // schoolNet: zit je nu op het netwerk van school (zegt de server)
-try { schoolPas = localStorage.getItem('jr-pas') || null; schoolAan = localStorage.getItem('jr-school-aan') !== '0'; } catch (e) { /* geen opslag */ }
+let schoolPas = null, schoolAan = true, schoolNet = false, schoolVpn = false; // schoolNet: zit je nu op het netwerk van school of een VPN (zegt de server)
+// zonder internet (de app heeft alles aan boord) blijft het slot dicht als dit apparaat vandaag al op school was
+const vandaag = () => new Date().toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam' });
+try {
+  schoolPas = localStorage.getItem('jr-pas') || null; schoolAan = localStorage.getItem('jr-school-aan') !== '0';
+  schoolNet = localStorage.getItem('jr-school-op') === vandaag();
+} catch (e) { /* geen opslag */ }
 function persist() {
   save.updatedAt = Date.now();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* geen opslag */ }
@@ -4634,6 +4639,7 @@ function showScreen(sel) {
   if (newsJob && sel !== '#over') newsCancel();
   // onder schooltijd is het hoofdmenu het slot
   if (sel === '#menu' && schoolDicht()) sel = '#school';
+  if (sel === '#school') $('#slotTekst').textContent = schoolVpn ? 'Je zit op een VPN. Onder schooltijd mag dat niet: zet hem uit om te spelen.' : 'Je mag nu niet spelen. Doordeweeks is Jens Run dicht van 9:00 tot 14:30.';
   if (sel === '#school' && curScreen !== '#school') {
     $('#schoolPas').value = ''; $('#schoolFout').textContent = '';
     $('#schoolPasBox').classList.add('hidden'); $('#schoolPasOpen').classList.remove('hidden');
@@ -5148,7 +5154,8 @@ function checkBlok() {
     setBlok(r.block);
     if (r.school) {
       schoolAan = r.school.aan !== false;
-      schoolNet = !!r.school.net;
+      schoolNet = !!r.school.net; schoolVpn = !!r.school.vpn;
+      try { if (schoolNet) localStorage.setItem('jr-school-op', vandaag()); else localStorage.removeItem('jr-school-op'); } catch (e) { /* geen opslag */ }
       try { localStorage.setItem('jr-school-aan', schoolAan ? '1' : '0'); } catch (e) { /* geen opslag */ }
       if (r.school.pas === false) zetSchoolPas(null);
       schoolCheck();
