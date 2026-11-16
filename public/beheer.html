@@ -75,6 +75,21 @@
     <p id="wallNow">–</p>
     <button id="clearWall" class="del">Muur leegmaken</button>
   </div>
+  <div id="schoolBox" hidden>
+    <h2>Schooltijd (ma t/m vr 9:00 tot 14:30 dicht)</h2>
+    <div class="nform">
+      <label class="chk" style="flex-direction:row;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="sAan" style="flex:0 0 auto;margin:0"> Jens Run dicht onder schooltijd <small id="sNu" class="ip"></small></label>
+      <div class="row nrow">
+        <label>Wachtwoord <input id="sCode" maxlength="40" autocomplete="off" placeholder="Bijvoorbeeld: friet42"></label>
+        <label>Voor wie (mag leeg) <input id="sLabel" maxlength="60" placeholder="Naam"></label>
+      </div>
+      <div class="row nrow">
+        <label>Geldig <select id="sDagen"><option value="">altijd</option><option value="1">1 dag</option><option value="7">1 week</option><option value="30">1 maand</option></select></label>
+      </div>
+      <div class="row"><button id="sMaak" style="background:#555">Verzin er een</button><button id="sAdd">Wachtwoord maken</button></div>
+    </div>
+    <div class="wrap"><table id="sTbl"><thead><tr><th>Wachtwoord</th><th>Voor</th><th>Geldig tot</th><th>Gebruikt</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
   <h2 id="bansH" hidden>Bans en time-outs</h2>
   <div class="wrap"><table id="bans" hidden>
     <thead><tr><th>Naam</th><th>Soort</th><th>Bericht</th><th>Tot</th><th></th></tr></thead>
@@ -127,6 +142,7 @@ async function load() {
       <td>${new Date(r.created).toLocaleDateString('nl-NL')}${r.ip ? `<br><small class="ip">${esc(r.ip)}</small>` : ''}</td>
       <td><div class="acts"><button class="to" data-ban="${esc(r.id)}" data-name="${esc(r.name)}" data-ip="${esc(r.ip || '')}" data-dev="${r.device ? 1 : ''}" data-kind="timeout">Time-out</button><button class="ban" data-ban="${esc(r.id)}" data-name="${esc(r.name)}" data-ip="${esc(r.ip || '')}" data-dev="${r.device ? 1 : ''}" data-kind="ban">Ban</button><button class="del" data-id="${esc(r.id)}" data-name="${esc(r.name)}">Verwijder</button></div></td></tr>`).join('');
     await loadBans();
+    await loadSchool();
     const cfg = await call('/api/admin/config');
     $('#cfg').hidden = false;
     $('#dates').value = (cfg.wedstrijden || []).join('\n');
@@ -163,6 +179,42 @@ $('#bans').onclick = async (e) => {
   const b = e.target.closest('[data-unban]');
   if (!b || !confirm(`Blokkade van ${b.dataset.name} opheffen?`)) return;
   try { await call('/api/admin/unban', { method: 'POST', body: JSON.stringify({ id: b.dataset.unban }) }); loadBans(); }
+  catch (err) { $('#msg').textContent = err.message; }
+};
+// ---------- schooltijd-wachtwoorden ----------
+async function loadSchool() {
+  const { rows, aan, nu, now } = await call('/api/admin/schoolpas');
+  $('#schoolBox').hidden = false;
+  $('#sAan').checked = aan;
+  $('#sNu').textContent = aan && nu ? '(nu dicht)' : '(nu open)';
+  $('#sTbl tbody').innerHTML = rows.length ? rows.map((r) => {
+    const oud = r.until != null && r.until < now;
+    return `<tr class="${oud ? 'oud' : ''}"><td><code>${esc(r.code)}</code></td><td>${esc(r.label || '')}</td>
+      <td>${r.until == null ? 'altijd' : fmtTot(r.until) + (oud ? ' (verlopen)' : '')}</td>
+      <td>${r.uses}x${r.last_used ? `<br><small class="ip">${fmtTot(r.last_used)}</small>` : ''}</td>
+      <td><button class="del" data-pas="${esc(r.code)}">Verwijder</button></td></tr>`;
+  }).join('') : '<tr><td colspan="5">Nog geen wachtwoorden</td></tr>';
+}
+$('#sAan').onchange = async () => {
+  try { await call('/api/admin/schoolpas', { method: 'POST', body: JSON.stringify({ aan: $('#sAan').checked }) }); loadSchool(); }
+  catch (e) { $('#msg').textContent = e.message; }
+};
+const WOORDEN = ['beker', 'friet', 'brommer', 'fiets', 'plus', 'necker', 'kroket', 'osso', 'hatert', 'goffert', 'asbest', 'troeki'];
+$('#sMaak').onclick = () => { $('#sCode').value = WOORDEN[Math.floor(Math.random() * WOORDEN.length)] + (10 + Math.floor(Math.random() * 90)); };
+$('#sAdd').onclick = async () => {
+  try {
+    const r = await fetch('/api/admin/schoolpas', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify({ code: $('#sCode').value, label: $('#sLabel').value, dagen: $('#sDagen').value }) });
+    const d = await r.json();
+    if (!r.ok) { $('#msg').textContent = d.error || 'Fout ' + r.status; return; }
+    $('#msg').textContent = `Wachtwoord "${d.code}" gemaakt`;
+    $('#sCode').value = ''; $('#sLabel').value = '';
+    loadSchool();
+  } catch (e) { $('#msg').textContent = e.message; }
+};
+$('#sTbl').onclick = async (e) => {
+  const b = e.target.closest('[data-pas]');
+  if (!b || !confirm(`Wachtwoord "${b.dataset.pas}" verwijderen? Wie het gebruikt, kan onder schooltijd dan niet meer spelen.`)) return;
+  try { await call('/api/admin/schoolpas/delete', { method: 'POST', body: JSON.stringify({ code: b.dataset.pas }) }); loadSchool(); }
   catch (err) { $('#msg').textContent = err.message; }
 };
 let banFor = null;

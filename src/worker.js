@@ -83,6 +83,32 @@ async function markSeen(db, id, dev, ip) {
     .bind(id, ID_RE.test(dev || '') ? dev : null, ip || null, Date.now()).run();
 }
 
+// ---------- schooltijd: doordeweeks 9:00-14:30 (Nederlandse tijd) dicht, behalve met een wachtwoord ----------
+const SCHOOL_VAN = 9 * 60, SCHOOL_TOT = 14 * 60 + 30;
+const SCHOOL_PADEN = new Set(['/api/score', '/api/weekly', '/api/fame']);
+function schoolUur(now = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(now).map((x) => [x.type, x.value]));
+  const m = Number(p.hour) * 60 + Number(p.minute);
+  return p.weekday !== 'Sat' && p.weekday !== 'Sun' && m >= SCHOOL_VAN && m < SCHOOL_TOT;
+}
+const pasCode = (raw) => String(raw || '').trim().toLowerCase().slice(0, 40);
+async function schoolAan(db) {
+  const r = await db.prepare("SELECT value FROM config WHERE key = 'schooltijd'").first();
+  return r ? JSON.parse(r.value) !== false : true;
+}
+async function pasGeldig(db, raw) {
+  const code = pasCode(raw);
+  if (!code) return false;
+  return !!(await db.prepare('SELECT 1 FROM schoolpas WHERE code = ? AND (until IS NULL OR until > ?)').bind(code, Date.now()).first());
+}
+// null = mag spelen; anders de reden waarom niet
+async function schoolDicht(req, db, url) {
+  if (!schoolUur() || !(await schoolAan(db))) return null;
+  if (await pasGeldig(db, req.headers.get('x-jr-pas') || url.searchParams.get('pas'))) return null;
+  return { error: 'Onder schooltijd is Jens Run dicht.', school: true };
+}
+
 function isAdmin(req, env) {
   const key = req.headers.get('x-admin-key') || '';
   return env.ADMIN_KEY && key.length > 0 && key === env.ADMIN_KEY;
@@ -97,12 +123,24 @@ async function api(req, env, url) {
     const blk = await activeBlock(db, b.id, devOf(req, url), ipOf(req));
     if (blk) return json({ error: blk.message, block: blk }, 403);
   }
+  if (req.method === 'POST' && SCHOOL_PADEN.has(path)) {
+    const dicht = await schoolDicht(req, db, url);
+    if (dicht) return json(dicht, 403);
+  }
 
   // bij het opstarten en af en toe: is deze speler (of dit apparaat/IP) geblokkeerd?
   if (path === '/api/status' && req.method === 'GET') {
     const id = url.searchParams.get('id') || '', dev = devOf(req, url), ip = ipOf(req);
     await markSeen(db, id, dev, ip);
-    return json({ block: await activeBlock(db, id, dev, ip) });
+    const pas = req.headers.get('x-jr-pas');
+    return json({ block: await activeBlock(db, id, dev, ip), school: { aan: await schoolAan(db), pas: pas ? await pasGeldig(db, pas) : null } });
+  }
+  // wachtwoord intypen op het schooltijd-scherm
+  if (path === '/api/schoolpas' && req.method === 'POST') {
+    const code = pasCode((await body(req)).code);
+    if (!(await pasGeldig(db, code))) return json({ error: 'Dat wachtwoord klopt niet.' }, 403);
+    await db.prepare('UPDATE schoolpas SET uses = uses + 1, last_used = ? WHERE code = ?').bind(Date.now(), code).run();
+    return json({ ok: true });
   }
 
   if (path === '/api/me' && req.method === 'GET') {
@@ -275,6 +313,8 @@ async function api(req, env, url) {
   // multiplayer met één knop: de eerste openbare kamer waar iemand wacht, anders een lege
   // (?mode=jacht: Shane jaagt, kamers voor precies twee spelers)
   if (path === '/api/live-quick' && req.method === 'GET') {
+    const dicht = await schoolDicht(req, db, url);
+    if (dicht) return json(dicht, 403);
     const jacht = new URL(req.url).searchParams.get('mode') === 'jacht';
     const prefix = jacht ? 'JP0' : 'QP0', max = jacht ? 2 : 4;
     let leeg = null;
@@ -293,6 +333,7 @@ async function api(req, env, url) {
     if (!/^[A-Z0-9]{4}$/.test(code)) return json({ error: 'code' }, 400);
     if (req.headers.get('Upgrade') !== 'websocket') return json({ error: 'websocket' }, 426);
     if (await activeBlock(db, url.searchParams.get('id'), devOf(req, url), ipOf(req))) return json({ error: 'geblokkeerd' }, 403);
+    if (await schoolDicht(req, db, url)) return json({ error: 'schooltijd' }, 403);
     return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(req);
   }
 
@@ -559,6 +600,28 @@ async function api(req, env, url) {
       const b = await body(req);
       if (!ID_RE.test(b.id || '')) return json({ error: 'id' }, 400);
       await db.prepare(`DELETE FROM ${b.c === 'nl' ? 'fame_nl' : 'fame'} WHERE player_id = ?`).bind(b.id).run();
+      return json({ ok: true });
+    }
+    if (path === '/api/admin/schoolpas' && req.method === 'GET') {
+      const { results } = await db.prepare('SELECT * FROM schoolpas ORDER BY created DESC').all();
+      return json({ rows: results, aan: await schoolAan(db), nu: schoolUur(), now: Date.now() });
+    }
+    if (path === '/api/admin/schoolpas' && req.method === 'POST') {
+      const b = await body(req);
+      if (typeof b.aan === 'boolean') {
+        await db.prepare("INSERT INTO config (key, value) VALUES ('schooltijd', ?1) ON CONFLICT (key) DO UPDATE SET value = ?1").bind(JSON.stringify(b.aan)).run();
+        return json({ ok: true });
+      }
+      const code = pasCode(b.code);
+      if (code.length < 4) return json({ error: 'Het wachtwoord moet minstens 4 tekens zijn.' }, 400);
+      const dagen = Number(b.dagen);
+      const until = Number.isFinite(dagen) && dagen > 0 ? Date.now() + Math.min(dagen, 3660) * 864e5 : null;
+      const r = await db.prepare('INSERT INTO schoolpas (code, label, until, created) VALUES (?, ?, ?, ?) ON CONFLICT (code) DO NOTHING')
+        .bind(code, String(b.label || '').trim().slice(0, 60) || null, until, Date.now()).run();
+      return r.meta.changes ? json({ ok: true, code }) : json({ error: 'Dat wachtwoord bestaat al.' }, 409);
+    }
+    if (path === '/api/admin/schoolpas/delete' && req.method === 'POST') {
+      await db.prepare('DELETE FROM schoolpas WHERE code = ?').bind(pasCode((await body(req)).code)).run();
       return json({ ok: true });
     }
     if (path === '/api/admin/bans' && req.method === 'GET') {

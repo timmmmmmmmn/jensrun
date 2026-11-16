@@ -266,6 +266,9 @@ const devId = (() => {
   document.cookie = `jrdev=${d}; max-age=157680000; path=/; samesite=lax`;
   return d;
 })();
+// schooltijd-wachtwoord van de beheerder (zie showSchool)
+let schoolPas = null, schoolAan = true;
+try { schoolPas = localStorage.getItem('jr-pas') || null; schoolAan = localStorage.getItem('jr-school-aan') !== '0'; } catch (e) { /* geen opslag */ }
 function persist() {
   save.updatedAt = Date.now();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* geen opslag */ }
@@ -3464,7 +3467,7 @@ window.addEventListener('pagehide', muteBackground);
 //  run flow
 // =====================================================================
 function startRun() {
-  if (showBlok()) return;
+  if (showBlok() || showSchool()) return;
   if (MODES[mode]?.mini) { startMini(mode); return; }
   if (jacht?.klaar) jachtStop();
   audioInit();
@@ -4619,7 +4622,7 @@ function showScreen(sel) {
   curScreen = sel;
   // Jesse popt elke keer opnieuw omhoog als je in het hoofdmenu komt
   if (sel === '#menu') { const j = $('#fmJesse'); j.classList.remove('pop'); void j.offsetWidth; j.classList.add('pop'); }
-  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer', '#blok']) $(s).classList.toggle('hidden', s !== sel);
+  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer', '#blok', '#school']) $(s).classList.toggle('hidden', s !== sel);
   for (const f of ['#fmModes', '#fmArt', '#fmLive']) $(f).classList.add('hidden');
   if (sel === '#menu') { renderWall(); renderFm(); }
   glasSluit(true);
@@ -5024,10 +5027,13 @@ $('#pinBtn').addEventListener('click', () => {
 
 // ---------- ranglijst ----------
 async function apiCall(path, data) {
-  const r = await fetch(path, data ? { method: 'POST', headers: { 'content-type': 'application/json', 'x-jr-dev': devId }, body: JSON.stringify(data) } : { headers: { 'x-jr-dev': devId } });
+  const headers = { 'x-jr-dev': devId };
+  if (schoolPas) headers['x-jr-pas'] = schoolPas;
+  const r = await fetch(path, data ? { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(data) } : { headers });
   let j = {};
   try { j = await r.json(); } catch (e) { /* leeg */ }
   if (r.status === 403 && j.block) setBlok(j.block);
+  if (r.status === 403 && j.school) zetSchoolPas(null);
   return { status: r.status, ok: r.ok, ...j };
 }
 function forgetName() { save.name = null; persist(); }
@@ -5118,7 +5124,16 @@ function setBlok(b) {
   if (!blokActief() && curScreen === '#blok') showScreen('#menu');
 }
 function checkBlok() {
-  apiCall('/api/status?id=' + save.playerId).then((r) => { if (r.ok) setBlok(r.block); }).catch(() => {});
+  apiCall('/api/status?id=' + save.playerId).then((r) => {
+    if (!r.ok) return;
+    setBlok(r.block);
+    if (r.school) {
+      schoolAan = r.school.aan !== false;
+      try { localStorage.setItem('jr-school-aan', schoolAan ? '1' : '0'); } catch (e) { /* geen opslag */ }
+      if (r.school.pas === false) zetSchoolPas(null);
+      schoolCheck();
+    }
+  }).catch(() => {});
 }
 function blokTijd() {
   if (!blokActief()) { clearInterval(blokTimer); if (curScreen === '#blok') showScreen('#menu'); return; }
@@ -5138,6 +5153,46 @@ function showBlok() {
   return true;
 }
 $('#blokOk').addEventListener('click', () => showScreen('#menu'));
+// ---------- schooltijd: doordeweeks 9:00-14:30 dicht, tenzij je een wachtwoord van de beheerder hebt ----------
+// de server weigert dan ook scores en live; de klok hier is Nederlandse tijd, ook op een telefoon in het buitenland
+function schoolUur(now = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(now).map((x) => [x.type, x.value]));
+  const m = Number(p.hour) * 60 + Number(p.minute);
+  return p.weekday !== 'Sat' && p.weekday !== 'Sun' && m >= 9 * 60 && m < 14 * 60 + 30;
+}
+function zetSchoolPas(code) {
+  schoolPas = code || null;
+  try { if (schoolPas) localStorage.setItem('jr-pas', schoolPas); else localStorage.removeItem('jr-pas'); } catch (e) { /* geen opslag */ }
+}
+const schoolDicht = () => schoolAan && !schoolPas && schoolUur();
+// geeft true als er niet gespeeld mag worden (en laat dan het scherm zien)
+function showSchool() {
+  if (!schoolDicht()) return false;
+  if (live) liveClose();
+  $('#schoolPas').value = '';
+  $('#schoolFout').textContent = '';
+  showScreen('#school');
+  return true;
+}
+function schoolCheck() {
+  if (schoolDicht() && curScreen === '#menu') showSchool();
+  else if (!schoolDicht() && curScreen === '#school') showScreen('#menu');
+}
+async function schoolProbeer() {
+  const code = $('#schoolPas').value.trim().toLowerCase();
+  if (!code) return;
+  $('#schoolFout').textContent = '';
+  try {
+    const r = await apiCall('/api/schoolpas', { code });
+    if (!r.ok) { $('#schoolFout').textContent = r.error || 'Dat wachtwoord klopt niet.'; return; }
+    zetSchoolPas(code);
+    showScreen('#menu');
+  } catch (e) { $('#schoolFout').textContent = 'Geen verbinding, probeer het zo nog eens.'; }
+}
+$('#schoolOk').addEventListener('click', schoolProbeer);
+$('#schoolPas').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') schoolProbeer(); });
+setInterval(schoolCheck, 20000);
 checkBlok();
 setInterval(() => { if (!document.hidden) checkBlok(); }, 90000);
 
@@ -12479,7 +12534,7 @@ function liveConnect(code, quick) {
   if (!/^[A-Z0-9]{4}$/.test(code)) { note('Een kamercode heeft 4 tekens'); return; }
   liveClose();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/api/live/${code}?id=${save.playerId}&dev=${devId}`);
+  const ws = new WebSocket(`${proto}://${location.host}/api/live/${code}?id=${save.playerId}&dev=${devId}${schoolPas ? '&pas=' + encodeURIComponent(schoolPas) : ''}`);
   live = { ws, code, quick, players: [], ghosts: new Map(), results: new Map(), started: false };
   let verbonden = false;
   ws.onopen = () => { verbonden = true; jachtPogingen = 0; liveSend({ t: 'hello', name: liveName(), pid: save.playerId }); };
@@ -13473,7 +13528,7 @@ function fxDing() {
   return dingN;
 }
 function startMini(kind) {
-  if (showBlok()) return;
+  if (showBlok() || showSchool()) return;
   audioInit();
   stopGameover();
   resetRun();
