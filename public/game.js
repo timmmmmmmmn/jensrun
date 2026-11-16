@@ -4233,9 +4233,9 @@ function updateCamera(dt) {
       camTargetLook.set(off, y - (portrait ? (shirt ? 0.55 : 0.32) : 0), 0);
     } else if (schoolRent()) {
       // de wachtende bende van voren; breed scherm: bende rechts, slot links. Telefoon: hoog richten, dan staan ze onder het slot
-      const x = wide ? 1.7 : 0;
-      camTargetPos.set(x + (wide ? 0 : 0.2), portrait ? 1.1 : 1.45, portrait ? -6.2 : -4.9);
-      camTargetLook.set(x + (wide ? 0 : 0.2), portrait ? 2.2 : 1.2, 1);
+      const x = wide ? 1.9 : 0;
+      camTargetPos.set(x, portrait ? 2.1 : 2.1, portrait ? -5.7 : -4.9);
+      camTargetLook.set(x, portrait ? 2.0 : 1.1, 1.4);
     } else if (state === 'menu') {
       if (portrait) { camTargetPos.set(px + 0.7, 1.75, -4.7); camTargetLook.set(px + 0.05, 0.62, 1.6); } // mobiel menu: Jens in het midden
       else {
@@ -5212,71 +5212,186 @@ async function schoolProbeer() {
 // lui gebouwd (alleen wie onder schooltijd opent), schermvullend dus niet via de batches
 let schoolBende = null, schoolT = 0;
 const JENS_WACHT = ['Is het al half drie?', 'Saaaai...', 'Nog even volhouden.', 'Wanneer mag ik rennen?', 'Ik verveel me kapot.'];
-const LINUS_SLOT = ['Mmm, vers!', 'Luchtgitaar!', 'Wie wil er brood?', 'Ik oefen alvast.'];
-const WILD_SLOT = ['RAAAH!', 'Grrr!', 'Hihihi!', 'BOE!'];
+const SLOT_ROEP = {
+  jos: ['Jens, briefje halen!', 'Jens, je bent te laat!', 'Eerst een briefje!', 'Dit is al de derde keer!'],
+  linus: ['Mmm, vers!', 'Luchtgitaar!', 'Wie wil er brood?', 'Ik oefen alvast.'],
+  jules: ['O2 voor iedereen!', 'Psssst!', 'Even opfrissen!', 'Ruik eens!'],
+  tim: ['NEC!', 'Die beker is van ons!', 'Goal!', 'Hier, Patrick!'],
+  patrick: ['Te zacht man!', 'Mijn bal!', 'Ik ben sneller op m\'n brommer.', 'Kom op dan!'],
+  jesse: ['♪ Jens Run Theme Song ♪', '♪♫♪', 'Nog één keer vanaf het refrein!', '♫ la la laaa ♫'],
+  boa: ['Bonnetje!', 'Staan blijven!', 'Ik schrijf je op!', 'Jij weer?!', 'Niet aan het hek zitten!'],
+  wild: ['RAAAH!', 'Grrr!', 'Hihihi!', 'BOE!'],
+};
+// hek: tralies in één InstancedMesh, met palen, twee liggers en een bordje
+function maakSchoolHek() {
+  const g = new THREE.Group(), staal = M('#8f969e'), BREED = 12;
+  const n = Math.round(BREED / 0.2), tralie = new THREE.InstancedMesh(box(0.035, 2.0, 0.035), staal, n), m4 = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) tralie.setMatrixAt(i, m4.makeTranslation(-BREED / 2 + i * 0.2 + 0.1, 1.0, 0));
+  g.add(tralie);
+  for (const y of [0.12, 1.92]) g.add(mesh(box(BREED, 0.07, 0.07), staal, 0, y, 0));
+  for (let x = -BREED / 2; x <= BREED / 2; x += 2.4) g.add(mesh(box(0.09, 2.1, 0.09), M('#5b6168'), x, 1.05, 0));
+  const bord = canvasTex(256, 96, (x) => { x.fillStyle = '#c8202b'; x.fillRect(0, 0, 256, 96); x.fillStyle = '#fff'; x.font = '44px Anton, Impact, sans-serif'; x.textAlign = 'center'; x.fillText('GESLOTEN', 128, 50); x.font = '24px Anton, Impact, sans-serif'; x.fillText('TOT 14:30', 128, 84); });
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.42), new THREE.MeshBasicMaterial({ map: bord }));
+  b.position.set(1.9, 0.62, -0.05); b.rotation.y = Math.PI; g.add(b);
+  g.userData.bord = b;
+  return g;
+}
 function maakSchoolBende() {
   const g = new THREE.Group();
-  const shane = makeShane(), jos = makeJos(), linus = makeLinus();
-  // Jos houdt een briefje omhoog
-  const briefje = mesh(box(0.2, 0.28, 0.01), M('#fbfbf2'), 0, -0.12, -0.06);
-  jos.handR.add(briefje);
-  const wild = new THREE.Group();
-  wild.add(new THREE.Mesh(wildRandGeo, wildRandMat), new THREE.Mesh(wildGeo, wildMat));
-  wild.rotation.y = Math.PI; // met het plaatje naar de camera
-  wild.scale.setScalar(0.62);
-  for (const p of [shane, jos, linus]) g.add(p.root);
-  g.add(wild);
-  jos.root.position.set(1.25, 0, 0.3);
-  jos.root.rotation.y = -0.3;
-  linus.root.position.set(2.05, 0, 1.5);
-  linus.root.rotation.y = -0.45;
+  const b = { g, praat: {}, puf: [], vast: [] };
+  // vaste x-plekken worden elke frame met de schermbreedte geschaald (smal scherm: dichter op elkaar)
+  const add = (p, x, z, ry = 0) => { p.root.position.set(x, 0, z); p.root.rotation.y = ry; g.add(p.root); b.vast.push([p.root, x]); return p; };
+  b.hek = maakSchoolHek(); b.hek.position.z = -1.4; g.add(b.hek); b.vast.push([b.hek.userData.bord, 1.9]);
+  // voorste rij: Jens, Jos met een briefje, Shane die sluipt
+  b.jos = add(makeJos(), 1.4, 0.3, -0.3);
+  b.jos.handR.add(mesh(box(0.2, 0.28, 0.01), M('#fbfbf2'), 0, -0.12, -0.06));
+  b.shane = add(makeShane(), -3, 0.15);
+  // middelste rij: Linus, Jesse achter z'n keyboard, Jules met O2, en de BOA die rondloopt
+  b.linus = add(makeLinus(), 2.5, 1.7, -0.45);
+  b.jesse = add(makeVriend('jesse'), 0.9, 1.9);
+  const keys = new THREE.Group();
+  keys.add(mesh(box(1.0, 0.08, 0.32), M('#151515'), 0, 0.95, 0));
+  keys.add(mesh(box(0.94, 0.02, 0.16), M('#f4f4f4'), 0, 1.0, -0.06));
+  for (let i = 0; i < 7; i++) keys.add(mesh(box(0.05, 0.025, 0.09), M('#111'), -0.39 + i * 0.13, 1.01, -0.02));
+  for (const x of [-0.42, 0.42]) keys.add(mesh(box(0.04, 0.92, 0.04), M('#444'), x, 0.46, 0));
+  keys.position.set(0.9, 0, 1.5); g.add(keys); b.vast.push([keys, 0.9]);
+  b.jules = add(makeJules(), -1.4, 1.6, 0.25);
+  b.boa = add(makeBoa(), -3, 2.6);
+  // achterste rij: Tim en Patrick voetballen
+  b.tim = add(makeVriend('tim'), 1.9, 3.6, -Math.PI / 2 - 0.2);
+  b.patrick = add(makeVriend('patrick'), -1.9, 3.6, Math.PI / 2 + 0.2);
+  b.bal = mesh(sphG(0.12, 7, 5), M('#f4f4f4'), 0, 0.12, 3.6); g.add(b.bal);
+  // Saar rent voor iedereen langs, het loslopend wild klimt aan de zijkant tegen het hek op
+  b.saar = makeSaar(); b.saar.scale.setScalar(0.85); g.add(b.saar);
+  b.wild = new THREE.Group();
+  b.wild.add(new THREE.Mesh(wildRandGeo, wildRandMat), new THREE.Mesh(wildGeo, wildMat));
+  b.wild.rotation.y = Math.PI; // met het plaatje naar de camera
+  b.wild.scale.setScalar(0.4);
+  g.add(b.wild);
+  // wolkjes O2 uit het flesje van Jules
+  for (let i = 0; i < 8; i++) { const m = mesh(sphG(0.09, 5, 4), new THREE.MeshBasicMaterial({ color: '#dff1ff', transparent: true, opacity: 0.8 }), 0, -9, 0); g.add(m); b.puf.push({ m, t: 9 }); }
+  let w = 1;
+  for (const k of ['jens', ...Object.keys(SLOT_ROEP)]) b.praat[k] = (w += 1.1);
   scene.add(g);
-  return { g, shane, jos, linus, wild, praat: { jens: 3, jos: 1.5, linus: 5, wild: 7 } };
+  return b;
 }
 function updSchoolScene(dt) {
   const aan = schoolRent();
-  if (!aan) { if (schoolBende?.g.visible) { schoolBende.g.visible = false; jensPhone.visible = mode === 'telefoon'; jens.head.rotation.set(0, 0, 0); } return; }
+  if (!aan) { if (schoolBende?.g.visible) { schoolBende.g.visible = false; jensPhone.visible = mode === 'telefoon'; jens.head.rotation.set(0, 0, 0); jens.root.position.set(0, 0, 0); } return; }
   if (!schoolBende) schoolBende = maakSchoolBende();
-  const b = schoolBende, t = (schoolT += dt);
+  const b = schoolBende, t = (schoolT += dt), sy = Math.sin;
   b.g.visible = true;
-  jensPhone.visible = true;
-  // Shane sluipt (cyclus van 10 s) op z'n tenen naar Jens' telefoon; Jens kijkt net op tijd op
-  const c = t % 10, sh = b.shane;
-  let sx, kijk = 0;
-  if (c < 4) { sx = -3.4 + c * 0.6; sh.root.rotation.y = -Math.PI / 2; pose(sh, 'run', dt, 0.35); }
+  b.hek.position.x = 0;
+  const K = camera.aspect < 0.8 ? 0.6 : 0.8;
+  for (const [o, x] of b.vast) o.position.x = x * K;
+  // Jens (cyclus 16 s): wachten op z'n telefoon, dan naar het hek en aan de tralies rammelen
+  const c = t % 16;
+  let jz = 0, kijk = 0;
+  if (c < 9) {
+    pose(jens, 'phoneIdle', dt);
+    jens.legR.rotation.x = 0; jens.kneeR.rotation.x = -Math.max(0, sy(t * 9)) * 0.25;
+    jensPhone.visible = true;
+  } else if (c < 10) { jz = -(c - 9) * 0.9; pose(jens, 'run', dt, 0.5); jensPhone.visible = false; }
+  else if (c < 13.5) {
+    jz = -0.9; pose(jens, 'idle', dt); jensPhone.visible = false;
+    jens.armL.rotation.x = jens.armR.rotation.x = 1.75 + sy(t * 22) * 0.12; jens.elL.rotation.x = jens.elR.rotation.x = 0.35;
+    b.hek.position.x = sy(t * 40) * 0.025;
+    if (!b.rammel) { b.rammel = true; bubble(jens.head, pick(['Laat me eruit!', 'Ik wil rennen!', 'Is het nou nog geen half drie?!']), 'shout', 2.4); noise(0.25, 0.06); }
+  } else { jz = -0.9 + (c - 13.5) * 0.36; pose(jens, 'run', dt, 0.4); jensPhone.visible = false; }
+  if (c < 9) b.rammel = false;
+  jens.root.position.set(0, 0, jz);
+  // Shane sluipt naar de telefoon terwijl Jens wacht, en wordt betrapt
+  const sh = b.shane;
+  let sx = -3;
+  if (c < 4) { sx = -3.2 + c * 0.55; sh.root.rotation.y = -Math.PI / 2; pose(sh, 'run', dt, 0.35); }
   else if (c < 5) { sx = -1.0; sh.root.rotation.y = -Math.PI / 2; pose(sh, 'reach', dt); sh.armR.rotation.x = 1.5; }
   else if (c < 7.5) {
-    // betrapt: stil staan, handen op de rug, fluiten
     sx = -1.0; kijk = 1; sh.root.rotation.y = damp(sh.root.rotation.y, 0, 8, dt); pose(sh, 'idle', dt);
     sh.armL.rotation.x = sh.armR.rotation.x = -0.6;
-    if (!b.betrapt) { b.betrapt = true; bubble(sh.head, pick(['Ik doe niks!', 'Fiuuuw...', 'Mooi weer hè?']), '', 2); bubble(jens.head, 'Shane!', '', 1.2); }
-  } else { sx = -1.0 - (c - 7.5) * 0.96; sh.root.rotation.y = Math.PI / 2; pose(sh, 'run', dt, 0.6); }
+    if (!b.betrapt) { b.betrapt = true; bubble(sh.head, pick(['Ik doe niks!', 'Fiuuuw...', 'Mooi weer hè?']), '', 2); bubble(jens.head, 'SHANE!', 'shout', 1.4); }
+  } else if (c < 10) { sx = -1.0 - (c - 7.5) * 0.88; sh.root.rotation.y = Math.PI / 2; pose(sh, 'run', dt, 0.6); }
+  else { sx = -3.2; sh.root.rotation.y = 0; pose(sh, c > 11 ? 'point' : 'idle', dt, 0.15); } // lacht Jens uit bij het hek
   if (c < 5) b.betrapt = false;
-  sh.root.position.set(sx, 0, 0.15);
-  // Jens: scrollt op z'n telefoon, wipt met z'n voet en kijkt af en toe zuchtend op
-  pose(jens, 'phoneIdle', dt);
-  jens.legR.rotation.x = 0; jens.kneeR.rotation.x = -Math.max(0, Math.sin(t * 9)) * 0.25;
-  const op = Math.sin(t * 0.7) > 0.85;
+  sh.root.position.set(sx * K, 0, 0.15);
   jens.head.rotation.y = damp(jens.head.rotation.y, kijk ? 1.0 : 0, 6, dt);
-  jens.head.rotation.x = damp(jens.head.rotation.x, kijk || op ? 0 : 0.35, 4, dt);
-  // Jos zwaait met een briefje
+  jens.head.rotation.x = damp(jens.head.rotation.x, c < 9 && !kijk && sy(t * 0.7) < 0.85 ? 0.35 : 0, 4, dt);
+  // Jos zwaait met z'n briefje en loopt Jens achterna als die bij het hek staat
   pose(b.jos, 'wenk', dt);
+  b.jos.root.position.z = damp(b.jos.root.position.z, c > 10 && c < 13.5 ? -0.5 : 0.3, 2, dt);
   // Linus: luchtgitaar op z'n stokbrood, en af en toe een hap
   const l = b.linus, lc = t % 7;
   pose(l, 'idle', dt);
-  if (lc < 4.5) { l.armR.rotation.x = 0.45; l.elR.rotation.x = 1.6 + Math.sin(t * 18) * 0.3; l.armL.rotation.x = 1.0; l.elL.rotation.x = 0.9; l.body.position.y = Math.abs(Math.sin(t * 6)) * 0.06; }
+  if (lc < 4.5) { l.armR.rotation.x = 0.45; l.elR.rotation.x = 1.6 + sy(t * 18) * 0.3; l.armL.rotation.x = 1.0; l.elL.rotation.x = 0.9; l.body.position.y = Math.abs(sy(t * 6)) * 0.06; }
   else { l.armR.rotation.x = 1.6; l.elR.rotation.x = 2.2; }
-  // het loslopend wild huppelt achter ze heen en weer, met een grote sprong af en toe
-  const wc = t % 6, hup = Math.abs(Math.sin(t * 5)) * 0.35 + (wc > 4.6 && wc < 5.4 ? Math.sin((wc - 4.6) / 0.8 * Math.PI) * 1.6 : 0);
-  b.wild.position.set(Math.sin(t * 0.55) * 2.2, hup, 2.6);
-  b.wild.scale.y = 0.62 * (hup < 0.05 ? 0.9 : 1.04);
-  // praatwolkjes om de beurt
-  const p = b.praat;
-  for (const k in p) p[k] -= dt;
-  if (p.jens < 0) { p.jens = 9 + Math.random() * 4; if (!kijk) bubble(jens.head, pick(JENS_WACHT), '', 2.2); }
-  if (p.jos < 0) { p.jos = 8 + Math.random() * 4; bubble(b.jos.head, pick(['Jens, briefje halen!', 'Jens, je bent te laat!', 'Eerst een briefje!']), '', 2.2); }
-  if (p.linus < 0) { p.linus = 9 + Math.random() * 5; bubble(l.head, pick(LINUS_SLOT), '', 2); }
-  if (p.wild < 0) { p.wild = 8 + Math.random() * 5; bubble(b.wild, pick(WILD_SLOT), 'shout', 1.4, 2.2); }
+  // Jesse speelt keyboard, hoofd mee op de maat
+  const je = b.jesse;
+  pose(je, 'idle', dt);
+  je.armL.rotation.x = 0.85; je.armR.rotation.x = 0.85;
+  je.elL.rotation.x = 0.7 + sy(t * 13) * 0.18; je.elR.rotation.x = 0.7 + sy(t * 13 + 1.7) * 0.18;
+  je.head.rotation.x = 0.15 + sy(t * 6.3) * 0.12; je.body.position.y = Math.abs(sy(t * 3.15)) * 0.03;
+  // Jules spuit elke 6 s een wolk O2 richting jou
+  const ju = b.jules, jc = t % 6;
+  pose(ju, 'idle', dt);
+  ju.armR.rotation.x = jc > 4 && jc < 5.2 ? 1.6 : 0.3; ju.elR.rotation.x = 0.2;
+  if (jc > 4.1 && !b.spoot) {
+    b.spoot = true;
+    ju.handR.getWorldPosition(tmpV);
+    for (const p of b.puf) { p.t = 0; p.m.position.copy(b.g.worldToLocal(tmpV.clone())); p.v = new THREE.Vector3(rand(-0.4, 0.4), rand(0, 0.5), -rand(2.5, 4)); }
+    noise(0.4, 0.05);
+  }
+  if (jc < 4) b.spoot = false;
+  for (const p of b.puf) {
+    p.t += dt;
+    p.m.visible = p.t < 1.6;
+    if (!p.m.visible) continue;
+    p.m.position.addScaledVector(p.v, dt);
+    p.m.scale.setScalar(1 + p.t * 1.6);
+    p.m.material.opacity = 0.8 * (1 - p.t / 1.6);
+  }
+  // de BOA loopt heen en weer en schrijft iedereen op
+  const bo = b.boa, bc = t % 12;
+  if (bc < 4) { bo.root.position.x = (-3 + bc * 1.5) * K; bo.root.rotation.y = -Math.PI / 2; pose(bo, 'run', dt, 0.45); }
+  else if (bc < 6) { bo.root.position.x = 3 * K; bo.root.rotation.y = damp(bo.root.rotation.y, 0, 6, dt); pose(bo, 'point', dt, 0.2); }
+  else if (bc < 10) { bo.root.position.x = (3 - (bc - 6) * 1.5) * K; bo.root.rotation.y = Math.PI / 2; pose(bo, 'run', dt, 0.45); }
+  else { bo.root.position.x = -3 * K; bo.root.rotation.y = damp(bo.root.rotation.y, 0, 6, dt); pose(bo, 'point', dt, 0.2); }
+  // Tim en Patrick schieten de bal over en weer
+  const heen = Math.floor(t / 1.4) % 2 === 0, f = (t % 1.4) / 1.4;
+  b.bal.position.set((heen ? 1.6 - f * 3.2 : -1.6 + f * 3.2) * K, 0.12 + sy(f * Math.PI) * 0.9, 3.6);
+  b.bal.rotation.z += dt * 9;
+  pose(b.tim, 'idle', dt); pose(b.patrick, 'idle', dt);
+  const trapper = heen ? b.tim : b.patrick;
+  trapper.legR.rotation.x = f < 0.15 ? 1.2 * sy(f / 0.15 * Math.PI) : 0;
+  (heen ? b.patrick : b.tim).armL.rotation.x = 0.6 + sy(t * 4) * 0.2;
+  // Saar rent voor iedereen langs
+  const sp = 0.75, s0 = sy(t * sp) * 3.0, sv = Math.cos(t * sp);
+  b.saar.position.set(s0 * K, 0, -0.75);
+  b.saar.rotation.y = sv > 0 ? Math.PI / 2 : -Math.PI / 2;
+  const su = b.saar.userData;
+  su.legs.forEach((lg, i) => { lg.rotation.x = sy(t * 16 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.7; });
+  su.tail.rotation.y = sy(t * 18) * 0.6;
+  b.saar.position.y = Math.abs(sy(t * 8)) * 0.06;
+  // het wild klimt (cyclus 8 s) tegen het hek op, valt eraf en huppelt even rond
+  const wc = t % 8, klim = wc < 4 ? wc / 4 * 0.9 : wc < 4.4 ? 0.9 * (1 - (wc - 4) / 0.4) : 0;
+  const hup = wc >= 4.4 ? Math.abs(sy(t * 6)) * 0.35 : 0;
+  b.wild.position.set((-2.6 + (wc >= 4.4 ? sy((wc - 4.4) * 1.7) * 0.5 : 0)) * K, klim + hup + (wc < 4 ? sy(t * 9) * 0.04 : 0), wc < 4.4 ? -1.25 : -0.9);
+  b.wild.rotation.z = wc < 4 ? sy(t * 9) * 0.08 : 0;
+  b.wild.scale.y = 0.4 * (wc >= 4.4 && hup < 0.05 ? 0.88 : 1);
+  if (wc > 3.95 && wc < 4.05 && !b.wildVal) { b.wildVal = true; bubble(b.wild, 'AAAH!', 'shout', 1, 1.6); }
+  if (wc < 1) b.wildVal = false;
+  // praatwolkjes om de beurt, niet allemaal tegelijk
+  const pr = b.praat;
+  for (const k in pr) pr[k] -= dt;
+  const wolk = (k, obj, lijst, cls = '', yOff) => { if (pr[k] < 0) { pr[k] = 9 + Math.random() * 7; bubble(obj, pick(lijst), cls, 2.2, yOff); } };
+  if (c < 9 && !kijk) wolk('jens', jens.head, JENS_WACHT);
+  wolk('jos', b.jos.head, SLOT_ROEP.jos);
+  wolk('linus', l.head, SLOT_ROEP.linus);
+  wolk('jules', ju.head, SLOT_ROEP.jules);
+  wolk('tim', b.tim.head, SLOT_ROEP.tim);
+  wolk('patrick', b.patrick.head, SLOT_ROEP.patrick);
+  wolk('jesse', je.head, SLOT_ROEP.jesse);
+  wolk('boa', bo.head, SLOT_ROEP.boa, 'shout');
+  wolk('wild', b.wild, SLOT_ROEP.wild, 'shout', 1.9);
+  if (pr.saar === undefined || pr.saar < 0) { pr.saar = 5 + Math.random() * 4; bubble(su.head, 'WOEF!', 'shout', 1.1, 0.4); }
 }
 $('#schoolOk').addEventListener('click', schoolProbeer);
 $('#schoolPasOpen').addEventListener('click', () => { $('#schoolPasOpen').classList.add('hidden'); $('#schoolPasBox').classList.remove('hidden'); $('#schoolPas').focus(); });
@@ -5675,13 +5790,16 @@ MODES.verhaal = {
   hidden: true, label: 'Verhaal', icon: '📖', chaser: 'de BOA', nearTime: 5,
   desc: '', lines: ['STAAN BLIJVEN!', 'HANDHAVING!', 'Dat wordt een boete!', 'Ik schrijf je op!', 'Jij weer?!'], catchLine: 'Zo. Bonnetje.',
 };
-{
-  const p = makePerson({ key: 'boa', skin: '#e8c3a6', hair: '#3a2a1e', hairStyle: 'boapet',
+function makeBoa() {
+  return makePerson({ key: 'boa', skin: '#e8c3a6', hair: '#3a2a1e', hairStyle: 'boapet',
     shirt: { base: '#1c2433', paint(x, side) {
       if (side === 'back') text(x, 'HANDHAVING', '#ffd23f', 18, 40);
       else { x.fillStyle = '#ffd23f'; x.fillRect(80, 30, 18, 12); x.fillStyle = '#c9cde6'; x.fillRect(30, 30, 20, 4); }
     } },
     pants: '#141a26', shoes: '#111', face: { skin: '#e8c3a6', angry: true, brow: '#3a2a1e', stubble: '#3a2a1e' }, scale: [1.08, 1.05, 1.08] });
+}
+{
+  const p = makeBoa();
   p.style = 'point';
   p.label = null;
   p.root.visible = false;
