@@ -2015,14 +2015,18 @@ const chasers = {};
   p.style = 'bike';
   chasers.fiets = p;
 }
-{
-  // Shane: knot, stoppels, zwarte hoodie met bandprint
+// Shane: knot, stoppels, zwarte hoodie met bandprint (ook in het schooltijd-slot)
+function makeShane() {
   const p = makePerson({ key: 'shane', skin: '#f0cbb2', hair: '#7a4a2c', hairStyle: 'knot', shirt: { base: '#151515', paint(x, side) {
       if (side === 'front') { x.fillStyle = '#c9cfd8'; x.fillRect(58, 0, 2, 50); x.fillRect(68, 0, 2, 50); text(x, 'WINTERSUN', '#7f9fe0', 16, 92); }
       else { x.fillStyle = '#222'; x.fillRect(30, 0, 68, 26); } // capuchon
     } }, pants: '#2a2f3a', shoes: '#1a1a1a',
     face: { skin: '#f0cbb2', brow: '#6a4428', stubble: '#7a4a2c' } });
   longSleeves(p, fabricMat('#151515'));
+  return p;
+}
+{
+  const p = makeShane();
   p.style = 'grab';
   chasers.telefoon = p;
 }
@@ -4228,11 +4232,10 @@ function updateCamera(dt) {
       camTargetPos.set(off, y + (portrait ? 0.15 : 0.05), shirt ? -1.75 : -0.95);
       camTargetLook.set(off, y - (portrait ? (shirt ? 0.55 : 0.32) : 0), 0);
     } else if (schoolRent()) {
-      // groot en recht van voren, laag zodat hij op je neerkijkt; breed scherm: Jens rechts, slot links
-      const x = wide ? 0.75 : 0;
-      // telefoon: hoog richten zodat zijn hoofd onder het slot uitkomt
-      camTargetPos.set(px + x, portrait ? 0.95 : 1.15, portrait ? -2.5 : -2.3);
-      camTargetLook.set(px + x, portrait ? 1.85 : 1.3, 0);
+      // de wachtende bende van voren; breed scherm: bende rechts, slot links. Telefoon: hoog richten, dan staan ze onder het slot
+      const x = wide ? 1.7 : 0;
+      camTargetPos.set(x + (wide ? 0 : 0.2), portrait ? 1.1 : 1.45, portrait ? -6.2 : -4.9);
+      camTargetLook.set(x + (wide ? 0 : 0.2), portrait ? 2.2 : 1.2, 1);
     } else if (state === 'menu') {
       if (portrait) { camTargetPos.set(px + 0.7, 1.75, -4.7); camTargetLook.set(px + 0.05, 0.62, 1.6); } // mobiel menu: Jens in het midden
       else {
@@ -4583,16 +4586,17 @@ renderer.setAnimationLoop(() => {
   else if (state === 'menu' || state === 'shop' || state === 'over') {
     if (state !== 'over') {
       // op slot onder schooltijd: Jens rent recht op je af, de straat schuift onder hem door
-      if (schoolRent()) { speed = 11; pose(jens, 'run', dt); }
-      else pose(jens, mode === 'telefoon' ? 'phoneIdle' : 'idle', dt);
+      if (!schoolRent()) pose(jens, mode === 'telefoon' ? 'phoneIdle' : 'idle', dt);
       jens.root.position.set(0, 0, 0);
       jens.root.rotation.set(0, 0, 0);
       kamer.visible = false;
+      updSchoolScene(dt);
     } else pose(jens, deathReason === 'gat' || deathReason === 'gepakt' ? 'grabbed' : 'idle', dt);
-    moveWorld(schoolRent() ? speed * dt : 0, dt);
+    moveWorld(0, dt);
   }
   if (state !== 'paused') {
-    updateChaser(dt, state === 'run' || schoolRent());
+    updateChaser(dt, state === 'run');
+    if (schoolRent() && chaser()) chaser().root.visible = false;
     updDuizelig(dt);
     updWild(dt);
   }
@@ -5203,6 +5207,76 @@ async function schoolProbeer() {
     zetSchoolPas(code);
     showScreen('#menu');
   } catch (e) { $('#schoolFout').textContent = 'Geen verbinding, probeer het zo nog eens.'; }
+}
+// ---------- het slot: Jens staat te wachten tot het half drie is, de rest vermaakt zich ----------
+// lui gebouwd (alleen wie onder schooltijd opent), schermvullend dus niet via de batches
+let schoolBende = null, schoolT = 0;
+const JENS_WACHT = ['Is het al half drie?', 'Saaaai...', 'Nog even volhouden.', 'Wanneer mag ik rennen?', 'Ik verveel me kapot.'];
+const LINUS_SLOT = ['Mmm, vers!', 'Luchtgitaar!', 'Wie wil er brood?', 'Ik oefen alvast.'];
+const WILD_SLOT = ['RAAAH!', 'Grrr!', 'Hihihi!', 'BOE!'];
+function maakSchoolBende() {
+  const g = new THREE.Group();
+  const shane = makeShane(), jos = makeJos(), linus = makeLinus();
+  // Jos houdt een briefje omhoog
+  const briefje = mesh(box(0.2, 0.28, 0.01), M('#fbfbf2'), 0, -0.12, -0.06);
+  jos.handR.add(briefje);
+  const wild = new THREE.Group();
+  wild.add(new THREE.Mesh(wildRandGeo, wildRandMat), new THREE.Mesh(wildGeo, wildMat));
+  wild.rotation.y = Math.PI; // met het plaatje naar de camera
+  wild.scale.setScalar(0.62);
+  for (const p of [shane, jos, linus]) g.add(p.root);
+  g.add(wild);
+  jos.root.position.set(1.25, 0, 0.3);
+  jos.root.rotation.y = -0.3;
+  linus.root.position.set(2.05, 0, 1.5);
+  linus.root.rotation.y = -0.45;
+  scene.add(g);
+  return { g, shane, jos, linus, wild, praat: { jens: 3, jos: 1.5, linus: 5, wild: 7 } };
+}
+function updSchoolScene(dt) {
+  const aan = schoolRent();
+  if (!aan) { if (schoolBende?.g.visible) { schoolBende.g.visible = false; jensPhone.visible = mode === 'telefoon'; jens.head.rotation.set(0, 0, 0); } return; }
+  if (!schoolBende) schoolBende = maakSchoolBende();
+  const b = schoolBende, t = (schoolT += dt);
+  b.g.visible = true;
+  jensPhone.visible = true;
+  // Shane sluipt (cyclus van 10 s) op z'n tenen naar Jens' telefoon; Jens kijkt net op tijd op
+  const c = t % 10, sh = b.shane;
+  let sx, kijk = 0;
+  if (c < 4) { sx = -3.4 + c * 0.6; sh.root.rotation.y = -Math.PI / 2; pose(sh, 'run', dt, 0.35); }
+  else if (c < 5) { sx = -1.0; sh.root.rotation.y = -Math.PI / 2; pose(sh, 'reach', dt); sh.armR.rotation.x = 1.5; }
+  else if (c < 7.5) {
+    // betrapt: stil staan, handen op de rug, fluiten
+    sx = -1.0; kijk = 1; sh.root.rotation.y = damp(sh.root.rotation.y, 0, 8, dt); pose(sh, 'idle', dt);
+    sh.armL.rotation.x = sh.armR.rotation.x = -0.6;
+    if (!b.betrapt) { b.betrapt = true; bubble(sh.head, pick(['Ik doe niks!', 'Fiuuuw...', 'Mooi weer hè?']), '', 2); bubble(jens.head, 'Shane!', '', 1.2); }
+  } else { sx = -1.0 - (c - 7.5) * 0.96; sh.root.rotation.y = Math.PI / 2; pose(sh, 'run', dt, 0.6); }
+  if (c < 5) b.betrapt = false;
+  sh.root.position.set(sx, 0, 0.15);
+  // Jens: scrollt op z'n telefoon, wipt met z'n voet en kijkt af en toe zuchtend op
+  pose(jens, 'phoneIdle', dt);
+  jens.legR.rotation.x = 0; jens.kneeR.rotation.x = -Math.max(0, Math.sin(t * 9)) * 0.25;
+  const op = Math.sin(t * 0.7) > 0.85;
+  jens.head.rotation.y = damp(jens.head.rotation.y, kijk ? 1.0 : 0, 6, dt);
+  jens.head.rotation.x = damp(jens.head.rotation.x, kijk || op ? 0 : 0.35, 4, dt);
+  // Jos zwaait met een briefje
+  pose(b.jos, 'wenk', dt);
+  // Linus: luchtgitaar op z'n stokbrood, en af en toe een hap
+  const l = b.linus, lc = t % 7;
+  pose(l, 'idle', dt);
+  if (lc < 4.5) { l.armR.rotation.x = 0.45; l.elR.rotation.x = 1.6 + Math.sin(t * 18) * 0.3; l.armL.rotation.x = 1.0; l.elL.rotation.x = 0.9; l.body.position.y = Math.abs(Math.sin(t * 6)) * 0.06; }
+  else { l.armR.rotation.x = 1.6; l.elR.rotation.x = 2.2; }
+  // het loslopend wild huppelt achter ze heen en weer, met een grote sprong af en toe
+  const wc = t % 6, hup = Math.abs(Math.sin(t * 5)) * 0.35 + (wc > 4.6 && wc < 5.4 ? Math.sin((wc - 4.6) / 0.8 * Math.PI) * 1.6 : 0);
+  b.wild.position.set(Math.sin(t * 0.55) * 2.2, hup, 2.6);
+  b.wild.scale.y = 0.62 * (hup < 0.05 ? 0.9 : 1.04);
+  // praatwolkjes om de beurt
+  const p = b.praat;
+  for (const k in p) p[k] -= dt;
+  if (p.jens < 0) { p.jens = 9 + Math.random() * 4; if (!kijk) bubble(jens.head, pick(JENS_WACHT), '', 2.2); }
+  if (p.jos < 0) { p.jos = 8 + Math.random() * 4; bubble(b.jos.head, pick(['Jens, briefje halen!', 'Jens, je bent te laat!', 'Eerst een briefje!']), '', 2.2); }
+  if (p.linus < 0) { p.linus = 9 + Math.random() * 5; bubble(l.head, pick(LINUS_SLOT), '', 2); }
+  if (p.wild < 0) { p.wild = 8 + Math.random() * 5; bubble(b.wild, pick(WILD_SLOT), 'shout', 1.4, 2.2); }
 }
 $('#schoolOk').addEventListener('click', schoolProbeer);
 $('#schoolPasOpen').addEventListener('click', () => { $('#schoolPasOpen').classList.add('hidden'); $('#schoolPasBox').classList.remove('hidden'); $('#schoolPas').focus(); });
