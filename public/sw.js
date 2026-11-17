@@ -1,8 +1,9 @@
 // Jens Run service worker: online altijd de nieuwste versie (netwerk eerst),
 // offline speelbaar uit de cache. Geluid en plaatjes: cache, en op de achtergrond verversen.
-const CACHE = 'jensrun-v4';
+const CACHE = 'jensrun-v5';
 const CORE = ['/', '/index.html', '/style.css', '/game.js', '/three.module.min.js', '/manifest.webmanifest', '/beker-model.js', '/iconen.js', '/img/iconen.png', '/img/beker.png', '/fonts/anton.woff2', '/fonts/barlow-500.woff2', '/fonts/barlow-700.woff2',
-  '/img/menu-bg.jpg', '/img/jens-face.png', '/icons/icon-192.png', '/eiland.js'];
+  '/img/menu-bg.jpg', '/img/jens-face.png', '/icons/icon-192.png', '/eiland.js',
+  '/hd.js', '/hd/postprocessing/EffectComposer.js', '/hd/postprocessing/RenderPass.js', '/hd/postprocessing/GTAOPass.js', '/hd/postprocessing/UnrealBloomPass.js', '/hd/postprocessing/OutputPass.js', '/hd/postprocessing/ShaderPass.js', '/hd/postprocessing/MaskPass.js', '/hd/postprocessing/Pass.js', '/hd/shaders/CopyShader.js', '/hd/shaders/LuminosityHighPassShader.js', '/hd/shaders/OutputShader.js', '/hd/shaders/GTAOShader.js', '/hd/shaders/PoissonDenoiseShader.js', '/hd/math/SimplexNoise.js', '/hd/environments/RoomEnvironment.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));

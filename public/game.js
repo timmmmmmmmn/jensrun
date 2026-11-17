@@ -1,4 +1,4 @@
-import * as THREE from './three.module.min.js';
+import { THREE, HD, hdTex, hdSetup, hdResize, hdRender } from './hd.js';
 import { Muxer, ArrayBufferTarget } from './mp4-muxer.mjs';
 import { BEKER, BEKER_TEX } from './beker-model.js';
 import { ICONS, ICON_CS, ICON_COLS, ICON_ROWS } from './iconen.js';
@@ -709,7 +709,8 @@ function speak(text) {
 // licht wordt per hoekpunt berekend (Gouraud, zoals de GTE van de PS1), de kleuren gaan terug naar
 // 15 bit met een bayer-dither en de mist loopt in banden. Grote vlakken die je scheef ziet (gevels)
 // krijgen PSX_PERSP: daar wordt de texture wel recht getekend, anders zwemmen de ramen over de gevel.
-{
+// Op Ultra (hd.js) blijft dit allemaal weg.
+if (!HD) {
   const C = THREE.ShaderChunk;
   const affine = `
 #ifdef USE_MAP
@@ -813,7 +814,7 @@ function speak(text) {
   vec3 outgoingLight = diffuseColor.rgb * vPsxLight + totalEmissiveRadiance;
 #endif` + fs.slice(i1)).replace('#include <common>', '#include <common>\nvarying vec3 vPsxLight;');
 }
-const QUALITY = { ps1: 224, normaal: 360, scherp: 540 };
+const QUALITY = { ps1: 224, normaal: 360, scherp: 540, ultra: 2160 };
 if (!save.set.quality || save.set.quality === 'normaal') save.set.quality = 'auto';
 const AUTO_STEPS = [240, 288, 360, 432];
 // zwakke apparaten (weinig kernen of geheugen) beginnen lager
@@ -821,10 +822,11 @@ const weakDevice = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.devic
 let autoIdx = weakDevice || isIPod ? 0 : 2;
 if (isIPod) AUTO_STEPS[0] = 180;
 let PSX_RES = save.set.quality === 'auto' ? AUTO_STEPS[autoIdx] : QUALITY[save.set.quality] || 400;
-let lowFx = autoIdx <= 1;
+let lowFx = !HD && autoIdx <= 1;
 const canvas = $('#c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(1);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: HD, powerPreference: 'high-performance' });
+renderer.setPixelRatio(HD ? Math.min(devicePixelRatio || 1, 2) : 1);
+document.documentElement.classList.toggle('hd', HD);
 renderer.debug.checkShaderErrors = /[?&]debug/.test(location.search);
 const scene = new THREE.Scene();
 const SKY = new THREE.Color('#bfe3ff');
@@ -840,11 +842,14 @@ scene.add(sun);
 const lantern = new THREE.PointLight('#fff4e6', 0, 26, 1.3);
 lantern.position.set(0, 2.6, 1.5);
 scene.add(lantern);
+if (HD) hdSetup(renderer, scene, camera, sun);
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  const k = PSX_RES / Math.min(w, h);
-  renderer.setSize(Math.round(w * k), Math.round(h * k), false);
+  if (HD) { renderer.setSize(w, h, false); hdResize(renderer); } else {
+    const k = PSX_RES / Math.min(w, h);
+    renderer.setSize(Math.round(w * k), Math.round(h * k), false);
+  }
   camera.aspect = w / h;
   camera.fov = w / h < 0.8 ? 72 : 60;
   camera.updateProjectionMatrix();
@@ -981,17 +986,26 @@ function updateBatches() {
 function inScene(o) { for (let n = o; n; n = n.parent) if (n === scene) return true; return false; }
 
 // ---------- low-poly: elke ronde vorm blijft bij een PS1-aantal hoeken ----------
-function cylG(rt, rb, h, seg = 6, hs = 1, ...rest) { return new THREE.CylinderGeometry(rt, rb, h, Math.min(seg, 6), Math.min(hs, 1), ...rest); }
-function coneG(r, h, seg = 6, ...rest) { return new THREE.ConeGeometry(r, h, Math.min(seg, 6), ...rest); }
+// Ultra: alles wat rond hoort te zijn wordt écht rond (bewust hoekige palen met < 6 kanten blijven hoekig)
+const rond = (n, min) => (n >= 6 ? Math.max(n, min) : n);
+function cylG(rt, rb, h, seg = 6, hs = 1, ...rest) { return new THREE.CylinderGeometry(rt, rb, h, HD ? rond(seg, 24) : Math.min(seg, 6), HD ? hs : Math.min(hs, 1), ...rest); }
+function coneG(r, h, seg = 6, ...rest) { return new THREE.ConeGeometry(r, h, HD ? rond(seg, 24) : Math.min(seg, 6), ...rest); }
 // (hoofden en haarkappen mogen iets ronder: die zie je van dichtbij)
-function sphG(r, w = 6, h = 4, ...rest) { return new THREE.SphereGeometry(r, w >= 14 ? 9 : Math.min(w, 6), w >= 14 ? Math.min(h, 7) : Math.min(h, 4), ...rest); }
-function torG(r, t, rs = 4, ts = 10, ...rest) { return new THREE.TorusGeometry(r, t, Math.min(rs, 4), Math.min(ts, 10), ...rest); }
+function sphG(r, w = 6, h = 4, ...rest) { if (HD) return new THREE.SphereGeometry(r, rond(w, 28), h >= 4 ? Math.max(h, 18) : h, ...rest); return new THREE.SphereGeometry(r, w >= 14 ? 9 : Math.min(w, 6), w >= 14 ? Math.min(h, 7) : Math.min(h, 4), ...rest); }
+function torG(r, t, rs = 4, ts = 10, ...rest) { return new THREE.TorusGeometry(r, t, HD ? Math.max(rs, 12) : Math.min(rs, 4), HD ? Math.max(ts, 32) : Math.min(ts, 10), ...rest); }
 
 // ---------- materials / textures ----------
 const matCache = new Map();
 let tileTex = null;
 function matTile() {
   if (tileTex) return tileTex;
+  // Ultra: geen PS1-blokjes met randen, alleen een fijne korrel zodat vlakken niet plastic ogen
+  if (HD) tileTex = canvasTex(64, 64, (x) => {
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, 64, 64);
+    for (let i = 0; i < 700; i++) { x.fillStyle = `rgba(0,0,0,${rand(0.015, 0.07).toFixed(3)})`; x.fillRect(rand(0, 64), rand(0, 64), rand(0.5, 2), rand(0.5, 2)); }
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, 1, 1);
+  });
+  if (tileTex) { tileTex.wrapS = tileTex.wrapT = THREE.RepeatWrapping; sharedRes.add(tileTex); return tileTex; }
   tileTex = canvasTex(16, 16, (x) => {
     x.fillStyle = '#ffffff'; x.fillRect(0, 0, 16, 16);
     for (let i = 0; i < 44; i++) { x.fillStyle = `rgba(0,0,0,${rand(0.05, 0.26).toFixed(2)})`; x.fillRect(Math.floor(rand(0, 16)), Math.floor(rand(0, 16)), 1 + Math.floor(rand(0, 2)), 1); }
@@ -1008,6 +1022,7 @@ function M(color, extra) {
 }
 function psxTex(t) {
   t.colorSpace = THREE.SRGBColorSpace;
+  if (HD) return hdTex(t);
   t.magFilter = THREE.NearestFilter;
   // geen wazige overgangen, maar op afstand ook geen geflikker
   t.minFilter = THREE.NearestMipmapNearestFilter;
@@ -1018,11 +1033,14 @@ function psxTex(t) {
 // Langwerpige (borden met tekst) mogen iets meer pixels houden.
 function canvasTex(w, h, draw, cap = Math.max(w, h) / Math.min(w, h) >= 2.5 ? 192 : 96) {
   const c = document.createElement('canvas');
-  const k = Math.min(1, cap / Math.max(w, h));
+  // Ultra: dubbel zo groot getekend als de tekenaar denkt, dan blijven tekst en ramen scherp
+  const k = HD ? Math.min(2, 1024 / Math.max(w, h)) : Math.min(1, cap / Math.max(w, h));
   c.width = Math.round(w * k); c.height = Math.round(h * k);
   const x = c.getContext('2d');
   x.scale(k, k);
   draw(x, w, h);
+  // Ultra: de pixelruis van de PS1-tekeningen iets verzachten, anders oogt alles korrelig
+  if (HD && Math.min(c.width, c.height) >= 32) { x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 0.6; x.filter = 'blur(1.2px)'; x.drawImage(c, 0, 0); x.filter = 'none'; x.globalAlpha = 1; }
   const t = new THREE.CanvasTexture(c);
   psxTex(t);
   return t;
@@ -2300,7 +2318,20 @@ const crownGeo = (() => {
   out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   return out;
 })();
-const leafTex = canvasTex(64, 64, (x) => {
+// Ultra: een kruin van echte blaadjes (gedraaide ovaaltjes) in plaats van PS1-blokjes
+const leafTex = HD ? canvasTex(256, 256, (x) => {
+  x.clearRect(0, 0, 256, 256);
+  for (let i = 0; i < 1500; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 116;
+    const px = 128 + Math.cos(a) * r, py = 124 + Math.sin(a) * r * 0.96;
+    const licht = Math.max(0, Math.min(1, (256 - py) / 256 - r / 360 + rand(-0.12, 0.12)));
+    const v = Math.round(70 + licht * 185);
+    x.fillStyle = `rgb(${v},${v},${v})`;
+    x.save(); x.translate(px, py); x.rotate(rand(0, Math.PI));
+    x.beginPath(); x.ellipse(0, 0, rand(3.5, 6), rand(1.6, 2.6), 0, 0, Math.PI * 2); x.fill();
+    x.restore();
+  }
+}) : canvasTex(64, 64, (x) => {
   x.clearRect(0, 0, 64, 64);
   for (let i = 0; i < 230; i++) {
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 29;
@@ -4621,7 +4652,8 @@ renderer.setAnimationLoop(() => {
     const blijft = new Set([plusWinkel, jens.root, pet, chaser()?.root]);
     for (const c of scene.children) if (c.visible && !c.isLight && !blijft.has(c)) { c.visible = false; verborgen.push(c); }
   }
-  if (state === 'mini' && mini.scene) renderer.render(mini.scene, mini.cam); else renderer.render(scene, camera);
+  const [rs, rc] = state === 'mini' && mini.scene ? [mini.scene, mini.cam] : [scene, camera];
+  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);
   for (const c of verborgen) c.visible = true;
   workAvg = workAvg * 0.95 + (performance.now() - t) * 0.05;
   const p2 = PERF.on ? performance.now() : 0;
@@ -10135,7 +10167,7 @@ function renderSettings() {
   $('#set_dash').textContent = save.set.dashcam ? '📺 NijmegenActueel-filmpje: aan' : '📺 NijmegenActueel-filmpje: uit';
   $('#set_dash').classList.toggle('hidden', !dashSupported);
   for (const b of document.querySelectorAll('[data-q]')) b.classList.toggle('sel', b.dataset.q === save.set.quality);
-  $('#set_q_info').textContent = save.set.quality === 'auto' ? `Automatisch: nu ${PSX_RES}p` : '';
+  $('#set_q_info').textContent = save.set.quality === 'auto' ? `Automatisch: nu ${PSX_RES}p` : save.set.quality === 'ultra' ? 'Echte schaduwen, glans en scherpe beelden. Zwaar: voor een goede pc of telefoon.' : '';
 }
 let settingsFrom = '#menu';
 function openSettings(from) { settingsFrom = from; showScreen('#settings'); renderSettings(); renderAccount(); }
@@ -10157,7 +10189,10 @@ $('#set_vibe').addEventListener('click', () => { save.vibe = !save.vibe; persist
 $('#set_quality').addEventListener('click', (e) => {
   const b = e.target.closest('[data-q]');
   if (!b) return;
+  const wasUltra = save.set.quality === 'ultra';
   save.set.quality = b.dataset.q; persist();
+  // de PS1-shaders zitten vanaf het starten in three.js: van/naar Ultra kan alleen met opnieuw laden
+  if (wasUltra !== (b.dataset.q === 'ultra')) { note(b.dataset.q === 'ultra' ? '✨ Ultra wordt geladen…' : '🕹️ Terug naar PS1…'); setTimeout(() => location.reload(), 350); return; }
   PSX_RES = save.set.quality === 'auto' ? AUTO_STEPS[autoIdx] : QUALITY[save.set.quality];
   lowFx = save.set.quality === 'ps1' || (save.set.quality === 'auto' && autoIdx <= 1);
   resize(); renderSettings();
