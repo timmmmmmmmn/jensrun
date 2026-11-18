@@ -135,7 +135,7 @@ const STREETS = ['Berg en Dalseweg', 'Javastraat', 'Sumatrastraat', 'Ubbergseweg
 
 // Foto's van gezichten: zet een bestand in public/img/ en voeg hier de naam toe,
 // bijv. jens: 'img/jens.png'. Leeg = getekend gezicht.
-const PHOTO_FACES = { jens: 'img/jens-face.png', shane: 'img/shane-face.png', jules: 'img/jules-face.png', linus: 'img/linus-face.png', darko: 'img/darko-face.png' };
+const PHOTO_FACES = { jens: 'img/jens-face.png', shane: 'img/shane-face.png', jules: 'img/jules-face.png', linus: 'img/linus-face.png', darko: 'img/darko-face.png', sef: 'img/sef-face.png' };
 
 // =====================================================================
 //  game data
@@ -227,6 +227,7 @@ const SHOP = {
     { id: 'geen', name: 'Alleen', price: 0 },
     { id: 'duif', name: 'Duif', price: 750 },
     { id: 'hond', name: 'Saar de hond', price: 1050 },
+    { id: 'sef', name: 'Sef (heel klein)', price: 900 },
   ] },
   bril: { label: 'Bril', items: [
     { id: 'geen', name: 'Geen bril', price: 0 },
@@ -1661,7 +1662,7 @@ function buildBril(group, style) {
 
 // ---------- persoon ----------
 // hoofdrolspelers krijgen alle details; figuranten een lichtere versie
-const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost', 'jules', 'linus']);
+const FULL_PEOPLE = new Set(['jesse', 'tim', 'patrick', 'jens', 'fietser', 'shane', 'toeterhater', 'docent', 'jos', 'boa', 'boa2', 'cameraman', 'ghost', 'jules', 'linus', 'sef']);
 function makePerson(o) {
   const root = new THREE.Group();
   root.userData.isPerson = true;
@@ -4819,7 +4820,7 @@ const ARTIKEL_ICOON = {
   rug: { geen: '🚫', cape: '🦸' },
   hand: { geen: '✋', cola: '🥤', fanta: '🍊', fietsbel: '🔔', ballon: '🎈', toeter: '📯', fakkel: '🔥', minibeker: '🏆' },
   skill: { geen: '🦵', dubbel: '🦘' },
-  maatje: { geen: '🧍', duif: '🕊️', hond: '🐶' },
+  maatje: { geen: '🧍', duif: '🕊️', hond: '🐶', sef: '🧑' },
   bril: { geen: '👀', filter: '😎', lennon: '👓', snor: '🥸' },
 };
 const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', goud: '#e8b923', pas: '#7a4cff' };
@@ -10353,21 +10354,29 @@ function makeSaar() {
   g.userData = { legs, tail, head };
   return g;
 }
+// Sef: een piepklein vriendje in een blauwe hoodie dat met Jens meerent
+const SEF_ROEP = ['Hebbes!', 'Voor jou, Jens!', 'Beker!', 'Wacht op mij!'];
+function makeSef() {
+  const p = makePerson({ key: 'sef', skin: '#f2d6c6', hair: '#6b4a2e', hairStyle: 'normaal', shirt: { base: '#2f5f7a', paint() {} }, pants: '#2a3140', shoes: '#ececec',
+    face: { skin: '#f2d6c6', brow: '#6b4a2e' } });
+  p.root.userData.p = p;
+  return p.root;
+}
 let pet = null, petKind = null, petT = 6, petDash = 0, petDashX = 0;
 function buildPet(kind) {
   if (pet) { scene.remove(pet); pet = null; }
   petKind = kind && kind !== 'geen' ? kind : null;
   if (!petKind) return;
-  pet = petKind === 'duif' ? makeDuif() : makeSaar();
+  pet = petKind === 'duif' ? makeDuif() : petKind === 'sef' ? makeSef() : makeSaar();
   if (petKind === 'hond') pet.rotation.y = Math.PI;
-  pet.scale.setScalar(petKind === 'hond' ? 0.9 : 1);
+  pet.scale.setScalar(petKind === 'hond' ? 0.9 : petKind === 'sef' ? 0.42 : 1);
   scene.add(pet);
 }
 function updatePet(dt) {
   if (!pet) return;
   const running = state === 'run' || state === 'dying';
   const side = player.lane === 2 ? -1 : 1;
-  let tx = running ? player.x + side * 0.85 : 0.9, tz = running ? -0.4 : -0.6;
+  let tx = running ? player.x + side * 0.85 : 0.9, tz = running ? (petKind === 'sef' ? 0 : -0.4) : -0.6;
   if (petDash > 0) { petDash -= dt; tx = petDashX; tz = -1.5; }
   pet.position.x = damp(pet.position.x, tx, 8, dt);
   pet.position.z = damp(pet.position.z, tz, 8, dt);
@@ -10375,12 +10384,15 @@ function updatePet(dt) {
   if (petKind === 'duif') {
     pet.position.y = 1.9 + Math.sin(t * 3) * 0.12 + (running ? 0 : -1.3);
     pet.userData.wings.forEach((w, i) => { w.rotation.z = (i ? -1 : 1) * Math.sin(t * (running ? 22 : 6)) * 0.7; });
+  } else if (petKind === 'sef') {
+    // korte beentjes: hij moet hard trappelen om Jens bij te houden
+    pose(pet.userData.p, running ? 'run' : 'idle', dt, running ? clamp(speed / 7, 1.2, 2.4) : 1);
   } else {
     pet.position.y = running ? Math.abs(Math.sin(t * 14)) * 0.06 : 0;
     pet.userData.legs.forEach((l, i) => { l.rotation.x = running ? Math.sin(t * 16 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.8 : 0; });
     pet.userData.tail.rotation.y = Math.sin(t * 10) * 0.6;
   }
-  pet.visible = !indoor || petKind === 'hond';
+  pet.visible = !indoor || petKind !== 'duif';
   if (state !== 'run') return;
   petT -= dt;
   if (petT > 0) return;
@@ -10392,6 +10404,7 @@ function updatePet(dt) {
   runBekers += n; save.bekers += n; score += 10 * n * scoreMult();
   missionEvent('bekers', n);
   petDash = 0.45; petDashX = o.x;
+  if (petKind === 'sef' && Math.random() < 0.3) bubble(pet.userData.p.head, pick(SEF_ROEP), '', 1.1);
   tone(petKind === 'duif' ? 1400 : 520, 0.08, 'square', 0.06); tone(petKind === 'duif' ? 1800 : 700, 0.1, 'square', 0.05, null, 0.08);
   buzz(8);
 }
