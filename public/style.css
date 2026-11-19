@@ -251,7 +251,7 @@ p { margin: 0; font-weight: 600; color: #fff; font-size: 18px; }
 }
 
 /* ---------- startscherm ---------- */
-.start { justify-content: center !important; align-items: center !important; background: linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.45)), url('img/menu-bg.jpg') center / cover; cursor: pointer; }
+.start { justify-content: center !important; align-items: center !important; background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(0,0,0,.6), rgba(0,0,0,.15) 75%), url('img/splash.jpg') center / cover, #000; cursor: pointer; }
 .start-box { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .start .logo { font-size: clamp(40px, 10vw, 76px); }
 .start .sub { font-size: 15px; }
