@@ -417,6 +417,15 @@ a.btn { text-decoration: none; text-align: center; display: block; }
 .splash-load { width: min(70vw, 320px); height: 12px; background: #000; border: 2px solid var(--edge); margin-top: 14px; }
 .splash-load i { display: block; height: 100%; width: 0; background: repeating-linear-gradient(90deg, var(--orange) 0 8px, #c2410c 8px 10px); transition: width .25s; }
 .splash-load.done { opacity: 0; transition: opacity .4s .3s; }
+.start-maker { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 74px; height: 74px; border-radius: 14px; background: #fff; color: #000; text-decoration: none; font-family: var(--title); line-height: 1; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+.start-maker b { font-size: 26px; letter-spacing: 1px; }
+.start-maker span { font-size: 9.5px; letter-spacing: .5px; margin-top: 3px; }
+.start-by { font-size: 14px; color: #fff; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; }
+.start-by b { color: var(--orange); }
+.start-legal { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 16px max(10px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.85) 45%); text-align: center; font-size: 11px; line-height: 1.45; color: rgba(255,255,255,.72); }
+#start .start-legal p { margin: 0; font-size: inherit; line-height: inherit; color: inherit; }
+.start-legal a { color: #fff; font-weight: 700; }
+@media (max-width: 700px) { #start .start-legal { font-size: 9px; line-height: 1.35; padding-top: 30px; } #start .start-box { margin-bottom: 60px; } .start-maker { width: 58px; height: 58px; border-radius: 12px; } .start-maker b { font-size: 20px; } .start-maker span { font-size: 7.5px; } }
 .splash-foot { font-size: 13px; color: var(--muted); letter-spacing: 2px; text-shadow: 1px 1px 0 #000; }
 /* ---------- muur, reacties, kamer, plakboek, foto, replay ---------- */
 .wall { background: rgba(255,90,20,.18); border: 2px solid var(--orange); padding: 7px 10px; font-weight: 700; font-size: 16px; }

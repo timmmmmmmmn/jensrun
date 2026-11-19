@@ -13627,7 +13627,7 @@ function leaveStart(e) {
   const kamerLink = new URLSearchParams(location.search).get('kamer');
   if (kamerLink) setTimeout(() => { mpSoort = new URLSearchParams(location.search).get('spel') === 'jacht' ? 'jacht' : 'race'; quickPlay(kamerLink.toUpperCase()); }, 300);
 }
-$('#start').addEventListener('pointerdown', leaveStart);
+$('#start').addEventListener('pointerdown', (e) => { if (!e.target.closest('a')) leaveStart(e); });
 // de klik die na de tik komt mag niet op een knop in het menu belanden
 let startedPerf = 0;
 document.addEventListener('click', (e) => { if (started && performance.now() - startedPerf < 600) { e.stopPropagation(); e.preventDefault(); } }, true);
