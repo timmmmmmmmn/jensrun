@@ -325,6 +325,7 @@
       <div id="overRank" class="rank hidden"></div>
       <div id="overChallenge" class="rank hidden"></div>
       <div class="row">
+        <button id="deelBtn" class="btn alt hidden">📸 Deel je score</button>
         <button id="shareBtn" class="btn alt">📣 Daag uit</button>
         <button id="snapShare" class="btn alt snapbtn hidden">💾 Download je filmpje</button>
       </div>
@@ -355,6 +356,17 @@
         <button id="overMenu" class="btn alt">Menu</button>
       </div>
     </div>
+    <!-- score delen: kaart met het moment dat je dood ging -->
+    <div id="deelUi" class="deel-ui hidden"><div class="deel-in">
+      <div class="deel-h"><h2>Deel je score</h2><button id="deelX" class="fm-x" aria-label="Sluiten">✕</button></div>
+      <div class="deel-prev"><img id="deelImg" alt="Je score met het moment dat je gepakt werd"></div>
+      <div class="deel-apps">
+        <button data-deel="instagram" class="deel-app ig">Instagram</button>
+        <button data-deel="whatsapp" class="deel-app wa">WhatsApp</button>
+        <button data-deel="x" class="deel-app xx">X</button>
+        <button data-deel="opslaan" class="deel-app op">💾 Opslaan</button>
+      </div>
+    </div></div>
   </div>
 
   <!-- RANGLIJST -->

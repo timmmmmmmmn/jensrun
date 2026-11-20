@@ -1,6 +1,7 @@
 package nl.timvanbergen.jensrun
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
 import android.os.Environment
@@ -245,6 +246,28 @@ class MainActivity : ComponentActivity() {
                 .putExtra(Intent.EXTRA_TEXT, "Snap uit Jens Run 👻 jensrun.timvanbergen.nl")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             runOnUiThread { startActivity(Intent.createChooser(send, "Deel je snap")) }
+        }
+
+        // scorekaart rechtstreeks naar Instagram/WhatsApp/X; staat die app er niet op, dan het gewone deelmenu
+        @JavascriptInterface
+        fun shareImageTo(base64: String, text: String, pkg: String) {
+            val dir = File(cacheDir, "shared").apply { mkdirs() }
+            val file = File(dir, "jensrun-score.png")
+            file.writeBytes(Base64.decode(base64, Base64.DEFAULT))
+            val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("image/png")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_TEXT, text)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runOnUiThread {
+                try {
+                    if (pkg.isEmpty()) throw ActivityNotFoundException()
+                    startActivity(Intent(send).setPackage(pkg))
+                } catch (e: ActivityNotFoundException) {
+                    startActivity(Intent.createChooser(send, "Deel je score"))
+                }
+            }
         }
     }
 

@@ -3611,6 +3611,7 @@ function die(reason) {
   setTimeout(() => verslaggever('dood', true), 700);
   deathReason = reason;
   deathT = 0;
+  deelShot = null; deelKaart = null; deelWil = true;
   sfx.die();
   engineStop();
   playGameover();
@@ -3679,6 +3680,8 @@ function finishRun() {
   const ch = challengeResult(s);
   $('#overChallenge').innerHTML = ch;
   $('#overChallenge').classList.toggle('hidden', !ch);
+  $('#deelBtn').classList.toggle('hidden', !!jacht || s <= 0);
+  deelInfo = { title, isBest: isBest && s > 0, name: save.name };
   showScreen('#over');
   lastRun = { mult: scoreMult(), mode, score: s, dist: Math.floor(dist), secs: Math.round(runTime * 10) / 10, bekers: runBekers, reason: deathReason, street: STREETS[streetIdx] };
   setTimeout(renderLiveResult, 0);
@@ -4659,6 +4662,7 @@ renderer.setAnimationLoop(() => {
   workAvg = workAvg * 0.95 + (performance.now() - t) * 0.05;
   const p2 = PERF.on ? performance.now() : 0;
   if (photo.take) { photo.take = false; takePhotoNow(); }
+  if (deelWil && state === 'dying' && deathT >= DEEL_SHOT_T) { deelWil = false; deelShot = pakCanvas(); }
   renderSnap();
   updateBubbles();
   if (PERF.on) { const p3 = performance.now(); PERF.upd += p1 - p0; PERF.rend += p2 - p1; PERF.post += p3 - p2; PERF.n++; if (p3 - p0 > 16) PERF.long++; const mt = renderer.info.memory.textures, mg = renderer.info.memory.geometries; if (p3 - p0 > 40) (PERF.slow ||= []).push([Math.round(p1 - p0), Math.round(p2 - p1), Math.round(p3 - p2), renderer.info.programs.length, mt - (PERF.mt || mt), mg - (PERF.mg || mg)]); PERF.mt = mt; PERF.mg = mg; PERF.calls += renderer.info.render.calls; PERF.tris += renderer.info.render.triangles; }
@@ -10127,6 +10131,126 @@ async function shareChallenge() {
   } catch (e) { /* geannuleerd */ }
 }
 $('#shareBtn').addEventListener('click', shareChallenge);
+
+// ---------- score delen: kaart met het beeld van net voordat je dood ging ----------
+const DEEL_SHOT_T = 0; // het beeld van de klap zelf: daarna zwaait de camera weg van Jens
+var deelWil = false, deelShot = null, deelKaart = null, deelInfo = null; // var: die() zet ze al
+function pakCanvas() {
+  // direct na het tekenen, anders is de buffer al leeg
+  const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height;
+  try { c.getContext('2d').drawImage(canvas, 0, 0); } catch (e) { return null; }
+  // waar Jens in beeld staat, zodat de uitsnede om hem heen valt
+  const v = new THREE.Vector3(); jens.root.getWorldPosition(v); v.y += 1; v.project(camera);
+  c.fx = (v.x + 1) / 2; c.fy = (1 - v.y) / 2;
+  return c;
+}
+const deelLogo = new Image(); deelLogo.src = 'icons/icon-192.png';
+async function maakDeelKaart() {
+  const run = lastRun, info = deelInfo || {};
+  const W = 1080, H = 1350, FOTO = 930;
+  await Promise.all([document.fonts.load("120px 'Anton'"), document.fonts.load("700 40px 'Barlow J'"), document.fonts.load("500 40px 'Barlow J'")]).catch(() => {});
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#14101c'; x.fillRect(0, 0, W, H);
+  // het beeld van de dood, bijgesneden tot het vak vol is, met scherpe PS1-pixels
+  if (deelShot) {
+    const k = Math.max(W / deelShot.width, FOTO / deelShot.height), sw = W / k, sh = FOTO / k;
+    const fx = Number.isFinite(deelShot.fx) ? deelShot.fx : 0.5, fy = Number.isFinite(deelShot.fy) ? deelShot.fy : 0.5;
+    // Jens iets onder het midden, boven de vervaging naar de score
+    const sx = clamp(fx * deelShot.width - sw / 2, 0, deelShot.width - sw), sy = clamp(fy * deelShot.height - sh * 0.58, 0, deelShot.height - sh);
+    x.imageSmoothingEnabled = false;
+    x.drawImage(deelShot, sx, sy, sw, sh, 0, 0, W, FOTO);
+  }
+  let g = x.createLinearGradient(0, FOTO - 380, 0, FOTO);
+  g.addColorStop(0, 'rgba(20,16,28,0)'); g.addColorStop(1, 'rgba(20,16,28,1)');
+  x.fillStyle = g; x.fillRect(0, FOTO - 380, W, 380);
+  g = x.createLinearGradient(0, 0, 0, 200);
+  g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, W, 200);
+  // logo linksboven
+  if (deelLogo.complete && deelLogo.naturalWidth) x.drawImage(deelLogo, 48, 44, 96, 96);
+  x.textBaseline = 'middle'; x.textAlign = 'left';
+  x.font = "70px 'Anton'"; x.fillStyle = '#fff'; x.fillText('JENS', 164, 94);
+  const jw = x.measureText('JENS ').width;
+  x.fillStyle = '#ff8a00'; x.fillText('RUN', 164 + jw, 94);
+  // titel van de dood, schuin over de rand van het beeld
+  x.save(); x.translate(60, FOTO - 150); x.rotate(-0.05);
+  x.font = "110px 'Anton'"; x.lineJoin = 'round'; x.lineWidth = 14; x.strokeStyle = '#000';
+  const titel = stripEmoji(info.title || 'Gepakt!').toUpperCase();
+  x.strokeText(titel, 0, 0); x.fillStyle = '#fff'; x.fillText(titel, 0, 0);
+  x.restore();
+  // score
+  x.textBaseline = 'alphabetic';
+  x.font = "700 34px 'Barlow J'"; x.fillStyle = '#b9b0c9'; x.fillText('SCORE', 60, FOTO + 20);
+  x.font = "190px 'Anton'"; x.fillStyle = '#ffd21f';
+  const sc = run.score.toLocaleString('nl-NL');
+  x.fillText(sc, 56, FOTO + 205);
+  if (info.isBest) {
+    const bx = 60 + x.measureText(sc).width + 30;
+    x.font = "44px 'Anton'"; const t = 'NIEUW RECORD!', tw = x.measureText(t).width;
+    if (bx + tw + 40 < W - 40) {
+      x.fillStyle = '#e5383b'; x.beginPath(); x.roundRect(bx, FOTO + 95, tw + 40, 70, 14); x.fill();
+      x.fillStyle = '#fff'; x.fillText(t, bx + 20, FOTO + 148);
+    }
+  }
+  x.font = "500 40px 'Barlow J'"; x.fillStyle = '#fff';
+  const regel = [MODES[run.mode]?.label, `${run.dist.toLocaleString('nl-NL')} m`, `${run.bekers} bekers`].filter(Boolean).join('  ·  ');
+  x.fillText(stripEmoji(regel), 60, FOTO + 275);
+  x.font = "700 40px 'Barlow J'"; x.fillStyle = '#ff8a00';
+  x.fillText(info.name ? `${stripEmoji(info.name)} daagt je uit` : 'Versla mij dan!', 60, FOTO + 340);
+  x.textAlign = 'right'; x.font = "500 32px 'Barlow J'"; x.fillStyle = '#b9b0c9';
+  x.fillText('jensrun.timvanbergen.nl', W - 60, FOTO + 340);
+  return new Promise((ok) => c.toBlob(ok, 'image/png'));
+}
+function deelTekst() {
+  const url = `${location.origin}/daag?m=${lastRun.mode}&s=${lastRun.score}&n=${encodeURIComponent(save.name || 'Iemand')}${feest ? `&f=${feest}` : ''}`;
+  return { url, text: stripEmoji(`Ik haalde ${lastRun.score.toLocaleString('nl-NL')} punten in Jens Run (${MODES[lastRun.mode].label}). Versla me dan!`) };
+}
+async function openDeel() {
+  if (!lastRun) return;
+  audioInit();
+  $('#deelUi').classList.remove('hidden');
+  $('#deelImg').removeAttribute('src');
+  $('#deelUi').classList.add('laadt');
+  if (!deelKaart) deelKaart = await maakDeelKaart();
+  if (!deelKaart) { $('#deelUi').classList.add('hidden'); note('Plaatje maken lukte niet'); return; }
+  $('#deelImg').src = URL.createObjectURL(deelKaart);
+  $('#deelUi').classList.remove('laadt');
+}
+function bewaarKaart() {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(deelKaart); a.download = 'jensrun-score.png';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+const DEEL_APPS = {
+  instagram: { pkg: 'com.instagram.android' },
+  whatsapp: { pkg: 'com.whatsapp', web: (t) => `https://wa.me/?text=${encodeURIComponent(`${t.text} ${t.url}`)}` },
+  x: { pkg: 'com.twitter.android', web: (t) => `https://x.com/intent/post?text=${encodeURIComponent(t.text)}&url=${encodeURIComponent(t.url)}` },
+};
+async function deelNaar(app) {
+  if (!deelKaart) return;
+  const t = deelTekst(), a = DEEL_APPS[app];
+  try {
+    // Android-app: rechtstreeks naar die app, met het plaatje erbij
+    if (window.JensRunNative?.shareImageTo) { window.JensRunNative.shareImageTo(await blobToB64(deelKaart), `${t.text} ${t.url}`, a?.pkg || ''); return; }
+    if (window.JensRunNative?.shareFile) { window.JensRunNative.shareFile(await blobToB64(deelKaart), 'image/png', 'jensrun-score.png'); return; }
+    // telefoonbrowser: het deelmenu van het systeem, daar staan Instagram, WhatsApp en X tussen
+    const file = new File([deelKaart], 'jensrun-score.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share(app === 'instagram' ? { files: [file] } : { files: [file], text: `${t.text} ${t.url}` });
+      return;
+    }
+  } catch (e) { if (e?.name === 'AbortError') return; }
+  // computer: plaatje opslaan en de app op het web openen
+  bewaarKaart();
+  if (a?.web) { window.open(a.web(t), '_blank', 'noopener'); note('💾 Plaatje opgeslagen: voeg het toe aan je bericht'); }
+  else note(app === 'instagram' ? '💾 Plaatje opgeslagen: zet het op Instagram vanaf je telefoon' : '💾 Plaatje opgeslagen');
+}
+$('#deelBtn').addEventListener('click', openDeel);
+$('#deelUi').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-deel]');
+  if (b) { if (b.dataset.deel === 'opslaan') { bewaarKaart(); note('💾 Plaatje opgeslagen'); } else deelNaar(b.dataset.deel); return; }
+  if (e.target.id === 'deelUi' || e.target.closest('#deelX')) $('#deelUi').classList.add('hidden');
+});
 
 // alles per frame
 function updateExtras(dt, m) {
