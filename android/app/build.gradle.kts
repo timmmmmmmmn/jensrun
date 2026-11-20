@@ -52,7 +52,7 @@ android {
 
 // De hele game (../public) gaat in de app: geen webapp meer, alles zit erin.
 val gameBundel by tasks.registering(Sync::class) {
-    from(rootProject.file("../public")) { exclude("sw.js", "beheer.html", ".DS_Store") }
+    from(rootProject.file("../public")) { exclude("sw.js", "beheer.html", ".DS_Store", "wp.html", "wp/**") }
     into(layout.projectDirectory.dir("src/main/assets/www"))
 }
 tasks.named("preBuild") { dependsOn(gameBundel) }

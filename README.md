@@ -32,3 +32,9 @@ Lokaal draaien: `npx wrangler dev`. Live zetten: `npx wrangler deploy`.
 - Iconen: [game-icons.net](https://game-icons.net) (CC BY 3.0), vlaggen: [flag-icons](https://github.com/lipis/flag-icons) (MIT)
 - Lettertypen: Anton en Barlow Semi Condensed (OFL)
 - Nieuws in het hoofdmenu zet je via `/beheer` (met plaatje en einddatum)
+
+## Windows 10 Mobile (Lumia)
+
+`wp/build.mjs` maakt een versie voor EdgeHTML 13–15: `public/wp.html` + `public/wp/` (één ES2015-script met polyfills, CSS-variabelen ingevuld). Na wijzigingen aan `public/`: `cd wp && npm install && node build.mjs`, daarna deployen. De app zelf (`wp/appx`) is een hosted web app die `/wp` opent; `.github/workflows/wp.yml` bouwt en ondertekent `JensRun.appx` (release `wp-latest`).
+
+Installeren op de telefoon: Instellingen → Bijwerken en beveiliging → Voor ontwikkelaars → Ontwikkelaarsmodus, dan `TimVanBergen.cer` en `JensRun.appx` openen.

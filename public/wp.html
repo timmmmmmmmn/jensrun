@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<script>window.WP_APP = true;</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Jens Run</title>
+<meta name="description" content="Jens Run – ren door Nijmegen-Oost, pak de bekers en laat je niet pakken.">
+<meta property="og:title" content="Jens Run">
+<meta property="og:description" content="Ren door Nijmegen, pak de bekers en laat je niet pakken.">
+<meta property="og:image" content="https://jensrun.timvanbergen.nl/icons/icon-512.png">
+<meta property="og:url" content="https://jensrun.timvanbergen.nl/">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Jens Run">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preload" href="fonts/anton.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="img/iconen.png" as="image">
+<link rel="stylesheet" href="wp/style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+  <div id="bubbles"></div>
+  <div id="splats"></div>
+  <div id="aanCap" class="aan-cap hidden"></div>
+  <div id="flash"></div>
+
+  <div id="hud" class="hidden">
+    <div class="hud-l">
+      <div class="bug">
+        <span class="bug-num" id="score">0</span>
+        <span class="bug-cups" id="bekerCount"><img src="img/beker.png" alt=""><span>0</span></span>
+        <span class="bug-streak hidden" id="bugStreak">×3</span>
+      </div>
+      <div class="xpbar hidden"><b id="xpLv">LV 1</b><span><i id="xpFill"></i></span></div>
+      <div id="dubbelCD" class="pill hidden"></div>
+    </div>
+    <div class="hud-r">
+      <button id="pauseBtn" class="icon-btn" aria-label="Pauze">❚❚</button>
+    </div>
+    <div id="powers"></div>
+    <div id="combo" class="combo hidden"></div>
+    <div id="lvlhud" class="lvlhud hidden">
+      <div class="lvl-top"><b id="lvlName"></b><span id="lvlTasks"></span></div>
+      <div class="lvl-bar"><i id="lvlBar"></i></div>
+    </div>
+    <div id="mpFeed" class="mpfeed"></div>
+    <div id="jachtHud" class="jachthud hidden"><span id="jhRol"></span><b id="jhGap">0 m</b><i><em id="jhBar"></em></i><span id="jhTijd">1:30</span></div>
+    <div id="jachtKnop" class="jachtknop hidden">
+      <button data-jp="sprint" aria-label="Sprint"><b>⚡</b><span>SPRINT</span><small>1</small><i></i></button>
+      <button data-jp="troeki" aria-label="Kwaliteit Troeki"><b>🚀</b><span>TROEKI</span><small>2</small><i></i></button>
+      <button data-jp="trap" aria-label="Obstakels"><b>💣</b><span>OBSTAKELS</span><small>3</small><i></i></button>
+    </div>
+    <button id="nitroBtn" class="nitro hidden" aria-label="Nitraat afsteken">🧨 <span>×3</span><small>E</small></button>
+  </div>
+  <div id="snap" class="snap hidden">
+    <div class="snap-top"><span class="snap-av">👻</span><span class="snap-rec"><i></i><b id="snapTime">0:00</b></span><span class="snap-tools">↻<br>⚡<br>🎵</span></div>
+    <div id="snapCap" class="snap-cap">Op de fiets 🚲</div>
+    <div class="snap-bottom"><i class="lens"></i><i class="shutter"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" /></svg></i><i class="lens"></i></div>
+  </div>
+  <!-- MINIGAMES: Glijden, Vuurwerk, Mijn Osso -->
+  <div id="mini" class="mini hidden">
+    <div class="mini-top">
+      <div id="miniScore" class="mini-score">0</div>
+      <div id="miniInfo" class="mini-info"></div>
+      <button id="miniPause" class="icon-btn" aria-label="Pauze">❚❚</button>
+    </div>
+    <div id="miniMsg" class="mini-msg"></div>
+    <div class="mini-cross"></div>
+    <div id="miniCtl" class="mini-ctl"></div>
+    <div id="miniPauseBox" class="mini-pausebox hidden"><div class="panel small"><h2>Pauze</h2><button id="mpResume" class="btn big">DOORGAAN</button><button id="mpQuit" class="btn">Stoppen</button></div></div>
+  </div>
+  <div id="miniOver" class="screen hidden">
+    <div class="panel small">
+      <h2 id="moTitle"></h2>
+      <p id="moText" class="mo-text"></p>
+      <div class="stats"><div><small>Score</small><b id="moScore">0</b></div><div><small>Record</small><b id="moBest">0</b></div><div><small>Bekers</small><b id="moBekers">0</b></div></div>
+      <div id="moNew" class="newbest hidden">NIEUW RECORD!</div>
+      <div id="moRank" class="hint"></div>
+      <button id="moAgain" class="btn big">OPNIEUW</button>
+      <button id="moMenu" class="btn">Menu</button>
+    </div>
+  </div>
+  <!-- JENS ARCADE in De Hub -->
+  <div id="arcade" class="screen hidden">
+    <div class="panel arc-panel">
+      <h2>🕹️ Jens Arcade</h2>
+      <div id="arcMenu" class="arc-menu"></div>
+      <div id="arcStage" class="arc-stage hidden"><canvas id="arcCv" width="320" height="240"></canvas></div>
+      <button id="arcBack" class="btn">Terug</button>
+    </div>
+  </div>
+  <div id="fx" class="fx"></div>
+  <div id="fxHype" class="fx-hype"></div>
+  <div id="fxFlash" class="fx-flash"></div>
+  <div id="toast"></div>
+  <div id="note"></div>
+
+  <!-- STARTSCHERM: de eerste klik zet het geluid aan -->
+  <div id="start" class="screen start">
+    <a class="start-maker" href="https://timvanbergen.nl" target="_blank" rel="noopener"><b>TIM</b><span>VAN BERGEN</span></a>
+    <div class="start-box">
+      <img class="splash-icon" src="icons/icon-512.png" alt="">
+      <h1 class="logo">JENS<span>RUN</span></h1>
+      <div class="sub">Versie 2.0</div>
+      <div class="start-by">Een game van <b>Tim van Bergen</b></div>
+      <div class="splash-load"><i id="splashBar"></i></div>
+      <div class="splash-foot">jensrun.timvanbergen.nl</div>
+      <div class="press"><span class="desk">DRUK OP EEN TOETS</span><span class="mob">TIK OM TE BEGINNEN</span></div>
+    </div>
+    <div class="start-legal">
+      <p>© 2026 Tim van Bergen. Jens Run en het Jens Run-logo zijn van Tim van Bergen. Alle rechten voorbehouden.</p>
+      <p>Bedacht, ontworpen en gebouwd door Tim van Bergen · Muziek: Jessegrill · 3D: three.js · Personages gebaseerd op vrienden, met hun toestemming.</p>
+      <p>Jens Run is een parodie en is niet verbonden aan NEC Nijmegen, PLUS of Omroep Gelderland. Meer games en apps op <a href="https://timvanbergen.nl" target="_blank" rel="noopener">timvanbergen.nl</a></p>
+    </div>
+  </div>
+
+  <!-- MENU: spelen linksonder, seizoenspas linksboven, nieuws rechts, Jens in het midden -->
+  <div id="menu" class="screen hidden fm">
+    <header class="fm-top">
+      <div class="fm-brand"><img src="icons/icon-192.png" alt=""><b>JENS RUN</b></div>
+      <nav class="fm-tabs">
+        <button class="on">Spelen</button>
+        <button data-go="#passBtn">Seizoenspas</button>
+        <button data-go="#shopBtn">PLUS</button>
+        <button data-go="#kamerBtn">De Hub</button>
+        <button data-go="#boardBtn">Ranglijst</button>
+        <button data-go="#krantBtn">Krant</button>
+        <button data-go="#socialBtn" id="fmBell" class="bell" data-n="">Vrienden</button>
+        <button data-go="#fameBtn">Wall of Fame</button>
+        <button data-go="#berichtBtn">Bericht</button>
+        <span class="fm-plate" aria-hidden="true"></span>
+        <button id="fmTabMeer" class="fm-tab-meer">Meer</button>
+      </nav>
+      <div class="fm-tr">
+        <div class="m-wallet"><img src="img/beker.png" alt=""><b id="mBekers">0</b><span id="mMult" class="m-mult"></span></div>
+        <button class="m-ic" data-go="#setBtn" aria-label="Instellingen">⚙️</button>
+      </div>
+    </header>
+    <aside class="fm-left">
+      <button id="fmSeason" class="fm-season" data-go="#passBtn">
+        <small id="fmSeasonH">SEIZOEN</small>
+        <b id="fmSeasonLv">TREDE 0</b>
+        <span class="fm-sbar"><i id="fmSeasonBar"></i></span>
+        <em id="fmSeasonCta"></em>
+      </button>
+      <div id="wall" class="wall hidden"></div>
+      <div id="challenge" class="challenge hidden"></div>
+      <div id="missionBox" class="missions"></div>
+    </aside>
+    <aside id="fmNews" class="fm-news"></aside>
+    <div id="fmJesse" class="fm-jesse" aria-label="Muziek: Jessegrill"><div class="fm-jesse-pic"><img src="img/jesse-piano.png" alt=""><i class="noot">♪</i><i class="noot">♫</i><i class="noot">♪</i><i class="noot">♬</i></div><span><em class="eq"><i></i><i></i><i></i><i></i></em>Jens Run Theme Song - <b>Jessegrill</b></span></div>
+    <div class="fm-hint"><span class="desk">← → wisselen (nog een keer op de stoep: sticker) · ↑ springen · ↓ glijden · E nitraat</span></div>
+    <div class="fm-play">
+      <button id="fmMode" class="fm-mode"><span id="fmModeImg" class="fm-mode-img"></span><span class="fm-mode-txt"><b id="fmModeName">Rennen</b><small>Spel kiezen</small></span></button>
+      <button id="playBtn" class="fm-go">SPELEN!</button>
+      <button id="fmMp" class="fm-mp">👥 MULTIPLAYER</button>
+    </div>
+    <!-- zwevend venster: spel kiezen -->
+    <div id="fmModes" class="fm-float hidden"><div class="fm-float-in">
+      <div class="fm-float-h"><h2>Kies je spel</h2><button class="fm-x" data-close="#fmModes" aria-label="Sluiten">✕</button></div>
+      <div id="modes" class="modes"></div>
+      <div class="fm-more">
+        <button id="storyBtn" class="fm-card story"><i>📖</i><b>Verhaal</b><small>Terroriseer Nijmegen, Nederland en Europa</small></button>
+        <button id="samenBtn" class="fm-card samen bell" data-n=""><i>👥</i><b>Samen spelen</b><small>Live tegen je vrienden</small></button>
+        <button data-go="#wkBtn" class="fm-card"><i>🗓️</i><b>Weekuitdaging</b><small>Elke week een nieuwe regel</small></button>
+      </div>
+    </div></div>
+    <!-- zwevend venster: multiplayer zoeken -->
+    <div id="fmLive" class="fm-float hidden"><div class="fm-float-in fm-live">
+      <div class="fm-float-h"><button class="fm-x fl-terug hidden" id="flTerug" aria-label="Terug">←</button><h2 id="flTitel">Multiplayer</h2><button class="fm-x" id="flCancel" aria-label="Annuleren">✕</button></div>
+      <!-- stap 1: wat wil je spelen -->
+      <div id="flKies" class="fl-kies">
+        <button id="flKiesRace" class="fl-kaart"><i>🏃</i><b>Normaal</b><small>Race met 2 tot 4 spelers. Wie het langst volhoudt, wint.</small></button>
+        <button id="flKiesJacht" class="fl-kaart jacht"><i>📱</i><b>Shane jaagt</b><small>1 tegen 1: de een is Shane, de ander Jens. De leider van de kamer kiest wie wie is.</small></button>
+      </div>
+      <!-- stap 2: kamer -->
+      <div id="flSpel" class="fl-spel hidden">
+        <p id="flStatus"></p>
+        <ol id="flList" class="board"></ol>
+        <div class="fl-kiesrol hidden" id="flJachtHost"><b>👑 Jij bent de leider. Wie is Shane?</b><div class="row"><button id="flJShane" class="btn">Ik ben Shane</button><button id="flJJens" class="btn">De ander is Shane</button></div></div>
+        <button id="flStart" class="btn big hidden">START</button>
+        <div class="row" id="flPrive"><button id="flKamer" class="btn alt">👥 Kamer met vriend</button><form id="flCode" class="fl-code"><input id="flCodeIn" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" aria-label="Kamercode"><button class="btn alt">Meedoen</button></form></div>
+        <div class="row"><button id="flZoek" class="btn alt">🔎 Zoek willekeurig</button><button id="flShare" class="btn alt">📣 Deel link</button><button id="flBots" class="btn alt">🏃 Tegen bots</button></div>
+        <div class="row" id="flJBots"><button id="flJBotShane" class="btn alt">Oefen als Shane</button><button id="flJBotJens" class="btn alt">Oefen als Jens</button></div>
+        <p id="flUitleg" class="fl-uitleg"></p>
+      </div>
+    </div></div>
+    <!-- zwevend venster: nieuwsbericht -->
+    <div id="fmArt" class="fm-float hidden"><div class="fm-float-in fm-art">
+      <div class="fm-float-h"><h2 id="fmArtH"></h2><button class="fm-x" data-close="#fmArt" aria-label="Sluiten">✕</button></div>
+      <img id="fmArtImg" alt="">
+      <p id="fmArtBody"></p>
+      <button id="fmArtMsg" class="btn hidden">📣 Stuur een bericht</button>
+      <small id="fmArtFoot" class="hint"></small>
+    </div></div>
+    <!-- zwevend venster: bericht achterlaten voor de maker -->
+    <div id="fmMsg" class="fm-float hidden"><div class="fm-float-in fm-msg">
+      <div class="fm-float-h"><h2>Stuur een bericht</h2><button class="fm-x" data-close="#fmMsg" aria-label="Sluiten">✕</button></div>
+      <p id="fmMsgOver" class="hint hidden"></p>
+      <p class="hint">Een idee, een fout gevonden of gewoon iets kwijt? Alleen de maker van Jens Run leest het.</p>
+      <form id="fmMsgForm" class="fm-msg-form">
+        <textarea id="fmMsgText" maxlength="1000" rows="6" placeholder="Typ je bericht…" aria-label="Je bericht"></textarea>
+        <div class="row"><small id="fmMsgStatus" class="hint"></small><button id="fmMsgSend" class="btn big">Versturen</button></div>
+      </form>
+    </div></div>
+    <nav class="m-nav">
+      <button data-go="#shopBtn"><i>🛒</i>PLUS</button>
+      <button data-go="#samenBtn" id="mSamen" class="bell" data-n=""><i>👥</i>Samen</button>
+      <button data-go="#storyBtn" class="m-mid"><i>📖</i>Verhaal</button>
+      <button data-go="#kamerBtn"><i>🏠</i>De Hub</button>
+      <button id="mMoreBtn" class="bell" data-n=""><i>☰</i>Meer</button>
+    </nav>
+    <div id="mMore" class="m-sheet hidden"><div class="m-sheet-in">
+      <b class="m-sheet-h">Meer</b>
+      <div class="m-grid">
+        <button data-go="#passBtn" data-i="🎟"><i>🎟️</i>Seizoenspas</button>
+        <button data-go="#boardBtn" data-i="🏅"><i>🏅</i>Ranglijst</button>
+        <button data-go="#krantBtn" data-i="📰"><i>📰</i>Krant</button>
+        <button data-go="#wkBtn" data-i="🗓"><i>🗓️</i>Week</button>
+        <button data-go="#socialBtn" id="mBell" class="bell" data-n="" data-i="🔔"><i>🔔</i>Vrienden</button>
+        <button data-go="#fameBtn" data-i="👑"><i>👑</i>Wall of Fame</button>
+        <button data-go="#berichtBtn" data-i="📣"><i>📣</i>Bericht</button>
+        <button data-go="#appBtn" data-i="📲"><i>📲</i>App</button>
+        <a href="https://github.com/timmmmmmmmn/jensrun" target="_blank" rel="noopener" data-i="💻"><i>💻</i>Broncode</a>
+      </div>
+    </div></div>
+    <!-- de knoppen waar de rest van de game op luistert -->
+    <div class="fm-src" hidden>
+      <span id="menuBekers"></span><div id="feesten"></div><div id="xPop" class="hidden"></div>
+      <button id="shopBtn"></button><button id="kamerBtn"></button><button id="socialBtn" class="bell" data-n=""></button><button id="fameBtn"></button>
+      <button id="xBtn"></button><button id="xClose"></button><button id="setBtn"></button><button id="appBtn"></button>
+      <button id="krantBtn"></button><button id="boardBtn"></button><button id="wkBtn"></button><button id="passBtn"></button><button id="berichtBtn"></button>
+    </div>
+  </div>
+
+  <!-- SHOP: de PLUS -->
+  <div id="shop" class="screen hidden">
+    <div class="panel shop-panel plus">
+      <div class="plus-head">
+        <img src="img/plus-logo.png" alt="PLUS">
+        <div class="plus-titel"><h2 id="plusTitel">PLUS Jens Run</h2><small id="plusSub"></small></div>
+        <button id="plusMand" class="plus-mand" aria-label="Mandje">🧺 <b id="mandN">0</b></button>
+        <div class="wallet">🏆 <b id="shopBekers">0</b></div>
+      </div>
+      <div id="plusVloer" class="plus-vloer">
+        <div id="plusGangen" class="plus-gangen"></div>
+        <button id="naarKassa" class="plus-kassaknop"></button>
+      </div>
+      <div id="plusSchap" class="plus-schap hidden">
+        <button class="plus-terug">← Winkelvloer</button>
+        <div id="items" class="plus-planken"></div>
+        <div class="shop-info">
+          <div><b id="siName"></b><small id="siStatus"></small></div>
+          <button id="siBtn" class="btn"></button>
+        </div>
+      </div>
+      <div id="plusKassa" class="plus-kassa hidden">
+        <button class="plus-terug">← Verder winkelen</button>
+        <div class="bon">
+          <div class="bon-kop"><b>PLUS JENS RUN</b><small>Filiaal Nijmegen · bekers only</small></div>
+          <ul id="bonRegels"></ul>
+          <div class="bon-tot"><span>TOTAAL</span><b>🏆 <i id="bonTotaal">0</i></b></div>
+          <div class="bon-saldo"><span>Saldo</span><i id="bonSaldo">0</i></div>
+          <div class="bon-saldo"><span>Na betalen</span><i id="bonNa">0</i></div>
+        </div>
+        <button id="pinBtn" class="btn big pin"></button>
+        <small id="pinMsg" class="pin-msg"></small>
+      </div>
+      <button id="shopBack" class="btn big">🚪 NAAR BUITEN</button>
+    </div>
+  </div>
+
+  <!-- BAN / TIME-OUT -->
+  <div id="blok" class="screen hidden">
+    <div class="panel small">
+      <h2 id="blokTitle">Time-out</h2>
+      <p id="blokMsg" style="white-space:pre-wrap"></p>
+      <p id="blokTijd"></p>
+      <button id="blokOk" class="btn alt">Menu</button>
+    </div>
+  </div>
+
+  <!-- SCHOOLTIJD: groot slot, Jens rent op je af (3D erachter) -->
+  <div id="school" class="screen hidden">
+    <div class="slot-kop">
+      <svg class="slot" viewBox="0 0 120 150" aria-hidden="true">
+        <path class="slot-beugel" d="M30 70V45a30 30 0 0 1 60 0v25" fill="none" stroke="#c9ced6" stroke-width="14" stroke-linecap="round"/>
+        <rect x="10" y="66" width="100" height="80" rx="14" fill="#ffc400" stroke="#000" stroke-width="5"/>
+        <rect x="18" y="74" width="84" height="10" rx="5" fill="#ffe45a"/>
+        <circle cx="60" cy="100" r="11" fill="#1d1306"/>
+        <path d="M55 104h10l4 26H51z" fill="#1d1306"/>
+      </svg>
+      <h2 class="slot-titel">Op slot</h2>
+      <p class="slot-tekst" id="slotTekst">Je mag nu niet spelen. Doordeweeks is Jens Run dicht van 9:00 tot 14:30.</p>
+    </div>
+    <div class="slot-pas">
+      <button id="schoolPasOpen" class="btn alt">Ik heb een wachtwoord</button>
+      <div id="schoolPasBox" class="hidden">
+        <div class="slot-rij">
+          <input id="schoolPas" type="password" placeholder="Wachtwoord" autocomplete="off" maxlength="40">
+          <button id="schoolOk" class="btn big">Spelen</button>
+        </div>
+        <p id="schoolFout"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="over" class="screen hidden">
+    <div class="panel">
+      <h2 id="overTitle">Gepakt!</h2>
+      <p id="overText"></p>
+      <div class="stats">
+        <div><small>Score</small><b id="overScore">0</b></div>
+        <div><small>Bekers</small><b id="overBekers">0</b></div>
+        <div><small>Record</small><b id="overBest">0</b></div>
+      </div>
+      <div id="newBest" class="newbest hidden">NIEUW RECORD!</div>
+      <div id="overBijna" class="bijna hidden"></div>
+      <div id="overRank" class="rank hidden"></div>
+      <div id="overChallenge" class="rank hidden"></div>
+      <div class="row">
+        <button id="deelBtn" class="btn alt hidden">📸 Deel je score</button>
+        <button id="shareBtn" class="btn alt">📣 Daag uit</button>
+        <button id="snapShare" class="btn alt snapbtn hidden">💾 Download je filmpje</button>
+      </div>
+      <div id="overLive" class="livebox hidden">
+        <div id="olRes"></div>
+        <div id="olChat" class="olchat">
+          <ol id="chatLog"></ol>
+          <div id="chatQuick" class="chatq"><button data-q="GG">GG</button><button data-q="Haha 😂">Haha 😂</button><button data-q="REN!">REN!</button><button data-q="Bijna 🔥">Bijna 🔥</button><button data-q="Nog een keer?">Nog een keer?</button></div>
+          <form id="chatForm" class="row"><input id="chatIn" maxlength="80" placeholder="Stuur een bericht…" autocomplete="off"><button class="btn">Stuur</button></form>
+        </div>
+      </div>
+      <button id="replayBtn" class="btn alt hidden">🎬 Bekijk de replay</button>
+      <form id="wallForm" class="namebox hidden">
+        <label for="wallInput">👑 Je staat #1! Zet iets op de muur</label>
+        <div class="row"><input id="wallInput" maxlength="60" placeholder="Kom maar op!"><button class="btn">OK</button></div>
+        <div class="err"></div>
+      </form>
+      <div id="overMissions" class="missions"></div>
+      <form id="overName" class="namebox hidden">
+        <label for="overNameInput">Zet je score op de ranglijst</label>
+        <div class="row"><input id="overNameInput" maxlength="16" placeholder="Jouw naam" autocomplete="nickname"><button class="btn">OK</button></div>
+        <small>Je kunt maar één keer een naam kiezen.</small>
+        <div class="err"></div>
+      </form>
+      <button id="againBtn" class="btn big">NOG EEN KEER</button>
+      <div class="row">
+        <button id="overShop" class="btn alt">🛒 PLUS</button>
+        <button id="overMenu" class="btn alt">Menu</button>
+      </div>
+    </div>
+    <!-- score delen: kaart met het moment dat je dood ging -->
+    <div id="deelUi" class="deel-ui hidden"><div class="deel-in">
+      <div class="deel-h"><h2>Deel je score</h2><button id="deelX" class="fm-x" aria-label="Sluiten">✕</button></div>
+      <div class="deel-prev"><img id="deelImg" alt="Je score met het moment dat je gepakt werd"></div>
+      <div class="deel-apps">
+        <button data-deel="instagram" class="deel-app ig">Instagram</button>
+        <button data-deel="whatsapp" class="deel-app wa">WhatsApp</button>
+        <button data-deel="x" class="deel-app xx">X</button>
+        <button data-deel="opslaan" class="deel-app op">💾 Opslaan</button>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- RANGLIJST -->
+  <div id="board" class="screen hidden">
+    <div class="panel">
+      <div class="shop-head"><h2>Ranglijst</h2><div id="boardMe" class="wallet"></div></div>
+      <button id="boardPick" class="glas-kies"></button>
+      <div id="boardTabs" class="tabs"></div>
+      <div id="boardPlus" class="board-plus hidden"></div>
+      <ol id="boardList" class="board"></ol>
+      <form id="boardName" class="namebox hidden">
+        <label for="boardNameInput">Kies je naam voor de ranglijst</label>
+        <div class="row"><input id="boardNameInput" maxlength="16" placeholder="Jouw naam" autocomplete="nickname"><button class="btn">OK</button></div>
+        <small>Je kunt maar één keer een naam kiezen.</small>
+        <div class="err"></div>
+      </form>
+      <button id="boardBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- LEVELS -->
+  <div id="levels" class="screen hidden">
+    <div class="panel wide">
+      <div class="shop-head"><h2 id="lvHead">Terroriseer Nijmegen</h2><div id="lvStars" class="wallet"></div></div>
+      <div id="campCats" class="tabs cats"></div>
+      <div id="campTabs" class="tabs"></div>
+      <div id="lvGrid" class="lvgrid"></div>
+      <div class="lvinfo">
+        <b id="lvTitle"></b>
+        <p id="lvIntro"></p>
+        <div id="lvCuts" class="tabs wrap"></div>
+        <ul id="lvTasks"></ul>
+      </div>
+      <button id="lvPlay" class="btn big">SPELEN</button>
+      <button id="lvBack" class="btn alt">Terug</button>
+    </div>
+  </div>
+
+  <!-- LEVEL KLAAR -->
+  <div id="lvldone" class="screen hidden">
+    <div class="panel">
+      <h2 id="ldTitle"></h2>
+      <div id="ldStars" class="ldstars"></div>
+      <p id="ldText"></p>
+      <ul id="ldTasks" class="ldtasks"></ul>
+      <div class="stats one"><div><small>Chaos-score</small><b id="ldScore">0</b></div></div>
+      <button id="ldNext" class="btn big">VOLGENDE WIJK</button>
+      <button id="ldFame" class="btn big hidden">👑 WALL OF FAME</button>
+      <div class="row">
+        <button id="ldRetry" class="btn alt">Opnieuw</button>
+        <button id="ldMap" class="btn alt">Kaart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WALL OF FAME -->
+  <div id="fame" class="screen hidden">
+    <div class="panel">
+      <h2>👑 Wall of Fame</h2>
+      <div id="fameTabs" class="tabs"></div>
+      <p id="fameSub">Iedereen die de Koning van Hatert heeft verslagen.</p>
+      <form id="fameForm" class="namebox hidden">
+        <label for="fameInput">Zet je naam op de muur</label>
+        <div class="row"><input id="fameInput" maxlength="16" placeholder="Jouw naam" autocomplete="nickname"><button class="btn">OK</button></div>
+        <div class="err"></div>
+      </form>
+      <ol id="fameList" class="board"></ol>
+      <button id="fameBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- APP INSTALLEREN -->
+  <div id="install" class="screen hidden">
+    <div class="panel">
+      <h2>📲 Jens Run als app</h2>
+      <div id="instIos" class="inst">
+        <b>iPhone / iPad</b>
+        <p>Open deze pagina in <b>Safari</b>, tik op <b>Deel</b> (vierkantje met pijl omhoog) en kies <b>Zet op beginscherm</b>. Updates gaan vanzelf.</p>
+      </div>
+      <div id="instAndroid" class="inst">
+        <b>Android</b>
+        <p>Download de app (APK) en open het bestand. Sta installeren uit deze bron toe als je telefoon erom vraagt. De app werkt zichzelf bij.</p>
+        <a class="btn big" href="https://github.com/timmmmmmmmn/jensrun/releases/latest/download/JensRun.apk">APK DOWNLOADEN</a>
+      </div>
+      <button id="instBack" class="btn alt">Terug</button>
+    </div>
+  </div>
+
+  <!-- PROFIEL -->
+  <div id="profile" class="screen hidden">
+    <div class="panel">
+      <h2 id="prName"></h2>
+      <div id="prBody"></div>
+      <button id="prBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- INSTELLINGEN -->
+  <div id="settings" class="screen hidden">
+    <div class="panel">
+      <h2>⚙️ Instellingen</h2>
+      <div class="label">Account</div>
+      <div id="accountBox" class="sobody"></div>
+      <label class="slider">🎵 Muziek <input id="set_music" type="range" min="0" max="100" step="5"><b id="set_music_v"></b></label>
+      <label class="slider">💥 Effecten <input id="set_sfx" type="range" min="0" max="100" step="5"><b id="set_sfx_v"></b></label>
+      <label class="slider">🗣️ Stemmen en filmpjes <input id="set_voice" type="range" min="0" max="100" step="5"><b id="set_voice_v"></b></label>
+      <div class="row"><button id="set_sound" class="btn alt"></button><button id="set_vibe" class="btn alt"></button></div>
+      <button id="set_dash" class="btn alt"></button>
+      <div class="label">Beeld</div>
+      <div id="set_quality" class="tabs"><button class="tab" data-q="auto">Auto</button><button class="tab" data-q="ps1">PS1</button><button class="tab" data-q="normaal">Iets scherper</button><button class="tab" data-q="scherp">Scherp</button><button class="tab" data-q="ultra">✨ Ultra</button></div>
+      <small id="set_q_info" class="hint"></small>
+      <div id="set_app" class="hidden"><div class="label">App</div><button id="set_update" class="btn alt">🔄 Zoeken naar updates</button><small id="set_appver" class="hint"></small></div>
+      <div class="label">Credits</div>
+      <div class="credits"><img src="img/jesse-piano.png" alt=""><div><b>Jens Run Theme Song - Jessegrill</b><span>Alle muziek in de game: menu, winkel, intro, het spelnummer en het doodsdeuntje</span></div></div>
+      <p class="hint">Iconen: game-icons.net (CC BY 3.0) · Beker-3D-model: stresvogel</p>
+      <p class="hint">🎮 Controller: stick/pijltjes wisselen · ✕/A springen · ○/B glijden · □/X nitraat · Start pauze</p>
+      <button id="setBack" class="btn big">KLAAR</button>
+    </div>
+  </div>
+
+  <!-- ACCOUNT -->
+  <div id="account" class="screen hidden">
+    <div class="panel">
+      <h2 id="acTitle">Account</h2>
+      <form id="acForm" class="namebox acform">
+        <label>Gebruikersnaam <input id="acName" maxlength="16" autocomplete="username" placeholder="Jouw naam"></label>
+        <label>Gebruikersnaam of e-mail <input id="acLogin" autocomplete="username" placeholder="naam of e-mail"></label>
+        <label>E-mail <input id="acEmail" type="email" autocomplete="email" placeholder="jij@voorbeeld.nl"></label>
+        <label>Huidig wachtwoord <input id="acOld" type="password" autocomplete="current-password"></label>
+        <label>Wachtwoord <input id="acPass" type="password" minlength="8"></label>
+        <small id="acInfo"></small>
+        <div class="err"></div>
+        <button id="acGo" class="btn big">INLOGGEN</button>
+      </form>
+      <button id="acBack" class="btn alt">Terug</button>
+    </div>
+  </div>
+
+  <!-- SAMEN -->
+  <div id="social" class="screen hidden">
+    <div class="panel">
+      <h2>👥 Samen</h2>
+      <button id="soPick" class="glas-kies"></button>
+      <div id="soTabs" class="tabs wrap"></div>
+      <div id="soBody" class="sobody"></div>
+      <button id="soBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- OSSO (first person door het huis van Jens) -->
+  <div id="kamer" class="screen hidden osso">
+    <div class="osso-top">
+      <h2>🏠 De Hub</h2>
+      <div id="kmStats" class="badges"></div>
+      <button id="kmShop" class="btn alt">🛒 Inrichten</button>
+      <button id="kmBack" class="btn alt">🚪 Weg</button>
+    </div>
+    <div class="osso-cross"></div>
+    <div id="ossoPrompt" class="osso-prompt hidden"></div>
+    <div id="ossoMsg" class="osso-msg"></div>
+    <div id="ossoTalk" class="osso-talk hidden"></div>
+    <button id="kmUse" class="btn osso-use hidden">✋</button>
+    <div id="ossoJoy" class="osso-joy hidden"><i></i></div>
+    <p class="osso-hint">WASD/joystick lopen · muis/sleep kijken · E/tik gebruiken</p>
+    <div id="ossoSleep" class="osso-sleep"></div>
+    <div id="osShop" class="os-shop hidden"><div class="panel">
+      <h2>🛒 Osso inrichten <small id="osShopBekers"></small></h2>
+      <div id="osShopList" class="items"></div>
+      <button id="osShopClose" class="btn big">KLAAR</button>
+    </div></div>
+    <button id="achBtn" class="hidden"></button>
+  </div>
+
+  <!-- LERARENKAMER -->
+  <div id="lkamer" class="screen hidden lk">
+    <div class="panel lk-panel">
+      <div class="shop-head"><h2>Lerarenkamer</h2><div class="wallet"><img class="cup-i" src="img/beker.png" alt=""> <b id="lkBekers">0</b></div></div>
+      <p class="hint lk-sub">Niemand kijkt. Hier liggen spullen die je nergens anders krijgt. Ze werken de rest van deze run.</p>
+      <div id="lkList" class="lk-list"></div>
+      <button id="lkBack" class="btn big">TERUG DE GANG IN</button>
+    </div>
+  </div>
+
+  <!-- SEIZOENSPAS -->
+  <div id="pass" class="screen hidden">
+    <div class="panel">
+      <h2>🎟️ Seizoenspas</h2>
+      <p id="passHead" class="hint"></p>
+      <div class="pass-bar"><i id="passBar"></i></div>
+      <p class="hint">Elke 10 meter gerend = 1 XP · 100 XP per trede · elke maand een nieuwe pas</p>
+      <div id="passList" class="pass-list"></div>
+      <button id="passBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- KRANT -->
+  <div id="krant" class="screen hidden">
+    <div class="panel krant">
+      <div class="kr-mast"><img src="img/na-logo.png" alt=""><div><b>NijmegenActueel</b><small id="krantDate"></small></div></div>
+      <div id="krantBody"></div>
+      <button id="krantBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- PLAKBOEK -->
+  <div id="plakboek" class="screen hidden">
+    <div class="panel wide">
+      <div class="shop-head"><h2>📒 NEC-plakboek</h2><div id="pbCount" class="wallet"></div></div>
+      <div id="pbReward" class="rank"></div>
+      <div id="pbGrid" class="pbgrid"></div>
+      <button id="pbBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- FOTOMODUS / REPLAY -->
+  <div id="photoUi" class="photo-ui hidden">
+    <div class="photo-tip">Sleep om te draaien · scroll om te zoomen</div>
+    <div class="row"><button id="photoShoot" class="btn big">📸 FOTO</button><button id="photoBack" class="btn alt">Terug</button></div>
+  </div>
+  <div id="photoFlash"></div>
+  <div id="cutUi" class="cut-ui hidden">
+    <button id="cutSkip" class="cut-skip">Overslaan ⏭</button>
+    <div id="cutTitle" class="cut-title hidden"></div>
+    <div id="cutLine" class="cut-line hidden"><b id="cutWho"></b><span id="cutText"></span></div>
+  </div>
+  <div id="newsUi" class="news-ui hidden">
+    <div class="news-box">
+      <video id="newsVideo" controls playsinline></video>
+      <div class="row"><button id="newsSave" class="btn">💾 Download</button><button id="newsClose" class="btn alt">Sluiten</button></div>
+    </div>
+  </div>
+  <div id="replayUi" class="replay-ui hidden">
+    <div class="rp-top"><b>● REPLAY</b><span></span></div>
+    <div class="rp-bar"><i id="replayBar"></i></div>
+    <button id="replayStop" class="btn alt">Stoppen</button>
+  </div>
+
+  <!-- PRESTATIES -->
+  <div id="awards" class="screen hidden">
+    <div class="panel wide">
+      <div class="shop-head"><h2>🎖️ Prestaties</h2><div id="achCount" class="wallet"></div></div>
+      <div id="achGrid" class="achgrid"></div>
+      <button id="achBack" class="btn big">TERUG</button>
+    </div>
+  </div>
+
+  <!-- WEEKUITDAGING -->
+  <div id="weekly" class="screen hidden">
+    <div class="panel">
+      <div class="label">Weekuitdaging</div>
+      <h2 id="wkTitle"></h2>
+      <p id="wkDesc"></p>
+      <div id="wkBest" class="rank"></div>
+      <button id="wkPlay" class="btn big">MEEDOEN</button>
+      <ol id="wkList" class="board"></ol>
+      <button id="wkBack" class="btn alt">Terug</button>
+    </div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="pause" class="screen hidden">
+    <div class="panel small">
+      <h2>Pauze</h2>
+      <button id="resumeBtn" class="btn big">DOORGAAN</button>
+      <button id="vibeBtn" class="btn alt">📳 Trillen</button>
+      <button id="photoBtn" class="btn alt">📷 Fotomodus</button>
+      <button id="pauseSet" class="btn alt">⚙️ Instellingen</button>
+      <button id="quitBtn" class="btn alt">Stoppen</button>
+    </div>
+  </div>
+</div>
+<script src="wp/game.js"></script>
+</body>
+</html>
