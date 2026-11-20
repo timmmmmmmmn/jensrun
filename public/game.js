@@ -4738,8 +4738,39 @@ function openArticle(n) {
   if (n.img) im.src = n.img; else im.removeAttribute('src');
   $('#fmArtBody').textContent = n.body || '';
   $('#fmArtFoot').textContent = n.until ? `Staat hier nog tot ${new Date(n.until).toLocaleString('nl-NL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}` : '';
+  $('#fmArtMsg').classList.toggle('hidden', !n.knop);
+  $('#fmArtMsg').onclick = () => { $('#fmArt').classList.add('hidden'); openBericht(n); };
   $('#fmArt').classList.remove('hidden');
 }
+// bericht achterlaten: komt op /beheer terecht, eventueel met het nieuwsbericht erbij
+let berichtNieuws = null;
+function openBericht(n = null) {
+  audioInit();
+  berichtNieuws = n?.id || null;
+  $('#fmMsgOver').textContent = n ? `Over: ${n.title}` : '';
+  $('#fmMsgOver').classList.toggle('hidden', !n);
+  $('#fmMsgStatus').textContent = '';
+  $('#fmMsgSend').disabled = false;
+  $('#fmMsg').classList.remove('hidden');
+  setTimeout(() => $('#fmMsgText').focus(), 50);
+}
+$('#berichtBtn').addEventListener('click', () => openBericht());
+$('#fmMsgForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('#fmMsgText').value.trim();
+  if (text.length < 2) { $('#fmMsgStatus').textContent = 'Je bericht is nog leeg.'; return; }
+  $('#fmMsgSend').disabled = true;
+  $('#fmMsgStatus').textContent = 'Versturen…';
+  try {
+    const r = await apiCall('/api/bericht', { id: save.playerId, text, news: berichtNieuws });
+    if (!r.ok) { $('#fmMsgStatus').textContent = r.error || 'Dat lukte niet, probeer het later nog eens.'; $('#fmMsgSend').disabled = false; return; }
+    $('#fmMsgText').value = '';
+    $('#fmMsg').classList.add('hidden');
+    note('📣 Bericht verstuurd, bedankt!');
+  } catch (err) { $('#fmMsgStatus').textContent = 'Geen internet. Probeer het later nog eens.'; $('#fmMsgSend').disabled = false; }
+});
+// typen in het berichtvenster mag Jens niet laten bewegen
+$('#fmMsgText').addEventListener('keydown', (e) => e.stopPropagation());
 let newsLoaded = 0;
 async function loadNews() {
   if (Date.now() - newsLoaded < 120000) return;
@@ -4772,7 +4803,7 @@ $('#fmMode').addEventListener('click', (e) => {
   $('#fmModes').classList.remove('hidden');
 });
 for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => $(b.dataset.close).classList.add('hidden'));
-for (const f of ['#fmModes', '#fmArt']) $(f).addEventListener('click', (e) => { if (e.target.id === f.slice(1)) e.currentTarget.classList.add('hidden'); });
+for (const f of ['#fmModes', '#fmArt', '#fmMsg']) $(f).addEventListener('click', (e) => { if (e.target.id === f.slice(1)) e.currentTarget.classList.add('hidden'); });
 $('#modes').addEventListener('click', (e) => {
   const b = e.target.closest('[data-mode]');
   if (!b) return;
@@ -7335,6 +7366,7 @@ $('#fmTabMeer').addEventListener('click', (e) => {
   glasMenu(e.currentTarget, [
     { el: $('#fmBell'), icon: '🔔' },
     { el: document.querySelector('.fm-tabs [data-go="#fameBtn"]'), icon: '👑' },
+    { el: document.querySelector('.fm-tabs [data-go="#berichtBtn"]'), icon: '📣' },
   ].map(({ el, icon }) => ({ icon, title: el.textContent.trim() + (el.dataset.n ? ` (${el.dataset.n})` : ''), run: () => el.click() })));
 });
 $('#mMoreBtn').addEventListener('click', (e) => {

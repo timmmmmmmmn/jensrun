@@ -65,7 +65,7 @@ async function body(req) {
 const devOf = (req, url) => req.headers.get('x-jr-dev') || url.searchParams.get('dev') || '';
 const ipOf = (req) => req.headers.get('cf-connecting-ip') || '';
 // paden waar een geblokkeerde speler niks meer mag
-const BLOCK_PATHS = new Set(['/api/register', '/api/score', '/api/weekly', '/api/fame', '/api/wall', '/api/react']);
+const BLOCK_PATHS = new Set(['/api/register', '/api/score', '/api/weekly', '/api/fame', '/api/wall', '/api/react', '/api/bericht']);
 async function activeBlock(db, id, dev, ip) {
   id = ID_RE.test(id || '') ? id : null;
   dev = ID_RE.test(dev || '') ? dev : null;
@@ -251,8 +251,25 @@ async function api(req, env, url) {
 
   // nieuws in het hoofdmenu: alleen wat nog niet verlopen is
   if (path === '/api/news' && req.method === 'GET') {
-    const { results } = await db.prepare('SELECT id, title, body, until, created, img IS NOT NULL AS has_img FROM news WHERE until > ? ORDER BY created DESC LIMIT 8').bind(Date.now()).all();
-    return json({ items: results.map((n) => ({ id: n.id, title: n.title, body: n.body, until: n.until, img: n.has_img ? `/api/news/img/${n.id}` : null })) });
+    const { results } = await db.prepare('SELECT id, title, body, until, created, knop, img IS NOT NULL AS has_img FROM news WHERE until > ? ORDER BY created DESC LIMIT 8').bind(Date.now()).all();
+    return json({ items: results.map((n) => ({ id: n.id, title: n.title, body: n.body, until: n.until, knop: !!n.knop, img: n.has_img ? `/api/news/img/${n.id}` : null })) });
+  }
+  // bericht achterlaten voor de beheerder (los, of via de knop onder een nieuwsbericht)
+  if (path === '/api/bericht' && req.method === 'POST') {
+    const b = await body(req), dev = devOf(req, url), ip = ipOf(req);
+    const text = String(b.text || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 1000);
+    if (text.length < 2) return json({ error: text ? 'Je bericht is te kort.' : 'Je bericht is nog leeg.' }, 400);
+    // tegen spammen: hooguit 5 berichten per uur per apparaat of IP
+    const uur = Date.now() - 36e5;
+    const n = await db.prepare('SELECT COUNT(*) AS n FROM berichten WHERE created > ?1 AND ((?2 IS NOT NULL AND device = ?2) OR (?3 IS NOT NULL AND ip = ?3))')
+      .bind(uur, ID_RE.test(dev) ? dev : null, ip || null).first();
+    if (n.n >= 5) return json({ error: 'Je hebt al veel berichten gestuurd. Probeer het over een uurtje weer.' }, 429);
+    const id = ID_RE.test(b.id || '') ? b.id : null;
+    const p = id ? await db.prepare('SELECT name FROM players WHERE id = ?').bind(id).first() : null;
+    const news = /^[a-f0-9]{16}$/.test(b.news || '') ? await db.prepare('SELECT id, title FROM news WHERE id = ?').bind(b.news).first() : null;
+    await db.prepare('INSERT INTO berichten (id, player_id, name, text, news_id, news_title, device, ip, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(hex(crypto.getRandomValues(new Uint8Array(8))), id, p?.name || null, text, news?.id || null, news?.title || null, ID_RE.test(dev) ? dev : null, ip || null, Date.now()).run();
+    return json({ ok: true });
   }
   const newsImg = path.match(/^\/api\/news\/img\/([a-f0-9]{16})$/);
   if (newsImg && req.method === 'GET') {
@@ -576,7 +593,7 @@ async function api(req, env, url) {
   if (path.startsWith('/api/admin/')) {
     if (!isAdmin(req, env)) return json({ error: 'geen toegang' }, 401);
     if (path === '/api/admin/news' && req.method === 'GET') {
-      const { results } = await db.prepare('SELECT id, title, body, until, created, img IS NOT NULL AS has_img FROM news ORDER BY created DESC LIMIT 50').all();
+      const { results } = await db.prepare('SELECT id, title, body, until, created, knop, img IS NOT NULL AS has_img FROM news ORDER BY created DESC LIMIT 50').all();
       return json({ rows: results });
     }
     if (path === '/api/admin/news' && req.method === 'POST') {
@@ -592,12 +609,29 @@ async function api(req, env, url) {
         img = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)); type = m[1];
       }
       const id = hex(crypto.getRandomValues(new Uint8Array(8))), now = Date.now();
-      await db.prepare('INSERT INTO news (id, title, body, img, img_type, until, created) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, title, text, img ? img.buffer : null, type, now + hours * 36e5, now).run();
+      await db.prepare('INSERT INTO news (id, title, body, img, img_type, until, created, knop) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(id, title, text, img ? img.buffer : null, type, now + hours * 36e5, now, b.knop ? 1 : 0).run();
       return json({ ok: true, id });
     }
     if (path === '/api/admin/news/delete' && req.method === 'POST') {
       const b = await body(req);
       await db.prepare('DELETE FROM news WHERE id = ?').bind(String(b.id || '')).run();
+      return json({ ok: true });
+    }
+    // berichtknop achteraf aan- of uitzetten
+    if (path === '/api/admin/news/knop' && req.method === 'POST') {
+      const b = await body(req);
+      await db.prepare('UPDATE news SET knop = ? WHERE id = ?').bind(b.knop ? 1 : 0, String(b.id || '')).run();
+      return json({ ok: true });
+    }
+    if (path === '/api/admin/berichten' && req.method === 'GET') {
+      const { results } = await db.prepare('SELECT id, player_id, name, text, news_title, ip, gelezen, created FROM berichten ORDER BY created DESC LIMIT 200').all();
+      return json({ rows: results });
+    }
+    if (path === '/api/admin/berichten' && req.method === 'POST') {
+      const b = await body(req);
+      if (b.alles) await db.prepare('UPDATE berichten SET gelezen = 1').run();
+      else if (b.verwijder) await db.prepare('DELETE FROM berichten WHERE id = ?').bind(String(b.id || '')).run();
+      else await db.prepare('UPDATE berichten SET gelezen = ? WHERE id = ?').bind(b.gelezen ? 1 : 0, String(b.id || '')).run();
       return json({ ok: true });
     }
     if (path === '/api/admin/players' && req.method === 'GET') {

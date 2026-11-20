@@ -132,6 +132,7 @@
         <button data-go="#krantBtn">Krant</button>
         <button data-go="#socialBtn" id="fmBell" class="bell" data-n="">Vrienden</button>
         <button data-go="#fameBtn">Wall of Fame</button>
+        <button data-go="#berichtBtn">Bericht</button>
         <span class="fm-plate" aria-hidden="true"></span>
         <button id="fmTabMeer" class="fm-tab-meer">Meer</button>
       </nav>
@@ -194,7 +195,18 @@
       <div class="fm-float-h"><h2 id="fmArtH"></h2><button class="fm-x" data-close="#fmArt" aria-label="Sluiten">✕</button></div>
       <img id="fmArtImg" alt="">
       <p id="fmArtBody"></p>
+      <button id="fmArtMsg" class="btn hidden">📣 Stuur een bericht</button>
       <small id="fmArtFoot" class="hint"></small>
+    </div></div>
+    <!-- zwevend venster: bericht achterlaten voor de maker -->
+    <div id="fmMsg" class="fm-float hidden"><div class="fm-float-in fm-msg">
+      <div class="fm-float-h"><h2>Stuur een bericht</h2><button class="fm-x" data-close="#fmMsg" aria-label="Sluiten">✕</button></div>
+      <p id="fmMsgOver" class="hint hidden"></p>
+      <p class="hint">Een idee, een fout gevonden of gewoon iets kwijt? Alleen de maker van Jens Run leest het.</p>
+      <form id="fmMsgForm" class="fm-msg-form">
+        <textarea id="fmMsgText" maxlength="1000" rows="6" placeholder="Typ je bericht…" aria-label="Je bericht"></textarea>
+        <div class="row"><small id="fmMsgStatus" class="hint"></small><button id="fmMsgSend" class="btn big">Versturen</button></div>
+      </form>
     </div></div>
     <nav class="m-nav">
       <button data-go="#shopBtn"><i>🛒</i>PLUS</button>
@@ -212,6 +224,7 @@
         <button data-go="#wkBtn" data-i="🗓"><i>🗓️</i>Week</button>
         <button data-go="#socialBtn" id="mBell" class="bell" data-n="" data-i="🔔"><i>🔔</i>Vrienden</button>
         <button data-go="#fameBtn" data-i="👑"><i>👑</i>Wall of Fame</button>
+        <button data-go="#berichtBtn" data-i="📣"><i>📣</i>Bericht</button>
         <button data-go="#appBtn" data-i="📲"><i>📲</i>App</button>
         <a href="https://github.com/timmmmmmmmn/jensrun" target="_blank" rel="noopener" data-i="💻"><i>💻</i>Broncode</a>
       </div>
@@ -221,7 +234,7 @@
       <span id="menuBekers"></span><div id="feesten"></div><div id="xPop" class="hidden"></div>
       <button id="shopBtn"></button><button id="kamerBtn"></button><button id="socialBtn" class="bell" data-n=""></button><button id="fameBtn"></button>
       <button id="xBtn"></button><button id="xClose"></button><button id="setBtn"></button><button id="appBtn"></button>
-      <button id="krantBtn"></button><button id="boardBtn"></button><button id="wkBtn"></button><button id="passBtn"></button>
+      <button id="krantBtn"></button><button id="boardBtn"></button><button id="wkBtn"></button><button id="passBtn"></button><button id="berichtBtn"></button>
     </div>
   </div>
 

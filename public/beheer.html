@@ -29,6 +29,17 @@
   #nPrev { max-width: 260px; border-radius: 10px; }
   .nthumb { width: 72px; height: 44px; object-fit: cover; border-radius: 6px; display: block; }
   tr.oud td { opacity: .45; }
+  .berlist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .ber { background: #fff; border-radius: 12px; padding: 12px 14px; border-left: 4px solid var(--orange); }
+  .ber.gelezen { border-left-color: var(--line); opacity: .6; }
+  .ber p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ber .kop { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-size: 13px; color: var(--muted); }
+  .ber .kop b { color: var(--ink); font-size: 15px; }
+  .ber .acts { display: flex; gap: 6px; }
+  .ber .acts button { padding: 4px 10px; font-size: 13px; background: #555; }
+  .ber .acts button.del { background: #e5383b; }
+  button.knop { padding: 4px 8px; font-size: 12px; background: #555; }
+  button.knop.aan { background: var(--orange); }
   button.ban { background: #7a1fa2; padding: 6px 10px; }
   button.to { background: #d97706; padding: 6px 10px; }
   td .acts { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -52,6 +63,11 @@
     <button id="load">Laden</button>
   </div>
   <div id="msg"></div>
+  <div id="berBox" hidden>
+    <h2>Berichten van spelers <span id="berN" class="tag ban" hidden></span></h2>
+    <div class="row"><button id="berAlles" style="background:#555">Alles gelezen</button></div>
+    <div id="berList" class="berlist"></div>
+  </div>
   <div id="newsBox" hidden>
     <h2>Nieuws in het hoofdmenu</h2>
     <div class="nform">
@@ -63,6 +79,7 @@
       </div>
       <label>Plaatje (mag leeg) <input id="nImg" type="file" accept="image/*"></label>
       <img id="nPrev" alt="" hidden>
+      <label class="chk" style="flex-direction:row;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="nKnop" style="flex:0 0 auto;margin:0"> Knop "Stuur een bericht" onder dit nieuws (berichten komen hierboven binnen)</label>
       <div class="row"><button id="nAdd">Nieuws plaatsen</button></div>
     </div>
     <div class="wrap"><table id="newsTbl"><thead><tr><th></th><th>Titel</th><th>Staat tot</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -154,6 +171,7 @@ async function load() {
     $('#dates').value = (cfg.wedstrijden || []).join('\n');
     $('#wallNow').textContent = cfg.wall ? `${cfg.wall.name}: ${cfg.wall.text}` : 'Leeg';
     await loadNewsAdmin();
+    await loadBerichten();
     const f = await call('/api/admin/fame');
     $('#fame').hidden = false; $('#fameH').hidden = false; $('#spelersH').hidden = false;
     $('#fame tbody').innerHTML = f.rows.length ? f.rows.map((r) => `<tr><td>${esc(r.name)}</td><td>${r.c === 'nl' ? 'Nederland' : 'Nijmegen'}</td><td class="n">${r.score}</td>
@@ -307,7 +325,7 @@ async function loadNewsAdmin() {
   const { rows } = await call('/api/admin/news');
   $('#newsBox').hidden = false;
   const now = Date.now();
-  $('#newsTbl tbody').innerHTML = rows.length ? rows.map((r) => `<tr class="${r.until < now ? 'oud' : ''}"><td>${r.has_img ? `<img class="nthumb" src="/api/news/img/${esc(r.id)}" alt="">` : ''}</td><td><b>${esc(r.title)}</b><br><small>${esc(r.body).slice(0, 90)}</small></td>
+  $('#newsTbl tbody').innerHTML = rows.length ? rows.map((r) => `<tr class="${r.until < now ? 'oud' : ''}"><td>${r.has_img ? `<img class="nthumb" src="/api/news/img/${esc(r.id)}" alt="">` : ''}</td><td><b>${esc(r.title)}</b><br><small>${esc(r.body).slice(0, 90)}</small><br><button class="knop${r.knop ? ' aan' : ''}" data-knop="${esc(r.id)}" data-aan="${r.knop ? 1 : ''}">${r.knop ? '📣 Berichtknop aan' : 'Berichtknop uit'}</button></td>
     <td>${new Date(r.until).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${r.until < now ? ' (verlopen)' : ''}</td>
     <td><button class="del" data-n="${esc(r.id)}" data-t="${esc(r.title)}">Verwijder</button></td></tr>`).join('') : '<tr><td colspan="4">Nog geen nieuws. Dan staat er het standaardbericht over 2.0.</td></tr>';
 }
@@ -327,18 +345,48 @@ $('#nImg').onchange = async () => {
 $('#nAdd').onclick = async () => {
   try {
     const hours = Number($('#nDur').value) * Number($('#nUnit').value);
-    const r = await fetch('/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify({ title: $('#nTitle').value, body: $('#nBody').value, hours, image: nImage }) });
+    const r = await fetch('/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json', 'x-admin-key': $('#key').value }, body: JSON.stringify({ title: $('#nTitle').value, body: $('#nBody').value, hours, image: nImage, knop: $('#nKnop').checked }) });
     const d = await r.json();
     if (!r.ok) { $('#msg').textContent = d.error || 'Fout ' + r.status; return; }
-    $('#nTitle').value = ''; $('#nBody').value = ''; $('#nImg').value = ''; nImage = null; $('#nPrev').hidden = true;
+    $('#nTitle').value = ''; $('#nBody').value = ''; $('#nKnop').checked = false; $('#nImg').value = ''; nImage = null; $('#nPrev').hidden = true;
     $('#msg').textContent = 'Nieuws geplaatst';
     loadNewsAdmin();
   } catch (e) { $('#msg').textContent = e.message; }
 };
 $('#newsTbl').onclick = async (e) => {
+  const k = e.target.closest('[data-knop]');
+  if (k) {
+    try { await call('/api/admin/news/knop', { method: 'POST', body: JSON.stringify({ id: k.dataset.knop, knop: !k.dataset.aan }) }); loadNewsAdmin(); }
+    catch (err) { $('#msg').textContent = err.message; }
+    return;
+  }
   const b = e.target.closest('[data-n]');
   if (!b || !confirm(`"${b.dataset.t}" verwijderen?`)) return;
   try { await call('/api/admin/news/delete', { method: 'POST', body: JSON.stringify({ id: b.dataset.n }) }); loadNewsAdmin(); }
+  catch (err) { $('#msg').textContent = err.message; }
+};
+// ---------- berichten van spelers ----------
+async function loadBerichten() {
+  const { rows } = await call('/api/admin/berichten');
+  $('#berBox').hidden = false;
+  const nieuw = rows.filter((r) => !r.gelezen).length;
+  $('#berN').hidden = !nieuw; $('#berN').textContent = `${nieuw} nieuw`;
+  $('#berList').innerHTML = rows.length ? rows.map((r) => `<div class="ber${r.gelezen ? ' gelezen' : ''}">
+    <div class="kop"><b>${esc(r.name || 'Anoniem')}</b><span>${fmtTot(r.created)}</span>${r.news_title ? `<span>· over nieuws: ${esc(r.news_title)}</span>` : ''}${r.ip ? `<small class="ip">${esc(r.ip)}</small>` : ''}</div>
+    <p>${esc(r.text)}</p>
+    <div class="acts"><button data-ber="${esc(r.id)}" data-g="${r.gelezen ? '' : 1}">${r.gelezen ? 'Ongelezen' : 'Gelezen'}</button><button class="del" data-berdel="${esc(r.id)}">Verwijder</button></div></div>`).join('') : '<p class="hint">Nog geen berichten.</p>';
+}
+$('#berList').onclick = async (e) => {
+  const g = e.target.closest('[data-ber]'), d = e.target.closest('[data-berdel]');
+  try {
+    if (g) await call('/api/admin/berichten', { method: 'POST', body: JSON.stringify({ id: g.dataset.ber, gelezen: !!g.dataset.g }) });
+    else if (d && confirm('Bericht verwijderen?')) await call('/api/admin/berichten', { method: 'POST', body: JSON.stringify({ id: d.dataset.berdel, verwijder: true }) });
+    else return;
+    loadBerichten();
+  } catch (err) { $('#msg').textContent = err.message; }
+};
+$('#berAlles').onclick = async () => {
+  try { await call('/api/admin/berichten', { method: 'POST', body: JSON.stringify({ alles: true }) }); loadBerichten(); }
   catch (err) { $('#msg').textContent = err.message; }
 };
 $('#saveDates').onclick = async () => {
