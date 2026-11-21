@@ -88,6 +88,45 @@ const wp = {
 						image = ImageUtils.sRGBToLinear( image );`, `						// Windows 10 Mobile: geen CPU-omzetting, de shader decodeert (DECODE_VIDEO_TEXTURE)`, 'three-srgb');
       src = vervang(src, 'decodeVideoTexture: HAS_MAP && ( material.map.isVideoTexture === true ) && ', 'decodeVideoTexture: HAS_MAP && ', 'three-decode');
       src = vervang(src, 'vec4 emissiveColor = texture2D( emissiveMap, vEmissiveMapUv );', 'vec4 emissiveColor = texture2D( emissiveMap, vEmissiveMapUv );\\n\\temissiveColor.rgb = mix( pow( emissiveColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), emissiveColor.rgb * 0.0773993808, vec3( lessThanEqual( emissiveColor.rgb, vec3( 0.04045 ) ) ) );', 'three-emissive');
+      // De GPU van de Lumia heeft geen ANGLE_instanced_arrays: three tekende InstancedMeshes dan helemaal niet (huizen, bomen,
+      // figuranten weg). Nu: gewone attributen koppelen, instanceMatrix niet (die blijft een vaste waarde) en per exemplaar
+      // de matrix met vertexAttrib4f zetten en tekenen.
+      src = vervang(src, `			if ( extensions.get( 'ANGLE_instanced_arrays' ) === null ) return;
+
+		}
+
+		initAttributes();`, `			if ( extensions.get( 'ANGLE_instanced_arrays' ) === null && object.isInstancedMesh !== true ) return;
+
+		}
+
+		const zonderInstancing = capabilities.isWebGL2 === false && object.isInstancedMesh === true && extensions.get( 'ANGLE_instanced_arrays' ) === null;
+
+		initAttributes();`, 'three-inst1');
+      src = vervang(src, `				if ( geometryAttribute !== undefined ) {
+
+					const normalized = geometryAttribute.normalized;`, `				if ( zonderInstancing && ( name === 'instanceMatrix' || name === 'instanceColor' ) ) continue;
+
+				if ( geometryAttribute !== undefined ) {
+
+					const normalized = geometryAttribute.normalized;`, 'three-inst2');
+      src = vervang(src, `			} else if ( object.isInstancedMesh ) {
+
+				renderer.renderInstances( drawStart, drawCount, object.count );`, `			} else if ( object.isInstancedMesh && capabilities.isWebGL2 === false && extensions.get( 'ANGLE_instanced_arrays' ) === null ) {
+
+				const im = program.getAttributes().instanceMatrix, ic = program.getAttributes().instanceColor;
+				const m = object.instanceMatrix.array, c = object.instanceColor ? object.instanceColor.array : null;
+
+				for ( let i = 0; i < object.count; i ++ ) {
+
+					if ( im ) for ( let k = 0; k < 4; k ++ ) _gl.vertexAttrib4f( im.location + k, m[ i * 16 + k * 4 ], m[ i * 16 + k * 4 + 1 ], m[ i * 16 + k * 4 + 2 ], m[ i * 16 + k * 4 + 3 ] );
+					if ( ic && c ) _gl.vertexAttrib3f( ic.location, c[ i * 3 ], c[ i * 3 + 1 ], c[ i * 3 + 2 ] );
+					renderer.render( drawStart, drawCount );
+
+				}
+
+			} else if ( object.isInstancedMesh ) {
+
+				renderer.renderInstances( drawStart, drawCount, object.count );`, 'three-inst3');
       // Direct3D 9-niveau (en ANGLE): attribuut 0 moet per hoekpunt zijn. Zonder binding kon de linker instanceMatrix op 0
       // zetten, en dan tekende instancing onzin (grote driehoeken, figuranten weg). Dus position altijd op 0.
       src = vervang(src, `	} else if ( parameters.morphTargets === true ) {
@@ -199,9 +238,19 @@ const bundel = (coreJs) => esbuild.build({
 });
 const zonder = await bundel('');
 const gebruik = await swc.transform(zonder.outputFiles[0].text, { env: { targets: { edge: '13' }, mode: 'usage', coreJs: '3.51' }, jsc: { parser: { syntax: 'ecmascript' } }, isModule: false });
-const nodig = [...new Set(gebruik.code.match(/core-js\/modules\/[\w.-]+/g) || [])].sort();
+// volgorde: zoals SWC ze vindt, maar een aanvulling (web.url-search-params.delete) altijd ná de basis (web.url-search-params):
+// die aanvullingen gebruiken de globale constructor meteen bij het laden
+const gevonden = [...new Set(gebruik.code.match(/core-js\/modules\/[\w.-]+/g) || [])].map((m) => m.replace(/\.js$/, ''));
+const nodig = [];
+const voegToe = (m) => {
+  if (nodig.includes(m)) return;
+  const basis = gevonden.find((b) => b !== m && m.startsWith(b + '.'));
+  if (basis) voegToe(basis);
+  nodig.push(m);
+};
+gevonden.forEach(voegToe);
 if (!nodig.length) throw new Error('core-js: geen polyfills gevonden, klopt de SWC-analyse nog?');
-console.log('core-js:', nodig.length, 'polyfills');
+console.log('core-js:', nodig.length, 'polyfills'); if (process.env.WP_META) console.log(nodig.join(' '));
 const r = await bundel(nodig.map((m) => `import '${m}';`).join('\n'));
 
 if (process.env.WP_META) { const per = {}; for (const [f, x] of Object.entries(r.metafile.outputs[Object.keys(r.metafile.outputs)[0]].inputs)) { const k = f.includes('core-js') ? 'core-js' : f.includes('three') ? 'three' : f.replace(/^.*node_modules\//, '').split('/')[0]; per[k] = (per[k] || 0) + x.bytesInOutput; } console.log(Object.entries(per).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round(v / 1024) + 'K').join(', ')); }
