@@ -53,6 +53,12 @@ const wp = {
       src = vervang(src, "renderer.setPixelRatio(HD ?", "{ const gl = renderer.getContext(); window.__wpStap('webgl ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' tex, ' + gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) + '/' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) + ' uniforms, uint-index ' + !!gl.getExtension('OES_element_index_uint') + ', ' + gl.getParameter(gl.RENDERER)); }\nrenderer.setPixelRatio(HD ?", 'caps');
       // de grote mp3's niet vooraf ophalen: de fetch-polyfill houdt alles in het geheugen
       src = vervang(src, "'icons/icon-512.png', 'audio/menu.mp3', 'audio/intro.mp3', 'audio/game.mp3', 'audio/shop.mp3', 'audio/dbivo.mp3', 'audio/gameover.mp3'];", "'icons/icon-512.png'];", 'splash');
+      // Unicode-property-regexen (\p{…} met de u-vlag) liet de app op de Lumia crashen voordat de game begon.
+      // Zonder u-vlag: de emoji uit het iconenvel letterlijk, de rest als surrogaatpaar (+ FE0F/ZWJ/huidskleur).
+      src = vervang(src, "const EMOJI_RE = /\\p{Regional_Indicator}{2}|\\p{Extended_Pictographic}(?:\\uFE0F|\\u200D\\p{Extended_Pictographic}\\uFE0F?|\\p{Emoji_Modifier})*/gu;",
+        "window.__wpStap('emoji');\nconst EMOJI_RE = new RegExp('(?:' + Object.keys(ICONS).sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|') + ')\\uFE0F?|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF](?:\\uFE0F|\\u200D[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF])*', 'g');", 'emoji-re');
+      src = vervang(src, "const EMOJI_PRES = /\\p{Emoji_Presentation}|\\uFE0F/u;", "const EMOJI_PRES = /[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|\\uFE0F/;", 'emoji-pres');
+      src = vervang(src, "\niconize(document.body);\n", "\nwindow.__wpStap('iconen in de pagina');\niconize(document.body);\n", 'iconize');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
@@ -61,7 +67,7 @@ const wp = {
       const regels = src.split('\n');
       let i = 0;
       while (/^(import\s|\s*$|\/\/)/.test(regels[i])) i++;
-      src = regels.slice(0, i).join('\n') + '\nwindow.__wpGame = function () {\n' + regels.slice(i).join('\n') + '\n};\n';
+      src = regels.slice(0, i).join('\n') + "\nwindow.__wpGame = function () {\nwindow.__wpStap('game-functie');\n" + regels.slice(i).join('\n') + '\n};\n';
       return { contents: src, loader: 'js' };
     });
   },
