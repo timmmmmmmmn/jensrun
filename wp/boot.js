@@ -2,8 +2,10 @@
 // Fouten komen op het scherm, en elke opstartstap gaat naar localStorage: crasht de app hard, dan
 // staat bij de volgende start waar hij bleef steken.
 (function () {
-  var stappen = [], vorige = null;
-  try { vorige = localStorage.getItem('wpBoot'); } catch (e) {}
+  var stappen = [], vorige = null, log = [], t0 = Date.now();
+  try { vorige = localStorage.getItem('wpBoot'); log = JSON.parse(localStorage.getItem('wpLog') || '[]'); } catch (e) {}
+  var vorigLog = log.slice();
+  log = [];
   function toon(tekst) {
     var d = document.getElementById('wpFout');
     if (!d) {
@@ -16,9 +18,13 @@
     }
     d.textContent += tekst + '\n';
   }
+  // stap = waar we nu zijn; de laatste 25 met de tijd erbij gaan naar wpLog
   window.__wpStap = function (s) {
     stappen.push(s);
-    try { localStorage.setItem('wpBoot', s); } catch (e) {}
+    if (stappen.length > 50) stappen.shift();
+    log.push(((Date.now() - t0) / 1000).toFixed(1) + 's ' + s);
+    if (log.length > 25) log.shift();
+    try { localStorage.setItem('wpBoot', s); localStorage.setItem('wpLog', JSON.stringify(log)); } catch (e) {}
   };
   window.__wpFout = function (e) {
     var m = e && (e.stack || e.message) || String(e);
@@ -40,7 +46,8 @@
     setTimeout(function () {
       try { window.__wpGame(); } catch (e) { window.__wpFout(e); return; }
       window.__wpStap('game opgezet');
-      requestAnimationFrame(function () { requestAnimationFrame(function () { window.__wpStap('klaar'); }); });
+      // netjes weggezet of afgesloten telt niet als crash
+      document.addEventListener('visibilitychange', function () { window.__wpStap(document.hidden ? 'gesloten' : 'terug'); });
     }, 30);
   }
   var t = setTimeout(function () { img.onload = img.onerror = null; start(); }, 2500);
@@ -48,7 +55,7 @@
   img.src = 'img/iconen.png';
   document.addEventListener('DOMContentLoaded', function () {
     window.__wpStap('script geladen');
-    if (vorige && vorige !== 'klaar') toon('Vorige keer gestopt bij: ' + vorige + ' (tik om te sluiten)');
+    if (vorige && vorige !== 'klaar' && vorige !== 'gesloten') toon('Vorige keer gestopt bij: ' + vorige + ' (tik om te sluiten)\n' + vorigLog.join('\n'));
     start();
   });
 })();

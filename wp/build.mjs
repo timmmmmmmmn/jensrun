@@ -45,6 +45,14 @@ const wp = {
       // laadt boot.js vooraf. De game zelf draait als gewone functie; in een async functie werd het één
       // generator van 1 MB, en die liet Chakra in EdgeHTML 13 de app laten crashen nog voor het splashscherm.
       src = vervang(src, 'const renderer = new THREE.WebGLRenderer(', "window.__wpStap('webgl');\nconst renderer = new THREE.WebGLRenderer(", 'webgl');
+      // per beeld bijhouden of hij bij bijwerken of tekenen omvalt (eerste 200 beelden, daarna elke 2 s)
+      src = vervang(src, "renderer.setAnimationLoop(() => {\n", "let wpN = 0, wpT = 0;\nrenderer.setAnimationLoop(() => {\n", 'loop');
+      src = vervang(src, "  autoQuality(t - last);\n", "  const wpLog = wpN < 200 || t - wpT > 2000;\n  if (wpLog) { wpT = t; window.__wpStap('beeld ' + wpN + ' ' + state); }\n  autoQuality(t - last);\n", 'loop2');
+      src = vervang(src, "  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n", "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');\n  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n  if (wpLog) window.__wpStap('beeld ' + wpN + ' getekend');\n  wpN++;\n", 'render');
+      // wat de GPU kan (Lumia 435 = Adreno 302, Direct3D 9_3)
+      src = vervang(src, "renderer.setPixelRatio(HD ?", "{ const gl = renderer.getContext(); window.__wpStap('webgl ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' tex, ' + gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) + '/' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) + ' uniforms, uint-index ' + !!gl.getExtension('OES_element_index_uint') + ', ' + gl.getParameter(gl.RENDERER)); }\nrenderer.setPixelRatio(HD ?", 'caps');
+      // de grote mp3's niet vooraf ophalen: de fetch-polyfill houdt alles in het geheugen
+      src = vervang(src, "'icons/icon-512.png', 'audio/menu.mp3', 'audio/intro.mp3', 'audio/game.mp3', 'audio/shop.mp3', 'audio/dbivo.mp3', 'audio/gameover.mp3'];", "'icons/icon-512.png'];", 'splash');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
