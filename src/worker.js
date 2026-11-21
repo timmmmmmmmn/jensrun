@@ -795,6 +795,12 @@ export default {
         .on('title', { element(el) { el.setInnerContent(title); } })
         .transform(new Response(page.body, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } }));
     }
+    // opstartlog van de Windows 10 Mobile-versie (wp/boot.js): alleen naar de worker-log (wrangler tail), niets opgeslagen
+    if (url.pathname === '/api/wplog' && req.method === 'POST') {
+      const tekst = (await req.text()).slice(0, 8000);
+      console.log('wplog', tekst);
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname.startsWith('/api/')) {
       try { return await api(req, env, url); }
       catch (e) { return json({ error: 'serverfout' }, 500); }

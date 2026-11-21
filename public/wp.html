@@ -39,6 +39,27 @@
     toon('Fout (' + stappen[stappen.length - 1] + '): ' + ((e && e.stack) || msg) + (bron ? '\n  ' + bron + ':' + regel + ':' + kol : ''));
   };
   window.addEventListener('unhandledrejection', function (ev) { window.__wpFout(ev.reason); });
+  // ook naar de server (alleen in de worker-log te zien), in porties: zo is het log er ook als de app hard crasht
+  var sessie = Math.random().toString(36).slice(2, 8), wacht = [], bezig = false;
+  function stuur() {
+    if (bezig || !wacht.length) return;
+    var x = new XMLHttpRequest(), deel = wacht.splice(0, wacht.length);
+    bezig = true;
+    try {
+      x.open('POST', '/api/wplog', true);
+      x.setRequestHeader('content-type', 'text/plain');
+      x.onloadend = function () { bezig = false; };
+      x.send(sessie + ' ' + deel.join(' | '));
+    } catch (e) { bezig = false; }
+  }
+  setInterval(stuur, 700);
+  var stap = window.__wpStap;
+  window.__wpStap = function (s) { stap(s); if (wacht.length < 200) wacht.push(((Date.now() - t0) / 1000).toFixed(1) + 's ' + s); };
+  var fout = window.__wpFout;
+  window.__wpFout = function (e) { fout(e); wacht.push('FOUT ' + ((e && (e.stack || e.message)) || String(e)).slice(0, 600)); stuur(); };
+  var onerr = window.onerror;
+  window.onerror = function (msg, bron, regel, kol, e) { onerr(msg, bron, regel, kol, e); wacht.push('FOUT ' + String((e && e.stack) || msg).slice(0, 600) + ' @' + regel + ':' + kol); stuur(); };
+  wacht.push('start ' + navigator.userAgent + ' ' + screen.width + 'x' + screen.height + ' dpr ' + window.devicePixelRatio + (vorige && vorige !== 'gesloten' ? ' | VORIGE KEER GESTOPT BIJ: ' + vorige + ' || ' + vorigLog.join(' | ') : ''));
   window.__wpStap('html');
 
   var img = new Image(), klaar = 0;
