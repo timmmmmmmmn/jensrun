@@ -332,7 +332,9 @@ const r = await bundel(nodig.map((m) => `import '${m}';`).join('\n'));
 if (process.env.WP_META) { const per = {}; for (const [f, x] of Object.entries(r.metafile.outputs[Object.keys(r.metafile.outputs)[0]].inputs)) { const k = f.includes('core-js') ? 'core-js' : f.includes('three') ? 'three' : f.replace(/^.*node_modules\//, '').split('/')[0]; per[k] = (per[k] || 0) + x.bytesInOutput; } console.log(Object.entries(per).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round(v / 1024) + 'K').join(', ')); }
 // esbuild kan niet naar ES5; SWC zet de bundel om voor EdgeHTML 13 (let/const, destructuring, async)
 const js = await swc.transform(r.outputFiles[0].text, {
-  env: { targets: { edge: '13' }, bugfixes: true },
+  // naar ES5 (doel IE 11): Chakra in Edge 14 gaf na veel aanroepen (JIT) uit new Mesh() een object zonder position: een
+  // fout met native afgeleide klassen en super(). Als ES5 draait alles via het oude, beproefde pad van de engine.
+  env: { targets: { ie: '11' } },
   // WP_DEBUG=1: niet verkleind, voor profileren
   jsc: { parser: { syntax: 'ecmascript' }, externalHelpers: false, minify: process.env.WP_DEBUG ? undefined : { compress: { passes: 1 }, mangle: true } },
   minify: !process.env.WP_DEBUG,
