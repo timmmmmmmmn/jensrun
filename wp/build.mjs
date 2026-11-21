@@ -30,6 +30,7 @@ const BAYER_NIEUW = `vec2 psxP = mod(floor(gl_FragCoord.xy), 4.0);
     vec2 psxB0 = mod(psxP, 2.0), psxB1 = floor(psxP / 2.0);
     float psxD = (abs(psxB0.x - psxB0.y) * 8.0 + psxB0.y * 4.0 + abs(psxB1.x - psxB1.y) * 2.0 + psxB1.y + 0.5) / 16.0;`;
 
+let tla = 0;
 const wp = {
   name: 'wp',
   setup(b) {
@@ -40,11 +41,19 @@ const wp = {
     b.onLoad({ filter: /public\/game\.js$/ }, (a) => {
       let src = fs.readFileSync(a.path, 'utf8');
       src = vervang(src, BAYER_OUD, BAYER_NIEUW, 'bayer');
-      // top-level await kan niet zonder modules: alles na de imports in een async functie
+      // Geen top-level await: de enige (wachten op iconen en lettertypen) gaat eruit en het iconenplaatje
+      // laadt boot.js vooraf. De game zelf draait als gewone functie; in een async functie werd het één
+      // generator van 1 MB, en die liet Chakra in EdgeHTML 13 de app laten crashen nog voor het splashscherm.
+      src = vervang(src, 'const renderer = new THREE.WebGLRenderer(', "window.__wpStap('webgl');\nconst renderer = new THREE.WebGLRenderer(", 'webgl');
+      src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
+      src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
+      src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
+      if (tla !== 1) throw new Error(`patch 'await': ${tla}× gevonden in plaats van 1×`);
+      if (/^await |^for await/m.test(src)) throw new Error('game.js heeft weer een top-level await');
       const regels = src.split('\n');
       let i = 0;
       while (/^(import\s|\s*$|\/\/)/.test(regels[i])) i++;
-      src = regels.slice(0, i).join('\n') + '\n(async () => {\n' + regels.slice(i).join('\n') + '\n})().catch((e) => { window.__wpFout && window.__wpFout(e); });\n';
+      src = regels.slice(0, i).join('\n') + '\nwindow.__wpGame = function () {\n' + regels.slice(i).join('\n') + '\n};\n';
       return { contents: src, loader: 'js' };
     });
   },
@@ -80,9 +89,9 @@ css = lcss({ code: Buffer.from(css), minify: true, targets: { edge: 13 << 16 }, 
 fs.writeFileSync(path.join(uit, 'style.css'), css);
 
 let html = fs.readFileSync(path.join(pub, 'index.html'), 'utf8');
-html = vervang(html, '<script type="module" src="game.js"></script>', '<script src="wp/game.js"></script>', 'script');
+html = vervang(html, '<script type="module" src="game.js"></script>', '<script src="wp/game.js" defer></script>', 'script');
 html = vervang(html, '<link rel="stylesheet" href="style.css">', '<link rel="stylesheet" href="wp/style.css">', 'css');
 html = html.replace('<link rel="manifest" href="manifest.webmanifest">\n', '');
-html = html.replace('<head>', '<head>\n<meta http-equiv="X-UA-Compatible" content="IE=edge">\n<script>window.WP_APP = true;</script>');
+html = html.replace('<head>', () => '<head>\n<meta http-equiv="X-UA-Compatible" content="IE=edge">\n<script>window.WP_APP = true;\n' + fs.readFileSync(path.join(hier, 'boot.js'), 'utf8') + '</script>');
 fs.writeFileSync(path.join(pub, 'wp.html'), html);
 console.log('klaar:', fs.statSync(path.join(uit, 'game.js')).size, 'bytes JS,', css.length, 'bytes CSS');
