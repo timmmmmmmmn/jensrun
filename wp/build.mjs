@@ -9,6 +9,7 @@ import path from 'node:path';
 import postcss from 'postcss';
 import customProps from 'postcss-custom-properties';
 import { transform as lcss, browserslistToTargets } from 'lightningcss';
+import * as acorn from 'acorn';
 
 const hier = path.dirname(new URL(import.meta.url).pathname);
 const pub = path.join(hier, '../public');
@@ -38,8 +39,63 @@ const wp = {
     b.onResolve({ filter: /^three$/ }, () => ({ path: path.join(hier, 'node_modules/three/build/three.module.js') }));
     b.onResolve({ filter: /^\.\/hd\.js$/ }, () => ({ path: path.join(hier, 'hd-stub.js') }));
     b.onResolve({ filter: /^\.\/eiland\.js$/ }, () => ({ path: path.join(hier, 'eiland-stub.js') }));
+    // three.js op WebGL1 zonder EXT_sRGB (de Lumia) zet elke sRGB-textuur bij elke upload op de CPU om (Math.pow per
+    // pixel, extra canvas): op de telefoon tientallen seconden vast en een geheugenpiek. Hier decodeert de GPU ze, net als
+    // three dat al voor videotexturen doet (map én emissiveMap; alle texturen van de game zijn sRGB).
+    b.onLoad({ filter: /three\/build\/three\.module\.js$/ }, (a) => {
+      let src = fs.readFileSync(a.path, 'utf8');
+      src = vervang(src, `						// slow fallback (CPU decode)
+
+						image = ImageUtils.sRGBToLinear( image );`, `						// Windows 10 Mobile: geen CPU-omzetting, de shader decodeert (DECODE_VIDEO_TEXTURE)`, 'three-srgb');
+      src = vervang(src, 'decodeVideoTexture: HAS_MAP && ( material.map.isVideoTexture === true ) && ', 'decodeVideoTexture: HAS_MAP && ', 'three-decode');
+      src = vervang(src, 'vec4 emissiveColor = texture2D( emissiveMap, vEmissiveMapUv );', 'vec4 emissiveColor = texture2D( emissiveMap, vEmissiveMapUv );\\n\\temissiveColor.rgb = mix( pow( emissiveColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), emissiveColor.rgb * 0.0773993808, vec3( lessThanEqual( emissiveColor.rgb, vec3( 0.04045 ) ) ) );', 'three-emissive');
+      // Direct3D 9-niveau (en ANGLE): attribuut 0 moet per hoekpunt zijn. Zonder binding kon de linker instanceMatrix op 0
+      // zetten, en dan tekende instancing onzin (grote driehoeken, figuranten weg). Dus position altijd op 0.
+      src = vervang(src, `	} else if ( parameters.morphTargets === true ) {
+
+		// programs with morphTargets displace position out of attribute 0
+		gl.bindAttribLocation( program, 0, 'position' );`, `	} else {
+
+		gl.bindAttribLocation( program, 0, 'position' );`, 'three-attr0');
+      // Bug in three r162 zonder OES_vertex_array_object (EdgeHTML): de bindingscache keek alleen naar vorm + programma,
+      // dus twee InstancedMeshes met dezelfde vorm en shader tekenden met de instanceMatrix van de eerste (rommeldriehoeken).
+      src = vervang(src, `			if ( currentState.geometry !== geometry.id ||
+				currentState.program !== program.id ||
+				currentState.wireframe !== wireframe ) {
+
+				currentState.geometry = geometry.id;
+				currentState.program = program.id;
+				currentState.wireframe = wireframe;`, `			const instanties = object.isInstancedMesh === true ? object.instanceMatrix : null;
+			const instKleur = object.isInstancedMesh === true ? object.instanceColor : null;
+
+			if ( currentState.geometry !== geometry.id ||
+				currentState.program !== program.id ||
+				currentState.wireframe !== wireframe ||
+				currentState.instanties !== instanties ||
+				currentState.instKleur !== instKleur ) {
+
+				currentState.geometry = geometry.id;
+				currentState.program = program.id;
+				currentState.wireframe = wireframe;
+				currentState.instanties = instanties;
+				currentState.instKleur = instKleur;`, 'three-binding');
+      return { contents: src, loader: 'js' };
+    });
     b.onLoad({ filter: /public\/game\.js$/ }, (a) => {
       let src = fs.readFileSync(a.path, 'utf8');
+      // markeringen door de hele opbouw (vóór een statement op het hoogste niveau, minstens 25 regels uit elkaar):
+      // crasht de Lumia hard, dan staat in het log op welke regel van game.js hij was
+      {
+        const ast = acorn.parse(src, { ecmaVersion: 'latest', sourceType: 'module', locations: true });
+        const plekken = [];
+        let vorige = 0;
+        for (const st of ast.body) {
+          if (/^(Import|Export|Function)/.test(st.type) || st.loc.start.line - vorige < 25) continue;
+          plekken.push([st.start, st.loc.start.line]);
+          vorige = st.loc.start.line;
+        }
+        for (const [pos, regel] of plekken.reverse()) src = src.slice(0, pos) + `window.__wpStap('r${regel}');\n` + src.slice(pos);
+      }
       src = vervang(src, BAYER_OUD, BAYER_NIEUW, 'bayer');
       // Geen top-level await: de enige (wachten op iconen en lettertypen) gaat eruit en het iconenplaatje
       // laadt boot.js vooraf. De game zelf draait als gewone functie; in een async functie werd het één
@@ -59,6 +115,12 @@ const wp = {
         "window.__wpStap('emoji');\nconst EMOJI_RE = new RegExp('(?:' + Object.keys(ICONS).sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|') + ')\\uFE0F?|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF](?:\\uFE0F|\\u200D[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]\\uFE0F?|\\uD83C[\\uDFFB-\\uDFFF])*', 'g');", 'emoji-re');
       src = vervang(src, "const EMOJI_PRES = /\\p{Emoji_Presentation}|\\uFE0F/u;", "const EMOJI_PRES = /[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|\\uFE0F/;", 'emoji-pres');
       src = vervang(src, "\niconize(document.body);\n", "\nwindow.__wpStap('iconen in de pagina');\niconize(document.body);\n", 'iconize');
+      // Opwarmen (alle ~90 objecten bouwen, alle shaders compileren, alle texturen uploaden, ~70 figuranten tekenen)
+      // is op de Lumia een geheugen- en GPU-piek vlak na het splashscherm: overslaan, shaders komen als iets voor het eerst verschijnt.
+      // Alleen de grens voor het opruimen zetten, zoals warmUp dat na afloop doet.
+      src = vervang(src, 'setTimeout(warmUp, 400); // tijdens het startscherm', "setTimeout(() => { resBase = { g: new THREE.BufferGeometry().id, t: new THREE.Texture().id }; }, 400);", 'warmup');
+      src = vervang(src, 'setTimeout(() => { try { renderer.compile(scene, camera); } catch (e) { /* niet erg */ } }, 500);', '', 'compile');
+      src = vervang(src, 'setTimeout(prewarmPeople, 1500);', '', 'prewarm');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
@@ -89,8 +151,9 @@ const r = await esbuild.build({
 // esbuild kan niet naar ES5; SWC zet de bundel om voor EdgeHTML 13 (let/const, destructuring, async)
 const js = await swc.transform(r.outputFiles[0].text, {
   env: { targets: { edge: '13' }, bugfixes: true },
-  jsc: { parser: { syntax: 'ecmascript' }, externalHelpers: false, minify: { compress: { passes: 1 }, mangle: true } },
-  minify: true,
+  // WP_DEBUG=1: niet verkleind, voor profileren
+  jsc: { parser: { syntax: 'ecmascript' }, externalHelpers: false, minify: process.env.WP_DEBUG ? undefined : { compress: { passes: 1 }, mangle: true } },
+  minify: !process.env.WP_DEBUG,
   isModule: false,
 });
 fs.writeFileSync(path.join(uit, 'game.js'), js.code);

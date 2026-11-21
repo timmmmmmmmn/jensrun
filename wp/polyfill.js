@@ -85,8 +85,30 @@ if (AC) {
       if (r && r.then) r.then(() => {}, () => {});
     });
   };
+  // connect() geeft in oude Edge niets terug, de game ketent a.connect(b).connect(c)
+  const AN = window.AudioNode && AudioNode.prototype, con = AN && AN.connect;
+  if (con) AN.connect = function (doel) { const r = con.apply(this, arguments); return r === undefined ? doel : r; };
+  if (window.AudioBuffer && !AudioBuffer.prototype.copyToChannel) AudioBuffer.prototype.copyToChannel = function (bron, kanaal, start) { this.getChannelData(kanaal).set(bron, start || 0); };
+  if (window.AudioBuffer && !AudioBuffer.prototype.copyFromChannel) AudioBuffer.prototype.copyFromChannel = function (doel, kanaal, start) { const d = this.getChannelData(kanaal); doel.set(d.subarray(start || 0, (start || 0) + doel.length)); };
+  for (const k of ['resume', 'suspend', 'close']) if (!AC.prototype[k]) AC.prototype[k] = function () { return Promise.resolve(); };
+  // new AudioContext({ latencyHint }) kent oude Edge niet: dan zonder opties
+  const ACecht = AC;
+  window.AudioContext = function AudioContext(o) { try { return o === undefined ? new ACecht() : new ACecht(o); } catch (e) { return new ACecht(); } };
+  window.AudioContext.prototype = ACecht.prototype;
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (OAC) { window.OfflineAudioContext = OAC; if (OAC.prototype.decodeAudioData === dec) OAC.prototype.decodeAudioData = AC.prototype.decodeAudioData; }
+  // startRendering() geeft in oude Edge geen promise maar een complete-event
+  if (OAC) {
+    const sr = OAC.prototype.startRendering;
+    OAC.prototype.startRendering = function () {
+      const oc = this;
+      return new Promise((ok, nee) => {
+        const vorige = oc.oncomplete;
+        oc.oncomplete = (e) => { if (vorige) vorige.call(oc, e); ok(e.renderedBuffer); };
+        try { const r = sr.call(oc); if (r && r.then) r.then(ok, nee); } catch (e) { nee(e); }
+      });
+    };
+  }
 }
 // EventTarget-opties ({ once, passive }) ondersteunt EdgeHTML 13–15 maar half: once zelf regelen
 (() => {
@@ -132,4 +154,66 @@ if (!window.createImageBitmap) {
     img.onerror = () => { URL.revokeObjectURL(url); nee(new Error('afbeelding kon niet geladen worden')); };
     img.src = url;
   });
+}
+
+// Tijdzones: oude Chakra kent alleen UTC en heeft geen formatToParts. Europe/Amsterdam rekenen we zelf uit
+// (zomertijd volgens de EU-regel: laatste zondag van maart t/m laatste zondag van oktober, 01:00 UTC).
+(() => {
+  let zoneOk = true;
+  try { new Date().toLocaleDateString('nl-NL', { timeZone: 'Europe/Amsterdam' }); } catch (e) { zoneOk = false; }
+  if (!window.Intl) return;
+  const DTF = Intl.DateTimeFormat;
+  if (zoneOk && DTF.prototype.formatToParts) return;
+  const laatsteZondag = (j, m) => { const d = new Date(Date.UTC(j, m + 1, 0, 1)); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.getTime(); };
+  const naarAms = (t) => { const j = new Date(t).getUTCFullYear(); return t + (t >= laatsteZondag(j, 2) && t < laatsteZondag(j, 9) ? 2 : 1) * 3600e3; };
+  const isAms = (o) => !zoneOk && !!o && typeof o.timeZone === 'string' && /^europe\/amsterdam$/i.test(o.timeZone);
+  const alsUtc = (o) => Object.assign({}, o, { timeZone: 'UTC' });
+  if (!zoneOk) {
+    for (const k of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']) {
+      const orig = Date.prototype[k];
+      Date.prototype[k] = function (loc, o) { return isAms(o) ? orig.call(new Date(naarAms(this.getTime())), loc, alsUtc(o)) : orig.call(this, loc, o); };
+    }
+  }
+  const DAG = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], twee = (n) => (n < 10 ? '0' : '') + n;
+  function DateTimeFormat(loc, o) {
+    if (!(this instanceof DateTimeFormat)) return new DateTimeFormat(loc, o);
+    this.ams = isAms(o);
+    this.o = Object.assign({}, o);
+    this.f = new DTF(loc, this.ams ? alsUtc(o) : o);
+  }
+  const tijd = (self, d) => { const t = d == null ? Date.now() : +d; return self.ams ? naarAms(t) : t; };
+  DateTimeFormat.prototype.format = function (d) { return this.f.format(tijd(this, d)); };
+  DateTimeFormat.prototype.resolvedOptions = function () { return this.f.resolvedOptions(); };
+  DateTimeFormat.prototype.formatToParts = function (d) {
+    const t = tijd(this, d);
+    if (this.f.formatToParts) return this.f.formatToParts(t);
+    // zelf opbouwen (en-GB-achtig): genoeg voor weekdag, datum en tijd als getallen
+    const x = new Date(t), utc = this.ams || /^utc$/i.test(this.o.timeZone || ''), o = this.o, p = [];
+    const g = (n) => x[(utc ? 'getUTC' : 'get') + n]();
+    const bij = (type, value) => { if (p.length) p.push({ type: 'literal', value: type === 'hour' || type === 'weekday' ? ' ' : type === 'minute' || type === 'second' ? ':' : '/' }); p.push({ type, value: String(value) }); };
+    if (o.weekday) bij('weekday', DAG[g('Day')]);
+    if (o.day) bij('day', o.day === '2-digit' ? twee(g('Date')) : g('Date'));
+    if (o.month) bij('month', o.month === '2-digit' ? twee(g('Month') + 1) : g('Month') + 1);
+    if (o.year) bij('year', g('FullYear'));
+    if (o.hour) bij('hour', twee(g('Hours')));
+    if (o.minute) bij('minute', twee(g('Minutes')));
+    if (o.second) bij('second', twee(g('Seconds')));
+    return p;
+  };
+  DateTimeFormat.supportedLocalesOf = DTF.supportedLocalesOf;
+  Intl.DateTimeFormat = DateTimeFormat;
+})();
+
+// play() geeft in EdgeHTML 13/14 geen promise terug: .play().catch(...) gooide dan een TypeError
+if (window.HTMLMediaElement) {
+  const play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function () {
+    try { const r = play.call(this); return r && r.then ? r : Promise.resolve(); } catch (e) { return Promise.reject(e); }
+  };
+}
+// ellipse() op een canvas: met een geschaalde cirkel
+if (window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.ellipse) {
+  CanvasRenderingContext2D.prototype.ellipse = function (x, y, rx, ry, rot, a0, a1, ccw) {
+    this.save(); this.translate(x, y); this.rotate(rot); this.scale(rx, ry); this.arc(0, 0, 1, a0, a1, !!ccw); this.restore();
+  };
 }

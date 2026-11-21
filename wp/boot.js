@@ -18,12 +18,12 @@
     }
     d.textContent += tekst + '\n';
   }
-  // stap = waar we nu zijn; de laatste 25 met de tijd erbij gaan naar wpLog
+  // stap = waar we nu zijn; de laatste 40 met de tijd erbij gaan naar wpLog
   window.__wpStap = function (s) {
     stappen.push(s);
     if (stappen.length > 50) stappen.shift();
     log.push(((Date.now() - t0) / 1000).toFixed(1) + 's ' + s);
-    if (log.length > 25) log.shift();
+    if (log.length > 40) log.shift();
     try { localStorage.setItem('wpBoot', s); localStorage.setItem('wpLog', JSON.stringify(log)); } catch (e) {}
   };
   window.__wpFout = function (e) {
