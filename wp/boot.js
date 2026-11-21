@@ -71,6 +71,24 @@
       document.addEventListener('visibilitychange', function () { window.__wpStap(document.hidden ? 'gesloten' : 'terug'); });
     }, 30);
   }
+  // lettertypen: EdgeHTML 13 heeft geen document.fonts, dus meten we tot de tekst breder of smaller wordt dan de
+  // terugval (anders tekent de game borden en texturen met het verkeerde lettertype); hooguit 3 s
+  klaar--;
+  function fontsKlaar() {
+    var c = document.createElement('canvas').getContext('2d'), fonts = ['40px Anton', '700 16px "Barlow J"'], t1 = Date.now();
+    var maat = function (f) { c.font = f; return c.measureText('Jens Run 0123 WMQ').width; };
+    var basis = fonts.map(function (f) { return maat(f.replace(/(Anton|"Barlow J")/, 'monospace')); });
+    // de lettertypen gaan pas laden als iets op de pagina ze gebruikt
+    var s = document.createElement('div');
+    s.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden';
+    s.innerHTML = '<span style="font-family:Anton">a</span><span style="font-family:\'Barlow J\';font-weight:700">a</span>';
+    document.body.appendChild(s);
+    (function kijk() {
+      var ok = fonts.every(function (f, i) { return maat(f + ', monospace') !== basis[i]; });
+      if (ok || Date.now() - t1 > 3000) { s.parentNode.removeChild(s); window.__wpStap(ok ? 'lettertypen' : 'lettertypen (te laat)'); start(); }
+      else setTimeout(kijk, 50);
+    })();
+  }
   var t = setTimeout(function () { img.onload = img.onerror = null; start(); }, 2500);
   img.onload = img.onerror = function () { clearTimeout(t); start(); };
   img.src = 'img/iconen.png';
@@ -78,5 +96,6 @@
     window.__wpStap('script geladen');
     if (vorige && vorige !== 'klaar' && vorige !== 'gesloten') toon('Vorige keer gestopt bij: ' + vorige + ' (tik om te sluiten)\n' + vorigLog.join('\n'));
     start();
+    fontsKlaar();
   });
 })();
