@@ -1,0 +1,43 @@
+/* Windows 10 Mobile (EdgeHTML 13): kaarten waarvan de grid vaste plekken gebruikt (icoon links over twee regels,
+   iets rechts ernaast). Flexbox kan dat niet, dus hier met absolute posities en floats. Komt achter style.css. */
+.fm-card, .arc-game, .lk-item, .fl-kaart, .plus-kassaknop { display: block; position: relative; }
+.fm-card > *, .arc-game > *, .lk-item > *, .fl-kaart > *, .plus-kassaknop > * { display: block; margin: 0; }
+.fm-card > i, .arc-game > span, .lk-item > i, .fl-kaart > i, .plus-kassaknop > .kassa-ic {
+  position: absolute; top: 50%; transform: translateY(-50%); text-align: center; line-height: 1;
+}
+
+.fm-card { padding-left: 60px; }
+.fm-card > i { left: 12px; width: 36px; }
+
+.arc-game { padding: 10px 74px 10px 64px; }
+.arc-game > span { left: 10px; width: 44px; }
+.arc-game > i { position: absolute; top: 10px; right: 10px; }
+
+.lk-item { padding: 10px 92px 10px 78px; }
+.lk-item > i { left: 12px; width: 54px; }
+.lk-item > em { position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
+
+.fl-kaart { padding-left: 82px; }
+.fl-kaart > i { left: 16px; width: 54px; }
+
+.plus-kassaknop { padding-left: 64px; }
+.plus-kassaknop > .kassa-ic { left: 16px; width: 36px; }
+
+/* seizoenspas op de telefoon: TREDE links, seizoen en balk ernaast, de knop eronder */
+@media (max-width: 700px) {
+  .fm-season { display: block; position: relative; padding-left: 128px; }
+  .fm-season b { position: absolute; left: 12px; top: 8px; margin: 0; white-space: nowrap; }
+  .fm-season small, .fm-season .fm-sbar, .fm-season em { display: block; }
+  .fm-season .fm-sbar { margin-top: 6px; }
+  .fm-season em { margin: 6px 0 0 -116px; }
+  .fm-season em.claim { display: inline-block; }
+}
+
+/* CSS-variabelen die JS zet: het nieuwsplaatje staat ook inline op de kaart, de winkelkleur op de doos (build.mjs) */
+.pak-doos { background-image: linear-gradient(90deg, rgba(0,0,0,.08), transparent 30%, transparent 75%, rgba(0,0,0,.14)); }
+@media (max-width: 700px) {
+  .fm-ncard::before { background-image: inherit; background-position: center; background-size: cover; background-repeat: no-repeat; }
+}
+
+/* glazen uitklapmenu's: zonder backdrop-filter (Edge 13) is het glas te doorzichtig om de tekst te lezen */
+.glas-p { background: linear-gradient(160deg, rgba(255,255,255,.1), rgba(255,255,255,.02) 42%), rgba(20,14,10,.92); }

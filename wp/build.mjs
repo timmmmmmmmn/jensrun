@@ -10,6 +10,7 @@ import postcss from 'postcss';
 import customProps from 'postcss-custom-properties';
 import { transform as lcss, browserslistToTargets } from 'lightningcss';
 import * as acorn from 'acorn';
+import edge13, { onopgelost } from './edge13css.mjs';
 
 const hier = path.dirname(new URL(import.meta.url).pathname);
 const pub = path.join(hier, '../public');
@@ -121,6 +122,8 @@ const wp = {
       src = vervang(src, 'setTimeout(warmUp, 400); // tijdens het startscherm', "setTimeout(() => { resBase = { g: new THREE.BufferGeometry().id, t: new THREE.Texture().id }; }, 400);", 'warmup');
       src = vervang(src, 'setTimeout(() => { try { renderer.compile(scene, camera); } catch (e) { /* niet erg */ } }, 500);', '', 'compile');
       src = vervang(src, 'setTimeout(prewarmPeople, 1500);', '', 'prewarm');
+      // CSS-variabelen die JS per element zet kent Edge 13 niet: de winkelkleur ook gewoon inline
+      src = vervang(src, 'style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos">', 'style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos" style="background-color:${pakKleur(shopTab, it.id)}">', 'pak');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
@@ -159,10 +162,14 @@ const js = await swc.transform(r.outputFiles[0].text, {
 fs.writeFileSync(path.join(uit, 'game.js'), js.code);
 
 // CSS: variabelen ingevuld (EdgeHTML 13/14 kent ze niet), de rest omgezet waar dat kan
-let css = fs.readFileSync(path.join(pub, 'style.css'), 'utf8');
+let css = fs.readFileSync(path.join(pub, 'style.css'), 'utf8') + '\n' + fs.readFileSync(path.join(hier, 'edge-fix.css'), 'utf8');
 css = css.replace(/url\((['"]?)(?!data:|https?:|\/)/g, 'url($1../');
 css = (await postcss([customProps({ preserve: true })]).process(css, { from: undefined })).css;
 css = lcss({ code: Buffer.from(css), minify: true, targets: { edge: 13 << 16 }, errorRecovery: true }).code.toString();
+// grid → flex, gap → marges, rekenfuncties uitgerekend: wat Edge 13 anders stil negeert (zie edge13css.mjs)
+css = (await postcss([edge13()]).process(css, { from: undefined })).css;
+css = lcss({ code: Buffer.from(css), minify: true, targets: { edge: 13 << 16 }, errorRecovery: true }).code.toString();
+if (onopgelost.length) console.log('niet uit te rekenen, gekozen:\n  ' + onopgelost.join('\n  '));
 fs.writeFileSync(path.join(uit, 'style.css'), css);
 
 let html = fs.readFileSync(path.join(pub, 'index.html'), 'utf8');
