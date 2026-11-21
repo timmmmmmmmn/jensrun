@@ -606,7 +606,9 @@ if (process.env.WP_META) { const per = {}; for (const [f, x] of Object.entries(r
 const js = await swc.transform(r.outputFiles[0].text, {
   // naar ES5 (doel IE 11): Chakra in Edge 14 gaf na veel aanroepen (JIT) uit new Mesh() een object zonder position: een
   // fout met native afgeleide klassen en super(). Als ES5 draait alles via het oude, beproefde pad van de engine.
-  env: { targets: { ie: '11' } },
+  // maar for…of, standaardparameters, spread en destructuring niet: die maakt SWC met try/finally-helpers, en de oude JIT
+  // van Chakra compileert functies met try/finally niet (de spellus draaide daardoor 500× trager). Edge 14 kent ze zelf.
+  env: { targets: { ie: '11' }, exclude: JSON.parse(process.env.WP_EXCL || '["transform-for-of","transform-parameters","transform-spread"]') },
   // WP_DEBUG=1: niet verkleind, voor profileren
   jsc: { parser: { syntax: 'ecmascript' }, externalHelpers: false, minify: process.env.WP_DEBUG ? undefined : { compress: { passes: 1 }, mangle: true } },
   minify: !process.env.WP_DEBUG,
