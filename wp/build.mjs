@@ -62,7 +62,7 @@ const BAYER_NIEUW = `vec2 psxP = mod(floor(gl_FragCoord.xy), 4.0);
     vec2 psxB0 = mod(psxP, 2.0), psxB1 = floor(psxP / 2.0);
     float psxD = (abs(psxB0.x - psxB0.y) * 8.0 + psxB0.y * 4.0 + abs(psxB1.x - psxB1.y) * 2.0 + psxB1.y + 0.5) / 16.0;`;
 
-let tla = 0;
+let tla = 0, kaal = 0;
 const wp = {
   name: 'wp',
   setup(b) {
@@ -71,7 +71,7 @@ const wp = {
     b.onResolve({ filter: /^\.\/hd\.js$/ }, () => ({ path: path.join(hier, 'hd-stub.js') }));
     // alleen de three-onderdelen die de game gebruikt (THREE.X), dan gooit esbuild de rest weg (minder JS = minder RAM)
     b.onLoad({ filter: /wp\/hd-stub\.js$/ }, (a) => {
-      const namen = [...new Set(fs.readFileSync(path.join(pub, 'game.js'), 'utf8').match(/\bTHREE\.[A-Za-z_$][\w$]*/g).map((x) => x.slice(6)))].sort();
+      const namen = [...new Set([...fs.readFileSync(path.join(pub, 'game.js'), 'utf8').match(/\bTHREE\.[A-Za-z_$][\w$]*/g).map((x) => x.slice(6)), 'Frustum', 'Sphere', 'Matrix4', 'Vector3'])].sort(); // + wat de patches gebruiken
       let src = fs.readFileSync(a.path, 'utf8');
       src = vervang(src, "import * as T from 'three';", `import { ${namen.join(', ')} } from 'three';`, 'three-namen');
       src = vervang(src, 'export const THREE = T;', `export const THREE = { ${namen.join(', ')} };`, 'three-obj');
@@ -127,6 +127,53 @@ const wp = {
 			} else if ( object.isInstancedMesh ) {
 
 				renderer.renderInstances( drawStart, drawCount, object.count );`, 'three-inst3');
+      // Chakra (Edge 14) gaf na honderden objecten ineens een Mesh zonder .position: een JIT-fout rond Object.defineProperties
+      // in de Object3D-constructor. Gewone toewijzingen doen hetzelfde en ontlopen die fout.
+      src = vervang(src, `		Object.defineProperties( this, {
+			position: {
+				configurable: true,
+				enumerable: true,
+				value: position
+			},
+			rotation: {
+				configurable: true,
+				enumerable: true,
+				value: rotation
+			},
+			quaternion: {
+				configurable: true,
+				enumerable: true,
+				value: quaternion
+			},
+			scale: {
+				configurable: true,
+				enumerable: true,
+				value: scale
+			},
+			modelViewMatrix: {
+				value: new Matrix4()
+			},
+			normalMatrix: {
+				value: new Matrix3()
+			}
+		} );`, `		this.position = position;
+		this.rotation = rotation;
+		this.quaternion = quaternion;
+		this.scale = scale;
+		this.modelViewMatrix = new Matrix4();
+		this.normalMatrix = new Matrix3();`, 'three-object3d');
+      // extensions.get() waarschuwde bij elke aanroep in de console als een extensie ontbreekt; de instancing-patch vraagt
+      // ANGLE_instanced_arrays per tekenopdracht op: duizenden console.warns per seconde (traag in Edge). Eén keer is genoeg.
+      src = vervang(src, `			if ( extension === null ) {
+
+				console.warn( 'THREE.WebGLRenderer: ' + name + ' extension not supported.' );
+
+			}`, `			if ( extension === null && ! extensions[ '_gemeld_' + name ] ) {
+
+				extensions[ '_gemeld_' + name ] = true;
+				console.warn( 'THREE.WebGLRenderer: ' + name + ' extension not supported.' );
+
+			}`, 'three-warn');
       // Direct3D 9-niveau (en ANGLE): attribuut 0 moet per hoekpunt zijn. Zonder binding kon de linker instanceMatrix op 0
       // zetten, en dan tekende instancing onzin (grote driehoeken, figuranten weg). Dus position altijd op 0.
       src = vervang(src, `	} else if ( parameters.morphTargets === true ) {
@@ -162,7 +209,7 @@ const wp = {
     // het iconenvel is voor de Lumia half zo groot (768×528): 48 px per icoon
     b.onLoad({ filter: /public\/iconen\.js$/ }, (a) => ({ contents: vervang(fs.readFileSync(a.path, 'utf8'), 'ICON_CS = 96', 'ICON_CS = 48', 'iconen'), loader: 'js' }));
     b.onLoad({ filter: /public\/game\.js$/ }, (a) => {
-      tla = 0;
+      tla = 0; kaal = 0;
       let src = fs.readFileSync(a.path, 'utf8');
       // markeringen door de hele opbouw (vóór een statement op het hoogste niveau, minstens 25 regels uit elkaar):
       // crasht de Lumia hard, dan staat in het log op welke regel van game.js hij was
@@ -206,6 +253,35 @@ const wp = {
       src = vervang(src, 'style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos">', 'style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos" style="background-color:${pakKleur(shopTab, it.id)}">', 'pak');
       // plaatjes en geluid uit public/wp/ (verkleind, mono): zie hierboven
       src = src.replace(/(['"`])(img|icons|audio)\//g, '$1wp/$2/');
+      // Lumia: altijd de iPod-stand (30 beelden/s, 180p, minder effecten en clips)
+      src = vervang(src, 'const isIPod = /iPod/.test(navigator.userAgent);', 'const isIPod = true;', 'ipod');
+      if (process.env.WP_DEBUG) src = vervang(src, 'const instPools = new Map();', 'const instPools = new Map(); window.__inst = instPools; window.__scene = () => scene;', 'debug-inst');
+      // Lumia: korte kijkafstand (42 m i.p.v. 72 m) met de mist mee naar voren, zodat niets zichtbaar opduikt; huizen, decor en
+      // figuranten verder weg worden niet getekend. Scheelt de helft van de tekenopdrachten (zonder instancing telt elk onderdeel).
+      src = vervang(src, 'const camera = new THREE.PerspectiveCamera(60, 1, 0.2, 72);', 'const camera = new THREE.PerspectiveCamera(60, 1, 0.2, 42);', 'ver-camera');
+      src = vervang(src, 'if (!h.g.visible || !h.g.parent || h.g.position.z < -74) continue;', 'if (!h.g.visible || !h.g.parent || h.g.position.z < -46) continue;', 'ver-huis');
+      src = vervang(src, 'if (!proxy.visible || proxy.position.z < -70) continue;', 'if (!proxy.visible || proxy.position.z < -44) continue;', 'ver-decor');
+      src = vervang(src, '    if (!_seenTop.has(top)) { _seenTop.add(top); top.updateMatrixWorld(true); }', '    if (top.position.z < -44) continue;\n    if (!_seenTop.has(top)) { _seenTop.add(top); top.updateMatrixWorld(true); }', 'ver-mensen');
+      src = vervang(src, "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');", "  if (rs === scene && scene.fog && camera.far < 50) { if (scene.fog.far > 40) scene.fog.far = 40; if (scene.fog.near > 22) scene.fog.near = 22; }\n  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');", 'ver-mist');
+      // alleen tekenen wat in beeld is: instances heeft three niet gecontroleerd (frustumCulled = false), dus ook huizen
+      // achter de camera kostten een tekenopdracht per onderdeel
+      src = vervang(src, 'function updateBatches() {\n  for (const im of instPools.values()) im.count = 0;', `const _wpFr = new THREE.Frustum(), _wpM = new THREE.Matrix4(), _wpS = new THREE.Sphere(), _wpV = new THREE.Vector3();
+const wpZie = (p, r) => _wpFr.intersectsSphere(_wpS.set(_wpV.set(p.x, p.y + r * 0.5, p.z), r));
+function updateBatches() {
+  camera.updateMatrixWorld();
+  _wpFr.setFromProjectionMatrix(_wpM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  for (const im of instPools.values()) im.count = 0;`, 'zie');
+      src = vervang(src, 'if (!h.g.visible || !h.g.parent || h.g.position.z < -46) continue;', 'if (!h.g.visible || !h.g.parent || h.g.position.z < -46 || !wpZie(h.g.position, Math.max(h.width, 11))) continue;', 'zie-huis');
+      src = vervang(src, 'if (!proxy.visible || proxy.position.z < -44) continue;', 'if (!proxy.visible || proxy.position.z < -44 || !wpZie(proxy.position, 5)) continue;', 'zie-decor');
+      src = vervang(src, '    if (top.position.z < -44) continue;', '    if (top.position.z < -44 || !wpZie(top.position, 3)) continue;', 'zie-mensen');
+      // Lumia: cosmetica eruit die veel kost. Lichtbundels/gloed van lantaarns (grote doorzichtige vlakken), regen en sneeuw
+      // (elk beeld op de CPU), en losse neus/oren/kapsel alleen nog voor Jens (zijn kapsel wisselt in de winkel).
+      src = vervang(src, 'for (const g of lampGlows) g.visible = lamps;', 'for (const g of lampGlows) g.visible = false;', 'kaal-lamp');
+      src = vervang(src, 'if (!precipKind || indoor) { rainLines.visible = false; flakes.visible = false; return; }', 'if (true) { rainLines.visible = false; flakes.visible = false; return; }', 'kaal-regen');
+      src = src.replace(/const FULL_PEOPLE = new Set\(\[[^\]]*\]\);/, () => { kaal++; return "const FULL_PEOPLE = new Set(['jens']);"; });
+      if (kaal !== 1) throw new Error('patch FULL_PEOPLE: ' + kaal + '×');
+      // HUD-teksten (score, meters) veranderen steeds: zonder één niet-ASCII-teken kan er geen emoji in zitten
+      src = vervang(src, 'function iconizeText(n) {\n  if (!n.parentNode || ICON_SKIP.has(n.parentNode.nodeName)) return;', 'function iconizeText(n) {\n  if (!/[^\\x00-\\x7f]/.test(n.nodeValue)) return;\n  if (!n.parentNode || ICON_SKIP.has(n.parentNode.nodeName)) return;', 'iconize-snel');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'wp/img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
