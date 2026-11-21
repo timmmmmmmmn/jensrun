@@ -41,3 +41,8 @@
 
 /* glazen uitklapmenu's: zonder backdrop-filter (Edge 13) is het glas te doorzichtig om de tekst te lezen */
 .glas-p { background: linear-gradient(160deg, rgba(255,255,255,.1), rgba(255,255,255,.02) 42%), rgba(20,14,10,.92); }
+
+/* Windows Phone vergroot tekst automatisch: uit. CSS-animaties en overgangen laten de telefoon elk beeld de interface
+   opnieuw tekenen (equalizer, muzieknootjes, pulserende knoppen): op de Lumia stil. */
+html { -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+*, *::before, *::after { animation-duration: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; }

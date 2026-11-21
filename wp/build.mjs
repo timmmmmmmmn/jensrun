@@ -71,7 +71,7 @@ const wp = {
     b.onResolve({ filter: /^\.\/hd\.js$/ }, () => ({ path: path.join(hier, 'hd-stub.js') }));
     // alleen de three-onderdelen die de game gebruikt (THREE.X), dan gooit esbuild de rest weg (minder JS = minder RAM)
     b.onLoad({ filter: /wp\/hd-stub\.js$/ }, (a) => {
-      const namen = [...new Set([...fs.readFileSync(path.join(pub, 'game.js'), 'utf8').match(/\bTHREE\.[A-Za-z_$][\w$]*/g).map((x) => x.slice(6)), 'Frustum', 'Sphere', 'Matrix4', 'Vector3'])].sort(); // + wat de patches gebruiken
+      const namen = [...new Set([...fs.readFileSync(path.join(pub, 'game.js'), 'utf8').match(/\bTHREE\.[A-Za-z_$][\w$]*/g).map((x) => x.slice(6)), 'Frustum', 'Sphere', 'Matrix4', 'Matrix3', 'Vector3', 'BufferAttribute', 'BufferGeometry', 'DynamicDrawUsage', 'Mesh'])].sort(); // + wat de patches gebruiken
       let src = fs.readFileSync(a.path, 'utf8');
       src = vervang(src, "import * as T from 'three';", `import { ${namen.join(', ')} } from 'three';`, 'three-namen');
       src = vervang(src, 'export const THREE = T;', `export const THREE = { ${namen.join(', ')} };`, 'three-obj');
@@ -113,13 +113,27 @@ const wp = {
 
 				renderer.renderInstances( drawStart, drawCount, object.count );`, `			} else if ( object.isInstancedMesh && capabilities.isWebGL2 === false && extensions.get( 'ANGLE_instanced_arrays' ) === null ) {
 
-				const im = program.getAttributes().instanceMatrix, ic = program.getAttributes().instanceColor;
-				const m = object.instanceMatrix.array, c = object.instanceColor ? object.instanceColor.array : null;
+				const pu = program.getUniforms(), m = object.instanceMatrix.array;
+				const im = program.getAttributes().instanceMatrix;
 
 				for ( let i = 0; i < object.count; i ++ ) {
 
-					if ( im ) for ( let k = 0; k < 4; k ++ ) _gl.vertexAttrib4f( im.location + k, m[ i * 16 + k * 4 ], m[ i * 16 + k * 4 + 1 ], m[ i * 16 + k * 4 + 2 ], m[ i * 16 + k * 4 + 3 ] );
-					if ( ic && c ) _gl.vertexAttrib3f( ic.location, c[ i * 3 ], c[ i * 3 + 1 ], c[ i * 3 + 2 ] );
+					if ( im ) {
+
+						for ( let k = 0; k < 4; k ++ ) _gl.vertexAttrib4f( im.location + k, m[ i * 16 + k * 4 ], m[ i * 16 + k * 4 + 1 ], m[ i * 16 + k * 4 + 2 ], m[ i * 16 + k * 4 + 3 ] );
+
+					} else {
+
+						_wpInst.fromArray( m, i * 16 );
+						_wpWereld.multiplyMatrices( object.matrixWorld, _wpInst );
+						_wpMV.multiplyMatrices( camera.matrixWorldInverse, _wpWereld );
+						_wpN.getNormalMatrix( _wpMV );
+						pu.setValue( _gl, 'modelMatrix', _wpWereld );
+						pu.setValue( _gl, 'modelViewMatrix', _wpMV );
+						pu.setValue( _gl, 'normalMatrix', _wpN );
+
+					}
+
 					renderer.render( drawStart, drawCount );
 
 				}
@@ -198,6 +212,25 @@ const wp = {
       src = vervang(src, `	function uploadTexture( textureProperties, texture, slot ) {`, `	function uploadTexture( textureProperties, texture, slot ) {
 
 		if ( typeof window !== 'undefined' && window.__wpStap && ( window.__wpTexN = ( window.__wpTexN || 0 ) + 1 ) < 300 ) window.__wpStap( 'tex ' + window.__wpTexN + ' ' + ( texture.image ? texture.image.width + 'x' + texture.image.height : '?' ) );`, 'three-texlog');
+      // Elk apart shaderprogramma kost de Lumia 4–11 s om te compileren. Minder varianten: zonder instancing-extensie geen
+      // USE_INSTANCING (de matrix gaat per exemplaar als uniform, zie hieronder) en overal dubbelzijdige belichting.
+      src = vervang(src, 'class WebGLRenderer {', 'let _wpWit = null;\nconst _wpInst = new Matrix4(), _wpWereld = new Matrix4(), _wpMV = new Matrix4(), _wpN = new Matrix3();\nclass WebGLRenderer {', 'three-hulp');
+      src = vervang(src, `			instancing: IS_INSTANCEDMESH,
+			instancingColor: IS_INSTANCEDMESH && object.instanceColor !== null,`, `			instancing: IS_INSTANCEDMESH && ( IS_WEBGL2 || extensions.has( 'ANGLE_instanced_arrays' ) ),
+			instancingColor: IS_INSTANCEDMESH && ( IS_WEBGL2 || extensions.has( 'ANGLE_instanced_arrays' ) ) && object.instanceColor !== null,`, 'three-geeninst');
+      src = vervang(src, `			doubleSided: material.side === DoubleSide,
+			flipSided: material.side === BackSide,`, `			doubleSided: true,
+			flipSided: false,`, 'three-dubbelzijdig');
+      // nog minder varianten: Lambert/Basic altijd met textuur (zo nodig 1×1 wit, sRGB zoals de rest) en altijd mist
+      src = vervang(src, '		const HAS_MAP = !! material.map;', `		if ( ( material.isMeshLambertMaterial || material.isMeshBasicMaterial ) && ! material.map ) {
+
+			if ( ! _wpWit ) { _wpWit = new DataTexture( new Uint8Array( [ 255, 255, 255, 255 ] ), 1, 1 ); _wpWit.colorSpace = SRGBColorSpace; _wpWit.needsUpdate = true; }
+			material.map = _wpWit;
+
+		}
+
+		const HAS_MAP = !! material.map;`, 'three-wit');
+      src = vervang(src, '			useFog: material.fog === true,', '			useFog: true,', 'three-mist');
       // Direct3D 9-niveau (en ANGLE): attribuut 0 moet per hoekpunt zijn. Zonder binding kon de linker instanceMatrix op 0
       // zetten, en dan tekende instancing onzin (grote driehoeken, figuranten weg). Dus position altijd op 0.
       src = vervang(src, `	} else if ( parameters.morphTargets === true ) {
@@ -254,9 +287,9 @@ const wp = {
       // generator van 1 MB, en die liet Chakra in EdgeHTML 13 de app laten crashen nog voor het splashscherm.
       src = vervang(src, 'const renderer = new THREE.WebGLRenderer(', "window.__wpStap('webgl');\nconst renderer = new THREE.WebGLRenderer(", 'webgl');
       // per beeld bijhouden of hij bij bijwerken of tekenen omvalt (eerste 200 beelden, daarna elke 2 s)
-      src = vervang(src, "renderer.setAnimationLoop(() => {\n", "let wpN = 0, wpT = 0;\nrenderer.setAnimationLoop(() => {\n", 'loop');
-      src = vervang(src, "  autoQuality(t - last);\n", "  const wpLog = wpN < 200 || t - wpT > 2000;\n  if (wpLog) { wpT = t; window.__wpStap('beeld ' + wpN + ' ' + state); }\n  autoQuality(t - last);\n", 'loop2');
-      src = vervang(src, "  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n", "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');\n  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n  if (wpLog) window.__wpStap('beeld ' + wpN + ' getekend');\n  wpN++;\n", 'render');
+      src = vervang(src, "renderer.setAnimationLoop(() => {\n", "let wpN = 0, wpT = 0;\nconst wpPerf = { n: 0, teken: 0, reken: 0, calls: 0, t0: 0 };\nrenderer.setAnimationLoop(() => {\n", 'loop');
+      src = vervang(src, "  autoQuality(t - last);\n", "  const wpLog = wpN < 15 || t - wpT > 5000;\n  if (wpLog) { wpT = t; window.__wpStap('beeld ' + wpN + ' ' + state); }\n  autoQuality(t - last);\n", 'loop2');
+      src = vervang(src, "  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n", "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');\n  const wpR0 = performance.now();\n  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n  wpPerf.n++; wpPerf.teken += performance.now() - wpR0; wpPerf.reken += wpR0 - t; wpPerf.calls += renderer.info.render.calls;\n  if (wpLog) { window.__wpStap('beeld ' + wpN + ' getekend'); if (wpPerf.n > 1) window.__wpStap('perf ' + (wpPerf.n / ((performance.now() - wpPerf.t0) / 1000)).toFixed(1) + ' fps, reken ' + (wpPerf.reken / wpPerf.n).toFixed(0) + ' ms, teken ' + (wpPerf.teken / wpPerf.n).toFixed(0) + ' ms, ' + (wpPerf.calls / wpPerf.n).toFixed(0) + ' calls, ' + renderer.info.programs.length + ' shaders'); wpPerf.n = wpPerf.teken = wpPerf.reken = wpPerf.calls = 0; wpPerf.t0 = performance.now(); }\n  wpN++;\n", 'render');
       // wat de GPU kan (Lumia 435 = Adreno 302, Direct3D 9_3)
       src = vervang(src, "renderer.setPixelRatio(HD ?", "{ const gl = renderer.getContext(); window.__wpStap('webgl ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' tex, ' + gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) + '/' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) + ' uniforms, uint-index ' + !!gl.getExtension('OES_element_index_uint') + ', ' + gl.getParameter(gl.RENDERER) + ', varyings ' + gl.getParameter(gl.MAX_VARYING_VECTORS) + ', tex-units ' + gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) + '/' + gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) + ', ext ' + (gl.getSupportedExtensions() || []).join(',')); }\nrenderer.setPixelRatio(HD ?", 'caps');
       // de grote mp3's niet vooraf ophalen: de fetch-polyfill houdt alles in het geheugen
@@ -279,7 +312,7 @@ const wp = {
       src = src.replace(/(['"`])(img|icons|audio)\//g, '$1wp/$2/');
       // Lumia: altijd de iPod-stand (30 beelden/s, 180p, minder effecten en clips)
       src = vervang(src, 'const isIPod = /iPod/.test(navigator.userAgent);', 'const isIPod = true;', 'ipod');
-      if (process.env.WP_DEBUG) src = vervang(src, 'const instPools = new Map();', 'const instPools = new Map(); window.__inst = instPools; window.__scene = () => scene;', 'debug-inst');
+      if (process.env.WP_DEBUG) src = vervang(src, 'const instPools = new Map();', 'const instPools = new Map(); window.__inst = instPools; window.__scene = () => scene; window.__renderer = () => renderer;', 'debug-inst');
       // Lumia: korte kijkafstand (42 m i.p.v. 72 m) met de mist mee naar voren, zodat niets zichtbaar opduikt; huizen, decor en
       // figuranten verder weg worden niet getekend. Scheelt de helft van de tekenopdrachten (zonder instancing telt elk onderdeel).
       src = vervang(src, 'const camera = new THREE.PerspectiveCamera(60, 1, 0.2, 72);', 'const camera = new THREE.PerspectiveCamera(60, 1, 0.2, 42);', 'ver-camera');
@@ -306,6 +339,73 @@ function updateBatches() {
       if (kaal !== 1) throw new Error('patch FULL_PEOPLE: ' + kaal + '×');
       // HUD-teksten (score, meters) veranderen steeds: zonder één niet-ASCII-teken kan er geen emoji in zitten
       src = vervang(src, 'function iconizeText(n) {\n  if (!n.parentNode || ICON_SKIP.has(n.parentNode.nodeName)) return;', 'function iconizeText(n) {\n  if (!/[^\\x00-\\x7f]/.test(n.nodeValue)) return;\n  if (!n.parentNode || ICON_SKIP.has(n.parentNode.nodeName)) return;', 'iconize-snel');
+      // PS1-effecten per pixel (scheve texturen, kleurstappen, bayer-dither) kosten de Lumia-GPU veel en geven extra
+      // shadervarianten (PSX_PERSP) plus een extra varying: weg. Hoekpunten verspringen en Gouraud-licht blijven.
+      src = vervang(src, "  C.uv_pars_vertex += '\\nvarying vec3 vPsxUv;\\n';\n  C.uv_pars_fragment += '\\nvarying vec3 vPsxUv;\\n';\n  C.project_vertex += affine + `", "  C.project_vertex += `", 'psx-affine');
+      src = src.replace(/C\.map_fragment = C\.map_fragment\.replace\('vec4 sampledDiffuseColor = texture2D\( map, vMapUv \);', `[\s\S]*?`\);\n/, () => { kaal++; return ''; });
+      if (kaal !== 2) throw new Error('patch psx-map: ' + kaal);
+      src = vervang(src, '  C.dithering_fragment += dither;\n', '', 'psx-dither');
+      src = vervang(src, "sp.fragmentShader = sp.fragmentShader.replace('#include <fog_fragment>', '#include <fog_fragment>' + dither);", '', 'psx-dither-sprite');
+      src = src.replace(/\{ PSX_PERSP: '' \}/g, '{}');
+      // Instanties per soort samenvoegen tot één gewone mesh per beeld (CPU, een paar duizend hoekpunten): van ~110 naar ~45
+      // tekenopdrachten. De InstancedMeshes blijven alleen als opslag van de matrices.
+      src = vervang(src, '  for (const im of instPools.values()) { im.visible = im.count > 0; im.instanceMatrix.needsUpdate = true; }', `  for (const im of instPools.values()) {
+    im.visible = false;
+    const mm = im.userData.wpMerge || (im.userData.wpMerge = wpMaakMerge(im));
+    mm.visible = im.count > 0;
+    if (im.count) wpVulMerge(im, mm);
+  }`, 'merge');
+      src = vervang(src, 'function instPush(geo, mat, m, order) {', `const _wpM4 = new THREE.Matrix4(), _wpN3 = new THREE.Matrix3();
+function wpMaakMerge(im) {
+  const bron = im.geometry.index ? im.geometry.toNonIndexed() : im.geometry;
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), im.material);
+  mesh.frustumCulled = false; mesh.renderOrder = im.renderOrder; mesh.matrixAutoUpdate = false;
+  mesh.userData.bron = bron; mesh.userData.cap = 0;
+  scene.add(mesh);
+  return mesh;
+}
+function wpVulMerge(im, mesh) {
+  const bron = mesh.userData.bron, g = mesh.geometry, nv = bron.attributes.position.count, n = im.count;
+  const namen = ['position', 'normal', 'uv', 'color'].filter((k) => bron.attributes[k]);
+  if (n > mesh.userData.cap) {
+    const cap = Math.max(n, mesh.userData.cap * 2, 8);
+    for (const k of namen) { const a = new THREE.BufferAttribute(new Float32Array(cap * nv * bron.attributes[k].itemSize), bron.attributes[k].itemSize); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(k, a); }
+    mesh.userData.cap = cap;
+  }
+  const mat = im.instanceMatrix.array, P = bron.attributes.position.array, N = bron.attributes.normal && bron.attributes.normal.array;
+  const pOut = g.attributes.position.array, nOut = N && g.attributes.normal.array;
+  for (let i = 0; i < n; i++) {
+    const e = _wpM4.fromArray(mat, i * 16).elements;
+    const o = i * nv * 3;
+    for (let v = 0; v < nv; v++) {
+      const x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2], q = o + v * 3;
+      pOut[q] = e[0] * x + e[4] * y + e[8] * z + e[12];
+      pOut[q + 1] = e[1] * x + e[5] * y + e[9] * z + e[13];
+      pOut[q + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
+    }
+    if (N) {
+      const f = _wpN3.getNormalMatrix(_wpM4).elements;
+      for (let v = 0; v < nv; v++) {
+        const x = N[v * 3], y = N[v * 3 + 1], z = N[v * 3 + 2], q = o + v * 3;
+        let a = f[0] * x + f[3] * y + f[6] * z, b = f[1] * x + f[4] * y + f[7] * z, c = f[2] * x + f[5] * y + f[8] * z;
+        const l = Math.sqrt(a * a + b * b + c * c) || 1;
+        nOut[q] = a / l; nOut[q + 1] = b / l; nOut[q + 2] = c / l;
+      }
+    }
+  }
+  for (const k of namen) {
+    const a = g.attributes[k];
+    if (k !== 'position' && k !== 'normal' && a.wpGevuld !== n) {
+      // uv en kleur veranderen niet per exemplaar: alleen bijvullen als er meer exemplaren zijn
+      const src = bron.attributes[k].array;
+      for (let i = 0; i < n; i++) a.array.set(src, i * src.length);
+      a.wpGevuld = n;
+      a.needsUpdate = true;
+    } else if (k === 'position' || k === 'normal') a.needsUpdate = true;
+  }
+  g.setDrawRange(0, n * nv);
+}
+function instPush(geo, mat, m, order) {`, 'merge-fn');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'wp/img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
