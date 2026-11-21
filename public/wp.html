@@ -96,7 +96,7 @@
   }
   var t = setTimeout(function () { img.onload = img.onerror = null; start(); }, 2500);
   img.onload = img.onerror = function () { clearTimeout(t); start(); };
-  img.src = 'img/iconen.png';
+  img.src = 'wp/img/iconen.png';
   document.addEventListener('DOMContentLoaded', function () {
     window.__wpStap('script geladen');
     if (vorige && vorige !== 'klaar' && vorige !== 'gesloten') toon('Vorige keer gestopt bij: ' + vorige + ' (tik om te sluiten)\n' + vorigLog.join('\n'));
@@ -116,12 +116,12 @@
 <meta property="og:description" content="Ren door Nijmegen, pak de bekers en laat je niet pakken.">
 <meta property="og:image" content="https://jensrun.timvanbergen.nl/icons/icon-512.png">
 <meta property="og:url" content="https://jensrun.timvanbergen.nl/">
-<link rel="icon" type="image/png" href="icons/favicon-32.png">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="wp/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="wp/icons/icon-180.png">
 <meta name="apple-mobile-web-app-title" content="Jens Run">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preload" href="fonts/anton.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="img/iconen.png" as="image">
+<link rel="preload" href="wp/img/iconen.png" as="image">
 <link rel="stylesheet" href="wp/style.css">
 </head>
 <body>
@@ -136,7 +136,7 @@
     <div class="hud-l">
       <div class="bug">
         <span class="bug-num" id="score">0</span>
-        <span class="bug-cups" id="bekerCount"><img src="img/beker.png" alt=""><span>0</span></span>
+        <span class="bug-cups" id="bekerCount"><img src="wp/img/beker.png" alt=""><span>0</span></span>
         <span class="bug-streak hidden" id="bugStreak">×3</span>
       </div>
       <div class="xpbar hidden"><b id="xpLv">LV 1</b><span><i id="xpFill"></i></span></div>
@@ -207,7 +207,7 @@
   <div id="start" class="screen start">
     <a class="start-maker" href="https://timvanbergen.nl" target="_blank" rel="noopener"><b>TIM</b><span>VAN BERGEN</span></a>
     <div class="start-box">
-      <img class="splash-icon" src="icons/icon-512.png" alt="">
+      <img class="splash-icon" src="wp/icons/icon-512.png" alt="">
       <h1 class="logo">JENS<span>RUN</span></h1>
       <div class="sub">Versie 2.0</div>
       <div class="start-by">Een game van <b>Tim van Bergen</b></div>
@@ -225,7 +225,7 @@
   <!-- MENU: spelen linksonder, seizoenspas linksboven, nieuws rechts, Jens in het midden -->
   <div id="menu" class="screen hidden fm">
     <header class="fm-top">
-      <div class="fm-brand"><img src="icons/icon-192.png" alt=""><b>JENS RUN</b></div>
+      <div class="fm-brand"><img src="wp/icons/icon-192.png" alt=""><b>JENS RUN</b></div>
       <nav class="fm-tabs">
         <button class="on">Spelen</button>
         <button data-go="#passBtn">Seizoenspas</button>
@@ -240,7 +240,7 @@
         <button id="fmTabMeer" class="fm-tab-meer">Meer</button>
       </nav>
       <div class="fm-tr">
-        <div class="m-wallet"><img src="img/beker.png" alt=""><b id="mBekers">0</b><span id="mMult" class="m-mult"></span></div>
+        <div class="m-wallet"><img src="wp/img/beker.png" alt=""><b id="mBekers">0</b><span id="mMult" class="m-mult"></span></div>
         <button class="m-ic" data-go="#setBtn" aria-label="Instellingen">⚙️</button>
       </div>
     </header>
@@ -256,7 +256,7 @@
       <div id="missionBox" class="missions"></div>
     </aside>
     <aside id="fmNews" class="fm-news"></aside>
-    <div id="fmJesse" class="fm-jesse" aria-label="Muziek: Jessegrill"><div class="fm-jesse-pic"><img src="img/jesse-piano.png" alt=""><i class="noot">♪</i><i class="noot">♫</i><i class="noot">♪</i><i class="noot">♬</i></div><span><em class="eq"><i></i><i></i><i></i><i></i></em>Jens Run Theme Song - <b>Jessegrill</b></span></div>
+    <div id="fmJesse" class="fm-jesse" aria-label="Muziek: Jessegrill"><div class="fm-jesse-pic"><img src="wp/img/jesse-piano.png" alt=""><i class="noot">♪</i><i class="noot">♫</i><i class="noot">♪</i><i class="noot">♬</i></div><span><em class="eq"><i></i><i></i><i></i><i></i></em>Jens Run Theme Song - <b>Jessegrill</b></span></div>
     <div class="fm-hint"><span class="desk">← → wisselen (nog een keer op de stoep: sticker) · ↑ springen · ↓ glijden · E nitraat</span></div>
     <div class="fm-play">
       <button id="fmMode" class="fm-mode"><span id="fmModeImg" class="fm-mode-img"></span><span class="fm-mode-txt"><b id="fmModeName">Rennen</b><small>Spel kiezen</small></span></button>
@@ -345,7 +345,7 @@
   <div id="shop" class="screen hidden">
     <div class="panel shop-panel plus">
       <div class="plus-head">
-        <img src="img/plus-logo.png" alt="PLUS">
+        <img src="wp/img/plus-logo.png" alt="PLUS">
         <div class="plus-titel"><h2 id="plusTitel">PLUS Jens Run</h2><small id="plusSub"></small></div>
         <button id="plusMand" class="plus-mand" aria-label="Mandje">🧺 <b id="mandN">0</b></button>
         <div class="wallet">🏆 <b id="shopBekers">0</b></div>
@@ -583,7 +583,7 @@
       <small id="set_q_info" class="hint"></small>
       <div id="set_app" class="hidden"><div class="label">App</div><button id="set_update" class="btn alt">🔄 Zoeken naar updates</button><small id="set_appver" class="hint"></small></div>
       <div class="label">Credits</div>
-      <div class="credits"><img src="img/jesse-piano.png" alt=""><div><b>Jens Run Theme Song - Jessegrill</b><span>Alle muziek in de game: menu, winkel, intro, het spelnummer en het doodsdeuntje</span></div></div>
+      <div class="credits"><img src="wp/img/jesse-piano.png" alt=""><div><b>Jens Run Theme Song - Jessegrill</b><span>Alle muziek in de game: menu, winkel, intro, het spelnummer en het doodsdeuntje</span></div></div>
       <p class="hint">Iconen: game-icons.net (CC BY 3.0) · Beker-3D-model: stresvogel</p>
       <p class="hint">🎮 Controller: stick/pijltjes wisselen · ✕/A springen · ○/B glijden · □/X nitraat · Start pauze</p>
       <button id="setBack" class="btn big">KLAAR</button>
@@ -646,7 +646,7 @@
   <!-- LERARENKAMER -->
   <div id="lkamer" class="screen hidden lk">
     <div class="panel lk-panel">
-      <div class="shop-head"><h2>Lerarenkamer</h2><div class="wallet"><img class="cup-i" src="img/beker.png" alt=""> <b id="lkBekers">0</b></div></div>
+      <div class="shop-head"><h2>Lerarenkamer</h2><div class="wallet"><img class="cup-i" src="wp/img/beker.png" alt=""> <b id="lkBekers">0</b></div></div>
       <p class="hint lk-sub">Niemand kijkt. Hier liggen spullen die je nergens anders krijgt. Ze werken de rest van deze run.</p>
       <div id="lkList" class="lk-list"></div>
       <button id="lkBack" class="btn big">TERUG DE GANG IN</button>
@@ -668,7 +668,7 @@
   <!-- KRANT -->
   <div id="krant" class="screen hidden">
     <div class="panel krant">
-      <div class="kr-mast"><img src="img/na-logo.png" alt=""><div><b>NijmegenActueel</b><small id="krantDate"></small></div></div>
+      <div class="kr-mast"><img src="wp/img/na-logo.png" alt=""><div><b>NijmegenActueel</b><small id="krantDate"></small></div></div>
       <div id="krantBody"></div>
       <button id="krantBack" class="btn big">TERUG</button>
     </div>

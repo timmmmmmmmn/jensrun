@@ -10,12 +10,42 @@ import postcss from 'postcss';
 import customProps from 'postcss-custom-properties';
 import { transform as lcss, browserslistToTargets } from 'lightningcss';
 import * as acorn from 'acorn';
+import { execFileSync } from 'node:child_process';
 import edge13, { onopgelost } from './edge13css.mjs';
 
 const hier = path.dirname(new URL(import.meta.url).pathname);
 const pub = path.join(hier, '../public');
 const uit = path.join(pub, 'wp');
 fs.mkdirSync(uit, { recursive: true });
+
+// ---------- afbeeldingen en geluid voor de Lumia (1 GB RAM) ----------
+// Gedecodeerde plaatjes staan op ware grootte in het geheugen (splash.jpg van 2400×1600 = 15 MB) en Web Audio bewaart
+// geluid als 32-bit stereo op 48 kHz (~68 MB voor alles wat bij de start laadt). Daarom kopieën in public/wp/:
+// plaatjes niet groter dan het scherm (480×800) nodig heeft, geluid mono op 22,05 kHz. Alleen opnieuw als de bron nieuwer is.
+const nieuwer = (bron, doel) => !fs.existsSync(doel) || fs.statSync(doel).mtimeMs < fs.statSync(bron).mtimeMs;
+const allesIn = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? allesIn(path.join(d, e.name)) : [path.join(d, e.name)]));
+const MAAT = { 'img/splash.jpg': 1000, 'img/menu-bg.jpg': 800, 'img/iconen.png': 768 };
+let nPlaatjes = 0, nGeluid = 0;
+for (const bron of [...allesIn(path.join(pub, 'img')), ...allesIn(path.join(pub, 'icons'))]) {
+  const rel = path.relative(pub, bron), doel = path.join(uit, rel);
+  if (!/\.(png|jpe?g|webp)$/i.test(bron) || !nieuwer(bron, doel)) continue;
+  fs.mkdirSync(path.dirname(doel), { recursive: true });
+  const maat = MAAT[rel] || (rel.startsWith('img/mode/') ? 400 : 256);
+  const [w, h] = execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', bron]).toString().match(/\d+(?=\s*$)/gm).map(Number);
+  if (Math.max(w, h) > maat) execFileSync('sips', ['-Z', String(maat), ...(/\.jpe?g$/i.test(bron) ? ['-s', 'formatOptions', '82'] : []), bron, '--out', doel], { stdio: 'ignore' });
+  else fs.copyFileSync(bron, doel);
+  nPlaatjes++;
+}
+for (const bron of allesIn(path.join(pub, 'audio'))) {
+  const rel = path.relative(pub, bron), doel = path.join(uit, rel);
+  if (!nieuwer(bron, doel)) continue;
+  fs.mkdirSync(path.dirname(doel), { recursive: true });
+  if (/\.mp3$/i.test(bron)) execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', bron, '-ac', '1', '-ar', '22050', '-b:a', '48k', doel]);
+  else if (/\.json$/i.test(bron)) fs.writeFileSync(doel, fs.readFileSync(bron, 'utf8').replace(/"audio\//g, '"wp/audio/'));
+  else continue;
+  nGeluid++;
+}
+if (nPlaatjes || nGeluid) console.log('omgezet:', nPlaatjes, 'plaatjes,', nGeluid, 'geluiden');
 
 // een tekst moet precies één keer voorkomen, anders is game.js veranderd en klopt de patch niet meer
 const vervang = (src, oud, nieuw, wat) => {
@@ -39,6 +69,14 @@ const wp = {
     b.onResolve({ filter: /^\.\/three\.module\.min\.js$/ }, () => ({ path: path.join(hier, 'node_modules/three/build/three.module.js') }));
     b.onResolve({ filter: /^three$/ }, () => ({ path: path.join(hier, 'node_modules/three/build/three.module.js') }));
     b.onResolve({ filter: /^\.\/hd\.js$/ }, () => ({ path: path.join(hier, 'hd-stub.js') }));
+    // alleen de three-onderdelen die de game gebruikt (THREE.X), dan gooit esbuild de rest weg (minder JS = minder RAM)
+    b.onLoad({ filter: /wp\/hd-stub\.js$/ }, (a) => {
+      const namen = [...new Set(fs.readFileSync(path.join(pub, 'game.js'), 'utf8').match(/\bTHREE\.[A-Za-z_$][\w$]*/g).map((x) => x.slice(6)))].sort();
+      let src = fs.readFileSync(a.path, 'utf8');
+      src = vervang(src, "import * as T from 'three';", `import { ${namen.join(', ')} } from 'three';`, 'three-namen');
+      src = vervang(src, 'export const THREE = T;', `export const THREE = { ${namen.join(', ')} };`, 'three-obj');
+      return { contents: src, loader: 'js', resolveDir: hier };
+    });
     b.onResolve({ filter: /^\.\/eiland\.js$/ }, () => ({ path: path.join(hier, 'eiland-stub.js') }));
     // three.js op WebGL1 zonder EXT_sRGB (de Lumia) zet elke sRGB-textuur bij elke upload op de CPU om (Math.pow per
     // pixel, extra canvas): op de telefoon tientallen seconden vast en een geheugenpiek. Hier decodeert de GPU ze, net als
@@ -82,7 +120,10 @@ const wp = {
 				currentState.instKleur = instKleur;`, 'three-binding');
       return { contents: src, loader: 'js' };
     });
+    // het iconenvel is voor de Lumia half zo groot (768×528): 48 px per icoon
+    b.onLoad({ filter: /public\/iconen\.js$/ }, (a) => ({ contents: vervang(fs.readFileSync(a.path, 'utf8'), 'ICON_CS = 96', 'ICON_CS = 48', 'iconen'), loader: 'js' }));
     b.onLoad({ filter: /public\/game\.js$/ }, (a) => {
+      tla = 0;
       let src = fs.readFileSync(a.path, 'utf8');
       // markeringen door de hele opbouw (vóór een statement op het hoogste niveau, minstens 25 regels uit elkaar):
       // crasht de Lumia hard, dan staat in het log op welke regel van game.js hij was
@@ -124,8 +165,10 @@ const wp = {
       src = vervang(src, 'setTimeout(prewarmPeople, 1500);', '', 'prewarm');
       // CSS-variabelen die JS per element zet kent Edge 13 niet: de winkelkleur ook gewoon inline
       src = vervang(src, 'style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos">', 'style="--pak:${pakKleur(shopTab, it.id)}"><span class="pak-doos" style="background-color:${pakKleur(shopTab, it.id)}">', 'pak');
+      // plaatjes en geluid uit public/wp/ (verkleind, mono): zie hierboven
+      src = src.replace(/(['"`])(img|icons|audio)\//g, '$1wp/$2/');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
-      src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
+      src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'wp/img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
       if (tla !== 1) throw new Error(`patch 'await': ${tla}× gevonden in plaats van 1×`);
       if (/^await |^for await/m.test(src)) throw new Error('game.js heeft weer een top-level await');
@@ -138,7 +181,9 @@ const wp = {
   },
 };
 
-const r = await esbuild.build({
+// core-js: alleen wat de code echt gebruikt. Eerst bundelen zonder core-js, SWC (mode 'usage', doel Edge 13) zegt welke
+// polyfills nodig zijn; die komen in plaats van heel core-js/stable (scheelt honderden KB JS om te parsen en te bewaren).
+const bundel = (coreJs) => esbuild.build({
   entryPoints: [path.join(hier, 'entry.js')],
   bundle: true,
   format: 'iife',
@@ -148,9 +193,18 @@ const r = await esbuild.build({
   charset: 'utf8',
   write: false,
   outfile: path.join(uit, 'game.js'),
-  plugins: [wp],
+  plugins: [wp, { name: 'corejs', setup(b) { b.onResolve({ filter: /^core-js\/stable$/ }, () => ({ path: 'corejs-nodig', namespace: 'corejs' })); b.onLoad({ filter: /.*/, namespace: 'corejs' }, () => ({ contents: coreJs, loader: 'js', resolveDir: hier })); } }],
   logLevel: 'warning',
+  metafile: true,
 });
+const zonder = await bundel('');
+const gebruik = await swc.transform(zonder.outputFiles[0].text, { env: { targets: { edge: '13' }, mode: 'usage', coreJs: '3.51' }, jsc: { parser: { syntax: 'ecmascript' } }, isModule: false });
+const nodig = [...new Set(gebruik.code.match(/core-js\/modules\/[\w.-]+/g) || [])].sort();
+if (!nodig.length) throw new Error('core-js: geen polyfills gevonden, klopt de SWC-analyse nog?');
+console.log('core-js:', nodig.length, 'polyfills');
+const r = await bundel(nodig.map((m) => `import '${m}';`).join('\n'));
+
+if (process.env.WP_META) { const per = {}; for (const [f, x] of Object.entries(r.metafile.outputs[Object.keys(r.metafile.outputs)[0]].inputs)) { const k = f.includes('core-js') ? 'core-js' : f.includes('three') ? 'three' : f.replace(/^.*node_modules\//, '').split('/')[0]; per[k] = (per[k] || 0) + x.bytesInOutput; } console.log(Object.entries(per).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + Math.round(v / 1024) + 'K').join(', ')); }
 // esbuild kan niet naar ES5; SWC zet de bundel om voor EdgeHTML 13 (let/const, destructuring, async)
 const js = await swc.transform(r.outputFiles[0].text, {
   env: { targets: { edge: '13' }, bugfixes: true },
@@ -163,7 +217,7 @@ fs.writeFileSync(path.join(uit, 'game.js'), js.code);
 
 // CSS: variabelen ingevuld (EdgeHTML 13/14 kent ze niet), de rest omgezet waar dat kan
 let css = fs.readFileSync(path.join(pub, 'style.css'), 'utf8') + '\n' + fs.readFileSync(path.join(hier, 'edge-fix.css'), 'utf8');
-css = css.replace(/url\((['"]?)(?!data:|https?:|\/)/g, 'url($1../');
+css = css.replace(/url\((['"]?)(?!['"]?(?:data:|https?:|\/|img\/|icons\/))/g, 'url($1../'); // img/ en icons/ staan in wp/ zelf
 css = (await postcss([customProps({ preserve: true })]).process(css, { from: undefined })).css;
 css = lcss({ code: Buffer.from(css), minify: true, targets: { edge: 13 << 16 }, errorRecovery: true }).code.toString();
 // grid → flex, gap → marges, rekenfuncties uitgerekend: wat Edge 13 anders stil negeert (zie edge13css.mjs)
@@ -177,5 +231,6 @@ html = vervang(html, '<script type="module" src="game.js"></script>', '<script s
 html = vervang(html, '<link rel="stylesheet" href="style.css">', '<link rel="stylesheet" href="wp/style.css">', 'css');
 html = html.replace('<link rel="manifest" href="manifest.webmanifest">\n', '');
 html = html.replace('<head>', () => '<head>\n<meta http-equiv="X-UA-Compatible" content="IE=edge">\n<script>window.WP_APP = true;\n' + fs.readFileSync(path.join(hier, 'boot.js'), 'utf8') + '</script>');
+html = html.replace(/((?:src|href)=")(img|icons)\//g, '$1wp/$2/');
 fs.writeFileSync(path.join(pub, 'wp.html'), html);
 console.log('klaar:', fs.statSync(path.join(uit, 'game.js')).size, 'bytes JS,', css.length, 'bytes CSS');

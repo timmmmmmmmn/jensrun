@@ -79,11 +79,21 @@ const AC = window.AudioContext || window.webkitAudioContext;
 if (AC) {
   window.AudioContext = AC;
   const dec = AC.prototype.decodeAudioData;
+  // Geheugen: decoderen in een OfflineAudioContext op 22,05 kHz (de geluiden in wp/audio zijn mono 22,05 kHz). Anders maakt
+  // Web Audio er 48 kHz-floats van: ruim 2× zo veel RAM voor niets. Een AudioBuffer mag in elke context spelen.
+  const OACl = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  let laag = null;
+  const decodeer = (ctx, buf) => new Promise((res, rej) => {
+    const r = dec.call(ctx, buf, res, rej);
+    if (r && r.then) r.then(res, rej);
+  });
   AC.prototype.decodeAudioData = function (buf, ok, nee) {
-    return new Promise((res, rej) => {
-      const r = dec.call(this, buf, (b) => { if (ok) ok(b); res(b); }, (e) => { if (nee) nee(e); rej(e); });
-      if (r && r.then) r.then(() => {}, () => {});
-    });
+    const kopie = buf && buf.slice ? buf.slice(0) : buf; // decodeAudioData mag de buffer leeg maken
+    let p;
+    try { if (!laag && OACl) laag = new OACl(1, 1, 22050); } catch (e) { laag = false; }
+    if (laag) p = decodeer(laag, buf).catch(() => decodeer(this, kopie));
+    else p = decodeer(this, buf);
+    return p.then((b) => { if (ok) ok(b); return b; }, (e) => { if (nee) nee(e); throw e; });
   };
   // connect() geeft in oude Edge niets terug, de game ketent a.connect(b).connect(c)
   const AN = window.AudioNode && AudioNode.prototype, con = AN && AN.connect;

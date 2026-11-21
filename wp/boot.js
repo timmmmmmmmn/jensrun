@@ -91,7 +91,7 @@
   }
   var t = setTimeout(function () { img.onload = img.onerror = null; start(); }, 2500);
   img.onload = img.onerror = function () { clearTimeout(t); start(); };
-  img.src = 'img/iconen.png';
+  img.src = 'wp/img/iconen.png';
   document.addEventListener('DOMContentLoaded', function () {
     window.__wpStap('script geladen');
     if (vorige && vorige !== 'klaar' && vorige !== 'gesloten') toon('Vorige keer gestopt bij: ' + vorige + ' (tik om te sluiten)\n' + vorigLog.join('\n'));
