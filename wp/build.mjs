@@ -174,6 +174,30 @@ const wp = {
 				console.warn( 'THREE.WebGLRenderer: ' + name + ' extension not supported.' );
 
 			}`, 'three-warn');
+      // Het eerste beeld moest alle ~30 shaders tegelijk compileren: op de Lumia kwam dat beeld nooit af. Nu hooguit
+      // window.__wpShaderBudget nieuwe programma's per beeld (de rest verschijnt een paar beelden later), en elk in het log.
+      src = vervang(src, `				program = programCache.acquireProgram( parameters, programCacheKey );
+				programs.set( programCacheKey, program );`, `				if ( typeof window !== 'undefined' && window.__wpShaderBudget !== undefined && ! programCache.programs.some( function ( p ) { return p.cacheKey === programCacheKey; } ) ) {
+
+					if ( window.__wpShaderBudget <= 0 ) return null;
+					window.__wpShaderBudget --;
+					if ( window.__wpStap ) window.__wpStap( 'shader ' + programCache.programs.length + ' ' + material.type + ( parameters.map ? '+map' : '' ) + ( parameters.fog ? '+fog' : '' ) + ( parameters.instancing ? '+inst' : '' ) + ( parameters.transparent ? '+transp' : '' ) );
+
+				}
+
+				program = programCache.acquireProgram( parameters, programCacheKey );
+				programs.set( programCacheKey, program );`, 'three-shaderbudget');
+      src = vervang(src, `				program = getProgram( material, scene, object );
+
+			}`, `				program = getProgram( material, scene, object );
+				if ( program === null ) return null;
+
+			}`, 'three-shaderbudget2');
+      src = vervang(src, `			const program = setProgram( camera, scene, geometry, material, object );`, `			const program = setProgram( camera, scene, geometry, material, object );
+			if ( program === null ) return;`, 'three-shaderbudget3');
+      src = vervang(src, `	function uploadTexture( textureProperties, texture, slot ) {`, `	function uploadTexture( textureProperties, texture, slot ) {
+
+		if ( typeof window !== 'undefined' && window.__wpStap && ( window.__wpTexN = ( window.__wpTexN || 0 ) + 1 ) < 300 ) window.__wpStap( 'tex ' + window.__wpTexN + ' ' + ( texture.image ? texture.image.width + 'x' + texture.image.height : '?' ) );`, 'three-texlog');
       // Direct3D 9-niveau (en ANGLE): attribuut 0 moet per hoekpunt zijn. Zonder binding kon de linker instanceMatrix op 0
       // zetten, en dan tekende instancing onzin (grote driehoeken, figuranten weg). Dus position altijd op 0.
       src = vervang(src, `	} else if ( parameters.morphTargets === true ) {
@@ -262,7 +286,7 @@ const wp = {
       src = vervang(src, 'if (!h.g.visible || !h.g.parent || h.g.position.z < -74) continue;', 'if (!h.g.visible || !h.g.parent || h.g.position.z < -46) continue;', 'ver-huis');
       src = vervang(src, 'if (!proxy.visible || proxy.position.z < -70) continue;', 'if (!proxy.visible || proxy.position.z < -44) continue;', 'ver-decor');
       src = vervang(src, '    if (!_seenTop.has(top)) { _seenTop.add(top); top.updateMatrixWorld(true); }', '    if (top.position.z < -44) continue;\n    if (!_seenTop.has(top)) { _seenTop.add(top); top.updateMatrixWorld(true); }', 'ver-mensen');
-      src = vervang(src, "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');", "  if (rs === scene && scene.fog && camera.far < 50) { if (scene.fog.far > 40) scene.fog.far = 40; if (scene.fog.near > 22) scene.fog.near = 22; }\n  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');", 'ver-mist');
+      src = vervang(src, "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');", "  window.__wpShaderBudget = 1;\n  if (rs === scene && scene.fog && camera.far < 50) { if (scene.fog.far > 40) scene.fog.far = 40; if (scene.fog.near > 22) scene.fog.near = 22; }\n  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');", 'ver-mist');
       // alleen tekenen wat in beeld is: instances heeft three niet gecontroleerd (frustumCulled = false), dus ook huizen
       // achter de camera kostten een tekenopdracht per onderdeel
       src = vervang(src, 'function updateBatches() {\n  for (const im of instPools.values()) im.count = 0;', `const _wpFr = new THREE.Frustum(), _wpM = new THREE.Matrix4(), _wpS = new THREE.Sphere(), _wpV = new THREE.Vector3();
