@@ -287,9 +287,9 @@ const wp = {
       // generator van 1 MB, en die liet Chakra in EdgeHTML 13 de app laten crashen nog voor het splashscherm.
       src = vervang(src, 'const renderer = new THREE.WebGLRenderer(', "window.__wpStap('webgl');\nconst renderer = new THREE.WebGLRenderer(", 'webgl');
       // per beeld bijhouden of hij bij bijwerken of tekenen omvalt (eerste 200 beelden, daarna elke 2 s)
-      src = vervang(src, "renderer.setAnimationLoop(() => {\n", "let wpN = 0, wpT = 0;\nconst wpPerf = { n: 0, teken: 0, reken: 0, calls: 0, t0: 0 };\nrenderer.setAnimationLoop(() => {\n", 'loop');
+      src = vervang(src, "renderer.setAnimationLoop(() => {\n", "let wpN = 0, wpT = 0;\nconst wpPerf = { n: 0, teken: 0, reken: 0, calls: 0, t0: 0, m: 0, d: {} };\nconst wpMerk = (k) => { const nu = performance.now(); wpPerf.d[k] = (wpPerf.d[k] || 0) + nu - wpPerf.m; wpPerf.m = nu; };\nrenderer.setAnimationLoop(() => {\n", 'loop');
       src = vervang(src, "  autoQuality(t - last);\n", "  const wpLog = wpN < 15 || t - wpT > 5000;\n  if (wpLog) { wpT = t; window.__wpStap('beeld ' + wpN + ' ' + state); }\n  autoQuality(t - last);\n", 'loop2');
-      src = vervang(src, "  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n", "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');\n  const wpR0 = performance.now();\n  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n  wpPerf.n++; wpPerf.teken += performance.now() - wpR0; wpPerf.reken += wpR0 - t; wpPerf.calls += renderer.info.render.calls;\n  if (wpLog) { window.__wpStap('beeld ' + wpN + ' getekend'); if (wpPerf.n > 1) window.__wpStap('perf ' + (wpPerf.n / ((performance.now() - wpPerf.t0) / 1000)).toFixed(1) + ' fps, reken ' + (wpPerf.reken / wpPerf.n).toFixed(0) + ' ms, teken ' + (wpPerf.teken / wpPerf.n).toFixed(0) + ' ms, ' + (wpPerf.calls / wpPerf.n).toFixed(0) + ' calls, ' + renderer.info.programs.length + ' shaders'); wpPerf.n = wpPerf.teken = wpPerf.reken = wpPerf.calls = 0; wpPerf.t0 = performance.now(); }\n  wpN++;\n", 'render');
+      src = vervang(src, "  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n", "  if (wpLog) window.__wpStap('beeld ' + wpN + ' tekenen');\n  const wpR0 = performance.now();\n  if (HD) hdRender(renderer, rs, rc); else renderer.render(rs, rc);\n  wpPerf.n++; wpPerf.teken += performance.now() - wpR0; wpPerf.reken += wpR0 - t; wpPerf.calls += renderer.info.render.calls;\n  if (wpLog) { window.__wpStap('beeld ' + wpN + ' getekend'); if (wpPerf.n > 1) window.__wpStap('perf ' + (wpPerf.n / ((performance.now() - wpPerf.t0) / 1000)).toFixed(1) + ' fps, reken ' + (wpPerf.reken / wpPerf.n).toFixed(0) + ' ms, teken ' + (wpPerf.teken / wpPerf.n).toFixed(0) + ' ms, ' + (wpPerf.calls / wpPerf.n).toFixed(0) + ' calls, ' + renderer.info.programs.length + ' shaders, ' + state + ' | ' + Object.keys(wpPerf.d).map((k) => k + ' ' + (wpPerf.d[k] / wpPerf.n).toFixed(0)).join(', ')); wpPerf.n = wpPerf.teken = wpPerf.reken = wpPerf.calls = 0; wpPerf.d = {}; wpPerf.t0 = performance.now(); }\n  wpN++;\n", 'render');
       // wat de GPU kan (Lumia 435 = Adreno 302, Direct3D 9_3)
       src = vervang(src, "renderer.setPixelRatio(HD ?", "{ const gl = renderer.getContext(); window.__wpStap('webgl ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' tex, ' + gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) + '/' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) + ' uniforms, uint-index ' + !!gl.getExtension('OES_element_index_uint') + ', ' + gl.getParameter(gl.RENDERER) + ', varyings ' + gl.getParameter(gl.MAX_VARYING_VECTORS) + ', tex-units ' + gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) + '/' + gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) + ', ext ' + (gl.getSupportedExtensions() || []).join(',')); }\nrenderer.setPixelRatio(HD ?", 'caps');
       // de grote mp3's niet vooraf ophalen: de fetch-polyfill houdt alles in het geheugen
@@ -406,6 +406,154 @@ function wpVulMerge(im, mesh) {
   g.setDrawRange(0, n * nv);
 }
 function instPush(geo, mat, m, order) {`, 'merge-fn');
+      // rekentijd per onderdeel meten (in de perf-regel van het log)
+      src = vervang(src, `  document.body.classList.toggle('slomo', slomoT > 0 && state === 'run');
+  const p0 = PERF.on ? performance.now() : 0;`, `  wpPerf.m = t;
+  document.body.classList.toggle('slomo', slomoT > 0 && state === 'run');
+  wpMerk('slomo');
+  const p0 = PERF.on ? performance.now() : 0;`, 'meet0');
+      src = vervang(src, `  if (state !== 'paused') {
+    updateChaser(dt, state === 'run');
+    if (schoolRent() && chaser()) chaser().root.visible = false;
+    updDuizelig(dt);
+    updWild(dt);
+  }
+  updateLiveLoop(dt);
+  updateCamera(dt);
+  if ((hudTick += dt) >= 0.1) { hudTick = 0; updateHud(); }
+  updateMusic(dt);
+  pollPad();
+  checkAch();
+  updateBatches();
+  freeTick();`, `  wpMerk('spel');
+  if (state !== 'paused') {
+    updateChaser(dt, state === 'run');
+    if (schoolRent() && chaser()) chaser().root.visible = false;
+    updDuizelig(dt);
+    updWild(dt);
+  }
+  wpMerk('achtervolger');
+  updateLiveLoop(dt);
+  updateCamera(dt);
+  wpMerk('camera');
+  if ((hudTick += dt) >= 0.1) { hudTick = 0; updateHud(); }
+  wpMerk('hud');
+  updateMusic(dt);
+  wpMerk('muziek');
+  pollPad();
+  checkAch();
+  wpMerk('pad+ach');
+  updateBatches();
+  wpMerk('batches');
+  freeTick();
+  wpMerk('opruimen');`, 'meet1');
+      // Kale Lambert-shader voor de Lumia: die van three (met alle lichtfuncties) kostte 6–7 s compileren per variant.
+      // Alleen wat de game gebruikt: textuur, kleur, Gouraud-licht (zoals de PS1-patch), emissive, mist, verspringende hoekpunten.
+      src = vervang(src, "window.__wpStap('webgl');\nconst renderer = new THREE.WebGLRenderer(", `{
+  const L = THREE.ShaderLib.lambert;
+  L.vertexShader = \`#include <common>
+#include <lights_pars_begin>
+#include <fog_pars_vertex>
+varying vec3 vLicht;
+#ifdef USE_MAP
+uniform mat3 mapTransform;
+varying vec2 vKaartUv;
+#endif
+#ifdef USE_EMISSIVEMAP
+uniform mat3 emissiveMapTransform;
+varying vec2 vGloedUv;
+#endif
+#ifdef USE_COLOR
+varying vec3 vKleur;
+#endif
+void main() {
+#ifdef USE_MAP
+  vKaartUv = (mapTransform * vec3(uv, 1.0)).xy;
+#endif
+#ifdef USE_EMISSIVEMAP
+  vGloedUv = (emissiveMapTransform * vec3(uv, 1.0)).xy;
+#endif
+#ifdef USE_COLOR
+  vKleur = color;
+#endif
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  {
+    float psxA = projectionMatrix[1][1] / projectionMatrix[0][0];
+    vec2 psxGrid = psxA >= 1.0 ? vec2(150.0 * psxA, 150.0) : vec2(150.0, 150.0 / psxA);
+    vec4 sp = gl_Position;
+    if (sp.w > 0.0) { sp.xy = floor(sp.xy / sp.w * psxGrid + 0.5) / psxGrid * sp.w; gl_Position = sp; }
+  }
+  vec3 n = normalize(normalMatrix * normal), li = ambientLightColor;
+  float up = 0.0;
+#if NUM_HEMI_LIGHTS > 0
+  for (int i = 0; i < NUM_HEMI_LIGHTS; i++) { li += getHemisphereLightIrradiance(hemisphereLights[i], n); up = dot(n, hemisphereLights[i].direction); }
+#endif
+#if NUM_DIR_LIGHTS > 0
+  for (int i = 0; i < NUM_DIR_LIGHTS; i++) li += saturate(abs(dot(n, directionalLights[i].direction))) * directionalLights[i].color;
+#endif
+#if NUM_POINT_LIGHTS > 0
+  for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
+    vec3 v = pointLights[i].position - mvPosition.xyz;
+    float r = length(v);
+    li += saturate(abs(dot(n, v / r)) * 0.7 + 0.3) * pointLights[i].color * getDistanceAttenuation(r, pointLights[i].distance, pointLights[i].decay);
+  }
+#endif
+  float wy = (modelMatrix * vec4(position, 1.0)).y;
+  float ao = wy < -0.5 ? 1.0 : mix(0.58, 1.0, smoothstep(0.0, 1.9, wy));
+  vLicht = li * RECIPROCAL_PI * mix(ao, 1.0, saturate(up));
+#ifdef USE_FOG
+  vFogDepth = - mvPosition.z;
+#endif
+}\`;
+  L.fragmentShader = \`uniform vec3 diffuse;
+uniform vec3 emissive;
+uniform float opacity;
+varying vec3 vLicht;
+#include <common>
+#include <fog_pars_fragment>
+#ifdef USE_MAP
+uniform sampler2D map;
+varying vec2 vKaartUv;
+#endif
+#ifdef USE_EMISSIVEMAP
+uniform sampler2D emissiveMap;
+varying vec2 vGloedUv;
+#endif
+#ifdef USE_ALPHATEST
+uniform float alphaTest;
+#endif
+#ifdef USE_COLOR
+varying vec3 vKleur;
+#endif
+vec3 naarLineair(vec3 c) { return mix(pow(c * 0.9478672986 + vec3(0.0521327014), vec3(2.4)), c * 0.0773993808, vec3(lessThanEqual(c, vec3(0.04045)))); }
+void main() {
+  vec4 diffuseColor = vec4(diffuse, opacity);
+#ifdef USE_MAP
+  vec4 t = texture2D(map, vKaartUv);
+  t.rgb = naarLineair(t.rgb);
+  diffuseColor *= t;
+#endif
+#ifdef USE_COLOR
+  diffuseColor.rgb *= vKleur;
+#endif
+#ifdef USE_ALPHATEST
+  if (diffuseColor.a < alphaTest) discard;
+#endif
+  vec3 gloed = emissive;
+#ifdef USE_EMISSIVEMAP
+  gloed *= naarLineair(texture2D(emissiveMap, vGloedUv).rgb);
+#endif
+  gl_FragColor = vec4(diffuseColor.rgb * vLicht + gloed, diffuseColor.a);
+  #include <colorspace_fragment>
+  #include <fog_fragment>
+}\`;
+}
+window.__wpStap('webgl');
+const renderer = new THREE.WebGLRenderer(`, 'kale-lambert');
+      // body.classList.toggle elk beeld laat Edge de stijl van de hele pagina opnieuw berekenen: alleen bij een wijziging
+      src = vervang(src, "  document.body.classList.toggle('slomo', slomoT > 0 && state === 'run');\n  wpMerk('slomo');", "  { const sl = slomoT > 0 && state === 'run'; if (sl !== wpSlomo) { wpSlomo = sl; document.body.classList.toggle('slomo', sl); } }\n  wpMerk('slomo');", 'slomo');
+      src = vervang(src, 'let wpN = 0, wpT = 0;', 'let wpN = 0, wpT = 0, wpSlomo = false;', 'slomo2');
       src = vervang(src, 'const iconSheet = new Image();', "window.__wpStap('game.js loopt');\nconst iconSheet = new Image();", 'stap');
       src = vervang(src, "const iconSheet = new Image();\niconSheet.src = 'wp/img/iconen.png';", 'const iconSheet = window.__wpIconen;', 'iconen');
       src = src.replace(/\nawait Promise\.race\(\[\n[\s\S]*?\n\]\);\n/, (m) => { tla++; return '\n'; });
