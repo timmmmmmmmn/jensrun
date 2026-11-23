@@ -7425,7 +7425,7 @@ $('#fameBack').addEventListener('click', () => { if (curLevel) openLevels(); els
 // =====================================================================
 //  FIETS (power-up): Jens fietst zo lang als het filmpje duurt
 // =====================================================================
-const FIETS_CLIPS = 52;
+const FIETS_CLIPS = 48;
 let fietsDmg = 0;
 let fietsT = 0, fietsMax = 1, fietsBag = [], voiceSrc = null, voiceUntil = 0, voiceDuck = 0.5;
 const jensBike = makeBike('#c8202b');
@@ -7465,7 +7465,7 @@ const FIETS_SET = Array.from({ length: FIETS_CLIPS }, (_, i) => i + 1).sort(() =
 let fietsVorige = null;
 function fietsVooruit() {
   if (fietsBag.length < 2) fietsBag = FIETS_SET.filter((n) => !fietsBag.includes(n)).sort(() => Math.random() - 0.5).concat(fietsBag);
-  for (const n of fietsBag.slice(-2)) { clipSeen.delete('fiets' + n); queueClip('fiets' + n, `audio/fiets/${n}.mp3?v=2`); }
+  for (const n of fietsBag.slice(-2)) { clipSeen.delete('fiets' + n); queueClip('fiets' + n, `audio/fiets/${n}.mp3?v=3`); }
 }
 function nextFietsClip() {
   if (!fietsBag.length) fietsVooruit();
