@@ -297,7 +297,7 @@ async function api(req, env, url) {
     const mode = url.searchParams.get('mode');
     if (!MODES.has(mode)) return json({ error: 'modus' }, 400);
     const { results } = await db.prepare(`SELECT p.name, s.score, s.dist, instr(COALESCE(p.profile, ''), '"plustoken"') > 0 AS plus FROM scores s JOIN players p ON p.id = s.player_id
-      WHERE s.mode = ? ORDER BY s.score DESC LIMIT 25`).bind(mode).all();
+      WHERE s.mode = ? ORDER BY s.score DESC`).bind(mode).all();
     // wie de PLUS token (1 op 500 potjes) ooit gevonden heeft, staat in het profiel als prestatie
     const { results: plus } = await db.prepare(`SELECT name FROM players WHERE instr(COALESCE(profile, ''), '"plustoken"') > 0 ORDER BY name LIMIT 50`).all();
     return json({ rows: results, plus: plus.map((p) => p.name) });
@@ -522,7 +522,7 @@ async function api(req, env, url) {
   // ---------- weekuitdaging ----------
   if (path === '/api/weekly' && req.method === 'GET') {
     const { results } = await db.prepare(`SELECT p.name, w.score FROM weekly w JOIN players p ON p.id = w.player_id
-      WHERE w.week = ? ORDER BY w.score DESC LIMIT 25`).bind(isoWeek()).all();
+      WHERE w.week = ? ORDER BY w.score DESC`).bind(isoWeek()).all();
     return json({ week: isoWeek(), rows: results });
   }
   if (path === '/api/weekly' && req.method === 'POST') {
