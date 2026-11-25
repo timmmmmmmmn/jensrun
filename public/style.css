@@ -1436,3 +1436,11 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 .deel-app.xx { background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
 .deel-app.op { background: rgba(255,255,255,.14); }
 @media (max-width: 700px) { .deel-ui { padding: 0; align-items: flex-end; } .deel-in { border-radius: 24px 24px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); } }
+/* reclame voor een respawn */
+.btn.big.ad-btn { background: linear-gradient(#7dff6a, #2bb673); box-shadow: 0 4px 0 #17703f; color: #06301a; margin-bottom: 10px; }
+.btn.big.ad-btn:active { box-shadow: 0 1px 0 #17703f; }
+.ad { position: fixed; inset: 0; z-index: 9000; background: #000; display: flex; align-items: center; justify-content: center; }
+.ad video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.ad-top { position: absolute; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); display: flex; justify-content: space-between; gap: 12px; font: 700 14px Barlow, sans-serif; color: #fff; pointer-events: none; }
+.ad-top span { background: rgba(0,0,0,.6); padding: 5px 10px; border-radius: 8px; }
+.ad-tag { background: #ffc400 !important; color: #161006; }

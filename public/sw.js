@@ -17,7 +17,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || req.headers.has('range')) return; // muziek streamt rechtstreeks
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // lettertypes van Google: gewoon via de browser
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/beheer')) return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/beheer') || url.pathname.startsWith('/ads/')) return; // reclames streamen
   const media = /\.(mp3|png|jpe?g|webp|woff2)$/i.test(url.pathname);
   e.respondWith(media ? staleWhileRevalidate(req) : networkFirst(req));
 });
