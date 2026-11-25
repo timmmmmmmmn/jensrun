@@ -171,6 +171,8 @@ const MODES = {
   osso: { mini: true, label: 'Mijn Osso', icon: '🏠', play: 'VERDEDIGEN!', desc: 'Iedereen die ooit achter Jens aan zat valt tegelijk z\'n osso binnen. Hou ze tegen met een AK-47, romeinse kaarsen en nitraat.' },
 };
 
+// prijzen in de PLUS: 8× zo duur sinds je bekers met reclames kunt verdienen (het Vitesse-shirt wil toch niemand)
+const INFLATIE = 8;
 const SHOP = {
   shout: { label: 'Kreet', items: [
     { id: 'hup', name: 'Hup!', price: 0, text: 'Hup!' },
@@ -236,6 +238,7 @@ const SHOP = {
     { id: 'snor', name: 'Snor', price: 600 },
   ] },
 };
+for (const s of Object.values(SHOP)) for (const it of s.items) if (it.price > 0 && it.price < 99999 && it.id !== 'vitesse') it.price = Math.round((it.price * INFLATIE) / 50) * 50;
 
 // =====================================================================
 //  save
@@ -3722,13 +3725,18 @@ function aanbodNee() {
   finishRun();
 }
 $('#aanbodNee').addEventListener('click', aanbodNee);
-const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4', 'ads/patricus.mp4', 'ads/hohoho.mp4', 'ads/istanbulcola.mp4', 'ads/rocketleague.mp4', 'ads/doekoe.mp4', 'ads/mast.mp4', 'ads/knalbel.mp4', 'ads/bosweg.mp4', 'ads/hooligans.mp4', 'ads/shane.mp4', 'ads/stadstour.mp4', 'ads/hatert.mp4'];
+const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4', 'ads/patricus.mp4', 'ads/hohoho.mp4', 'ads/istanbulcola.mp4', 'ads/rocketleague.mp4', 'ads/doekoe.mp4', 'ads/mast.mp4', 'ads/knalbel.mp4', 'ads/bosweg.mp4', 'ads/hooligans.mp4', 'ads/shane.mp4', 'ads/stadstour.mp4', 'ads/hatert.mp4', 'ads/linus.mp4', 'ads/wild.mp4', 'ads/jos.mp4', 'ads/skitta.mp4', 'ads/cijfernu.mp4'];
 var respawned = false, respawnDist = 0, adOpen = false;
 let adVorige = -1;
 const magRespawn = (s) => !respawned && s > 0 && !jacht && !live && !curLevel && !mapSeed && !MODES[mode]?.mini;
 function kijkReclame() {
   if (state !== 'over' || adOpen || !magRespawn(Math.floor(score))) return;
   clearInterval(aanbodTimer);
+  speelReclame(() => respawn());
+}
+// speelt een willekeurige reclame; klaar(true) als hij echt is afgelopen, klaar(false) als hij bleef hangen
+function speelReclame(klaar) {
+  if (adOpen) return;
   adOpen = true;
   newsCancel(); stopGameover();
   let i = Math.floor(Math.random() * ADS.length);
@@ -3736,28 +3744,41 @@ function kijkReclame() {
   adVorige = i;
   const v = $('#adVid'), box = $('#ad');
   box.classList.remove('hidden');
-  let klaar = false, stil = 0, laatste = -1;
+  let af = false, stil = 0, laatste = -1;
   const tik = setInterval(() => {
     $('#adTijd').textContent = v.duration ? `Nog ${Math.max(0, Math.ceil(v.duration - v.currentTime))} s` : '';
     // blijft hij hangen (geen internet, kapotte stream)? dan niet eeuwig op een zwart scherm laten wachten
     if (v.currentTime === laatste && !v.paused) stil += 0.25; else stil = 0;
     laatste = v.currentTime;
-    if (stil > 8) einde();
+    if (stil > 8) einde(false);
   }, 250);
-  const einde = () => {
-    if (klaar) return;
-    klaar = true; clearInterval(tik);
+  const einde = (gekeken) => {
+    if (af) return;
+    af = true; clearInterval(tik);
     v.onended = v.onerror = null; v.pause(); v.removeAttribute('src'); v.load();
     box.classList.add('hidden');
     adOpen = false;
-    respawn();
+    klaar(gekeken);
   };
-  v.onended = einde;
-  v.onerror = () => setTimeout(einde, 1500);
+  v.onended = () => einde(true);
+  v.onerror = () => setTimeout(() => einde(false), 1500);
   v.src = ADS[i];
   v.currentTime = 0;
-  v.play().catch(() => { v.muted = true; v.play().catch(() => setTimeout(einde, 1500)); });
+  v.play().catch(() => { v.muted = true; v.play().catch(() => setTimeout(() => einde(false), 1500)); });
 }
+// in de PLUS: een reclame kijken levert 1000 bekers op
+const RECLAME_BEKERS = 1000;
+function reclameVoorBekers() {
+  if (state !== 'shop') return;
+  speelReclame((gekeken) => {
+    if (!gekeken) { note('📺 De reclame bleef hangen, geen bekers. Probeer het nog eens.'); return; }
+    save.bekers += RECLAME_BEKERS; persist();
+    hype(`🏆 +${RECLAME_BEKERS.toLocaleString('nl-NL')} BEKERS!`, '', 'kaching');
+    for (let i = 0; i < 5; i++) setTimeout(() => fxDing(), i * 80);
+    renderShop();
+  });
+}
+for (const id of ['#plusReclame', '#kassaReclame']) $(id).addEventListener('click', reclameVoorBekers);
 function respawn() {
   if (state !== 'over') return;
   respawned = true; respawnDist = dist;
@@ -5228,13 +5249,14 @@ function naarPlus(view, tab) {
 }
 function renderShop() {
   $('#shopBekers').textContent = prijs(save.bekers);
+  $('#kassaReclame').classList.toggle('hidden', !(plusView === 'kassa' && mandTotaal() > save.bekers));
   $('#mandN').textContent = mandje.length;
   $('#plusMand').classList.toggle('vol', mandje.length > 0);
   for (const v of ['vloer', 'schap', 'kassa']) $('#plus' + v[0].toUpperCase() + v.slice(1)).classList.toggle('hidden', plusView !== v);
   $('#shopBack').classList.toggle('hidden', plusView !== 'vloer');
   const gang = GANGEN.findIndex((g) => g[0] === shopTab);
   $('#plusTitel').textContent = plusView === 'schap' ? `Gang ${gang + 1} · ${GANGEN[gang][1]}` : plusView === 'kassa' ? 'Kassa' : 'PLUS Jens Run';
-  $('#plusSub').textContent = plusView === 'schap' ? 'Pak iets van het schap' : plusView === 'kassa' ? 'Afrekenen met je bekers' : plusGratis() ? '🛒 PLUS token: alles is gratis!' : 'Kies een gang of ga naar de kassa';
+  $('#plusSub').textContent = plusView === 'schap' ? 'Pak iets van het schap' : plusView === 'kassa' ? 'Afrekenen met je bekers' : plusGratis() ? '🛒 PLUS token: alles is gratis!' : `📈 Inflatie: alles is ${INFLATIE}× zo duur`;
   if (plusView === 'vloer') renderVloer();
   else if (plusView === 'schap') renderSchap();
   else renderKassa();

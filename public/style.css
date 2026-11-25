@@ -1449,3 +1449,6 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 #aanbod .aanbod-let { color: #ffd23f; font-size: 14px; }
 #aanbod .btn { width: 100%; }
 .credits-klein { font-size: 12px; opacity: .7; margin: 8px 0 0; line-height: 1.4; }
+.plus-reclame { border: 0; border-radius: 999px; padding: 6px 12px; font: 700 15px Barlow, sans-serif; background: linear-gradient(#7dff6a, #2bb673); color: #06301a; cursor: pointer; white-space: nowrap; box-shadow: 0 3px 0 #17703f; }
+.plus-reclame:active { transform: translateY(2px); box-shadow: 0 1px 0 #17703f; }
+#kassaReclame { width: 100%; margin-top: 10px; background: linear-gradient(#7dff6a, #2bb673); color: #06301a; }
