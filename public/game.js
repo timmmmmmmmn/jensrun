@@ -3092,7 +3092,7 @@ function resetRun() {
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
   replayBuf = []; replayLen = 0; player.usedDouble = false; player.dubbelCD = 0;
-  lastSnap = null; dist = 0; score = 0; runBekers = 0; rowN = 0; segN = 0; respawned = false; respawnDist = 0;
+  lastSnap = null; dist = 0; score = 0; runBekers = 0; rowN = 0; segN = 0; respawned = false; respawnDist = 0; aanbodGezien = false;
   if (curLevel) prepareLevel(levelIdx);
   else if (boss) { scene.remove(boss.mesh); boss = null; }
   applyTheme(curLevel ? THEMES[curLevel.theme] : THEMES.oost);
@@ -3470,7 +3470,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'Escape' || k === 'p' || k === 'P') { if (state === 'run') pauseGame(); else if (state === 'paused') resumeGame(); }
   else if (k === 'Enter') {
     if (state === 'menu' && started && !$('#menu').classList.contains('hidden') && e.timeStamp - startedAt > 300) startRun();
-    else if (state === 'over' && !adOpen) startRun();
+    else if (state === 'over' && !adOpen && curScreen === '#over') startRun();
   }
 });
 let touch = null;
@@ -3641,6 +3641,8 @@ function die(reason) {
 function finishRun() {
   state = 'over';
   const s = Math.floor(score);
+  // eerst de vraag of je met een reclame verder wilt: pas daarna gaat de score (misschien) naar de ranglijst
+  if (!aanbodGezien && magRespawn(s)) { aanbodGezien = true; toonAanbod(s); return; }
   const best = save.best[mode] || 0;
   const isBest = !jacht && !respawned && s > best;
   if (isBest) save.best[mode] = s;
@@ -3680,9 +3682,8 @@ function finishRun() {
   $('#overBijna').classList.toggle('hidden', !bijna);
   if (bijna) $('#overBijna').textContent = `😩 Zo dichtbij! Nog maar ${(best - s + 1).toLocaleString('nl-NL')} punten tot je record`;
   $('#overRank').classList.toggle('hidden', !respawned);
-  if (respawned) $('#overRank').textContent = '📺 Met respawn gespeeld: deze score telt niet mee voor de ranglijst';
+  if (respawned) $('#overRank').textContent = '📺 Met reclame verder gespeeld: deze run telt niet mee voor de ranglijst';
   $('#overName').classList.add('hidden');
-  $('#adBtn').classList.toggle('hidden', !magRespawn(s));
   const ch = challengeResult(s);
   $('#overChallenge').innerHTML = ch;
   $('#overChallenge').classList.toggle('hidden', !ch);
@@ -3703,12 +3704,31 @@ function finishRun() {
 }
 
 // ---------- respawn: na een run één keer een reclame kijken en verder rennen (telt niet mee voor de ranglijst) ----------
+// direct na je dood: 'Verder rennen?' met een aftelklok. Kijk je de reclame, dan telt de hele run niet mee.
+const AANBOD_SECS = 7;
+var aanbodGezien = false;
+let aanbodTimer = 0;
+function toonAanbod(s) {
+  $('#aanbodScore').textContent = s.toLocaleString('nl-NL');
+  let n = AANBOD_SECS;
+  $('#aanbodTel').textContent = n;
+  clearInterval(aanbodTimer);
+  aanbodTimer = setInterval(() => { if (--n <= 0) aanbodNee(); else $('#aanbodTel').textContent = n; }, 1000);
+  showScreen('#aanbod');
+}
+function aanbodNee() {
+  clearInterval(aanbodTimer);
+  if (curScreen !== '#aanbod' || state !== 'over') return;
+  finishRun();
+}
+$('#aanbodNee').addEventListener('click', aanbodNee);
 const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4'];
 var respawned = false, respawnDist = 0, adOpen = false;
 let adVorige = -1;
 const magRespawn = (s) => !respawned && s > 0 && !jacht && !live && !curLevel && !mapSeed && !MODES[mode]?.mini;
 function kijkReclame() {
   if (state !== 'over' || adOpen || !magRespawn(Math.floor(score))) return;
+  clearInterval(aanbodTimer);
   adOpen = true;
   newsCancel(); stopGameover();
   let i = Math.floor(Math.random() * ADS.length);
@@ -4891,7 +4911,7 @@ function showScreen(sel) {
   curScreen = sel;
   // Jesse popt elke keer opnieuw omhoog als je in het hoofdmenu komt
   if (sel === '#menu') { const j = $('#fmJesse'); j.classList.remove('pop'); void j.offsetWidth; j.classList.add('pop'); }
-  for (const s of ['#start', '#menu', '#shop', '#over', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer', '#blok', '#school']) $(s).classList.toggle('hidden', s !== sel);
+  for (const s of ['#start', '#menu', '#shop', '#over', '#aanbod', '#pause', '#board', '#levels', '#lvldone', '#fame', '#install', '#profile', '#settings', '#awards', '#weekly', '#plakboek', '#kamer', '#social', '#account', '#pass', '#krant', '#mini', '#miniOver', '#arcade', '#lkamer', '#blok', '#school']) $(s).classList.toggle('hidden', s !== sel);
   for (const f of ['#fmModes', '#fmArt', '#fmLive']) $(f).classList.add('hidden');
   if (sel === '#menu') { renderWall(); renderFm(); }
   glasSluit(true);
@@ -13907,6 +13927,7 @@ $('#instBack').addEventListener('click', () => showScreen('#menu'));
 // terug-knop van de Android-app
 window.__jrBack = () => {
   if (adOpen) return true; // de reclame kun je niet wegdrukken
+  if (curScreen === '#aanbod') { aanbodNee(); return true; }
   if (glasSluit()) return true;
   if (state === 'run') { pauseGame(); return true; }
   if (state === 'mini') { if (mini.over) miniQuit(); else miniPause(!mini.paused); return true; }
