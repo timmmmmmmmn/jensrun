@@ -3722,7 +3722,7 @@ function aanbodNee() {
   finishRun();
 }
 $('#aanbodNee').addEventListener('click', aanbodNee);
-const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4'];
+const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4', 'ads/patricus.mp4'];
 var respawned = false, respawnDist = 0, adOpen = false;
 let adVorige = -1;
 const magRespawn = (s) => !respawned && s > 0 && !jacht && !live && !curLevel && !mapSeed && !MODES[mode]?.mini;
