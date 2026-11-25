@@ -306,7 +306,7 @@ function audioInit() {
     lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
     voiceBus.connect(lim).connect(ac.destination);
     if (recDest) lim.connect(recDest);
-    for (const n of ['nitraat', 'cake', 'groot', 'schot', 'boe']) queueClip(n, `audio/sfx/${n}.mp3`);
+    for (const n of ['nitraat', 'cake', 'groot', 'schot', 'boe', 'kruiwagen']) queueClip(n, `audio/sfx/${n}.mp3`);
     queueClip('dbivo', 'audio/dbivo.mp3');
     for (let i = 1; i <= 6; i++) queueClip('shane' + i, `audio/shane/${i}.mp3`);
     queueClip('gameover', 'audio/gameover.mp3');
@@ -2783,6 +2783,7 @@ const POWER_LOOK = {
   nitraat: { ring: '#e2231a', label: 'DUM BUM NITRAAT', bg: '#c8202b', sx: 2.0 },
   kist: { ring: '#b18cff', label: 'MYSTERY KIST', bg: '#6a2a9a', sx: 1.8 },
   darko: { ring: '#c8202b', label: 'DARKO · NEC #6', bg: '#1f7a3a', sx: 1.7 },
+  kruiwagen: { ring: '#2f8a3a', label: 'KRUIWAGEN', bg: '#2f8a3a', sx: 1.6 },
 };
 function makePower(type) {
   const g = new THREE.Group();
@@ -2795,6 +2796,8 @@ function makePower(type) {
     g.add(makeSjaalPower());
   } else if (type === 'fiets') {
     const f = makeBike('#c8202b'); f.scale.setScalar(0.75); f.position.y = -0.4; f.rotation.y = 0.8; g.add(f);
+  } else if (type === 'kruiwagen') {
+    const k = makeKruiwagen(); k.scale.setScalar(1.1); k.position.y = -0.5; k.rotation.y = 0.7; g.add(k);
   } else if (type === 'darko') {
     const bal = makeBal(); bal.scale.setScalar(2.4); g.add(bal);
   } else if (type === 'kist') {
@@ -3084,7 +3087,7 @@ function resetRun() {
   speed = 0; baseSpeed = curLevel ? curLevel.speed : weekly?.rule.id === 'snel' ? 20 : 14.5;
   bos = null; nextBos = weekly?.rule.id === 'bos' ? 150 : rand(1000, 1500);
   sjaalT = 0; jensSjaal.visible = false; dayMix = 0; sunsetFrom = 0; hill = null; hillTilt = 0; nextHill = rand(800, 1200);
-  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(800, 1200); nextLinus = rand(900, 1300); nextDarko = rand(700, 1100); stopDarkoPower();
+  path = null; nextTruck = rand(300, 550); nextRaam = rand(150, 300); nextReporter = rand(500, 900); nextVrienden = rand(400, 800); nextFork = rand(1100, 1500); nextSchat = rand(500, 900); nextKaart = rand(450, 800); nextJules = rand(800, 1200); nextLinus = rand(900, 1300); nextDarko = rand(700, 1100); stopDarkoPower(); stopKruiwagen();
   plusToken = Math.random() < 1 / 500 ? rand(300, 2000) : 0;
   if (ebos) { scene.remove(ebos.mesh); ebos = null; } nextEbos = 5000; bazen = 0;
   for (const f of replayBuf) { f.objs.length = 0; replayPool.push(f); }
@@ -3214,7 +3217,7 @@ function spawnRow(z) {
     else if (ahead > nextPower && brommerT <= 0 && bekerT <= 0 && weekly?.rule.id !== 'geenpower') {
       nextPower = ahead + rand(200, 340);
       // de eerste is altijd een mystery kist: meteen iets spannends
-      const type = firstPower ? 'kist' : pick(['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'kist', 'kist', 'kist', 'darko', 'darko']);
+      const type = firstPower ? 'kist' : pick(['brommer', 'beker-van-ons', 'kruiwagen', 'nitraat', 'sjaal', 'fiets', 'fiets', 'fiets', 'fiets', 'fiets', 'kist', 'kist', 'kist', 'darko', 'darko']);
       firstPower = false;
       addObj('power', makePower(type), LANES[freeLane], z, 0, 0, 0, { y: 1.0, type });
     } else if (Math.random() < (early ? 1 : 0.65)) {
@@ -3378,6 +3381,7 @@ function updateHud() {
   if (wkT > 0) html += `<div class="power wk"><span>🏆 De WK beker: 2× bekers</span><div class="bar"><i style="width:${Math.round((wkT / 10) * 100)}%"></i></div></div>`;
   if (sjaalT > 0) html += `<div class="power"><span>🧣 NEC-sjaal – bekermagneet</span><div class="bar"><i style="width:${Math.round((sjaalT / SJAAL_TIME) * 100)}%"></i></div></div>`;
   if (fietsT > 0) html += `<div class="power"><span>🚲 Fiets – 2× snel, halve schade</span><div class="bar"><i style="width:${Math.round((fietsT / fietsMax) * 100)}%"></i></div></div>`;
+  if (kruiwagenT > 0) html += `<div class="power"><span>🛒 Kruiwagens – bekerregen</span><div class="bar"><i style="width:${Math.round((kruiwagenT / KRUIWAGEN_TIME) * 100)}%"></i></div></div>`;
   if (darkoT > 0) html += `<div class="power"><span>⚽ Darko – trapt alles uit de weg</span><div class="bar"><i style="width:${Math.round((darkoT / DARKO_TIME) * 100)}%"></i></div></div>`;
   if (brommerT > 0) html += `<div class="power"><span>🛵 Brommer – onaantastbaar</span><div class="bar"><i style="width:${Math.round((brommerT / BROMMER_TIME) * 100)}%"></i></div></div>`;
   if (bekerT > 0) html += `<div class="power beker"><span>🏆 De beker is van ons! 2× punten</span><div class="bar"><i style="width:${Math.round((bekerT / BEKER_TIME) * 100)}%"></i></div></div>`;
@@ -3847,6 +3851,144 @@ function updDarkoPower(dt) {
   ballen.push({ mesh: m, x: r.position.x, z: r.position.z - 0.4, z0: r.position.z - 0.4, t: 0, target });
   tone(220, 0.06, 'square', 0.08, 110);
 }
+// ---------- Kruiwagen (power-up): 53 kruiwagens vallen aan beide kanten van noodtrappen en storten bekers op straat ----------
+const KRUIWAGEN_TIME = 7, KRUIWAGEN_N = 53, KRUIWAGEN_BEKERS = 5;
+let kruiwagenT = 0, kruiwagenLeft = 0, kruiwagenTik = 0, kruiwagenKant = 1, kruiwagenGeluid = 0;
+const kruiwagens = [];
+// vaste onderdelen één keer bouwen; elke kruiwagen/trap is daarna een lege proxy (getekend als instances)
+const proxyParts = new Map();
+function proxyVan(key, make) {
+  let parts = proxyParts.get(key);
+  if (!parts) {
+    const g = make(); g.updateMatrixWorld(true);
+    parts = [];
+    g.traverse((o) => { if (o.isMesh && !Array.isArray(o.material)) parts.push({ src: o, geo: o.geometry, mat: o.material, local: o.matrixWorld.clone(), order: o.renderOrder }); });
+    proxyParts.set(key, parts);
+  }
+  const p = new THREE.Group();
+  p.userData.parts = parts;
+  batchProxies.add(p);
+  return p;
+}
+function makeKruiwagen() {
+  const g = new THREE.Group(), bak = M('#2f8a3a'), staal = M('#3a3d42'), hout = M('#8a5a2a');
+  // bak: bodem en schuine wanden, wiel vooraan (+z), handvatten achter
+  g.add(mesh(box(0.62, 0.06, 0.8), bak, 0, 0.42, 0));
+  for (const s of [-1, 1]) { const w = mesh(box(0.06, 0.34, 0.86), bak, s * 0.36, 0.58, 0); w.rotation.z = s * -0.35; g.add(w); }
+  const v = mesh(box(0.7, 0.34, 0.06), bak, 0, 0.58, 0.46); v.rotation.x = 0.5; g.add(v);
+  const a = mesh(box(0.7, 0.3, 0.06), bak, 0, 0.56, -0.42); a.rotation.x = -0.25; g.add(a);
+  // binnenkant vol bekers
+  g.add(mesh(box(0.56, 0.14, 0.7), goldMat, 0, 0.56, 0));
+  g.add(mesh(wheel(0.2, 0.1, M('#1b1b1b')).geometry, M('#1b1b1b'), 0, 0.2, 0.62));
+  for (const s of [-1, 1]) {
+    const h = mesh(box(0.05, 0.05, 1.5), hout, s * 0.24, 0.42, -0.2); h.rotation.x = -0.12; g.add(h);
+    g.add(mesh(box(0.04, 0.4, 0.04), staal, s * 0.24, 0.2, -0.35));
+  }
+  return g;
+}
+// noodtrap tegen de gevel: twee bordessen met hekje en een schuine trap ertussen (+x = richting de weg)
+const NOODTRAP_LAGEN = [2.9, 5.5];
+function makeNoodtrap() {
+  const g = new THREE.Group(), ijzer = M('#2b2d31'), roest = M('#5a3a2a');
+  for (const y of NOODTRAP_LAGEN) {
+    g.add(mesh(box(1.3, 0.08, 3.2), ijzer, 0.65, y, 0));
+    g.add(mesh(box(0.05, 0.05, 3.2), roest, 1.28, y + 0.9, 0));
+    for (const z of [-1.55, -0.78, 0, 0.78, 1.55]) g.add(mesh(box(0.04, 0.9, 0.04), ijzer, 1.28, y + 0.45, z));
+    for (const z of [-1.6, 1.6]) g.add(mesh(box(1.3, 0.05, 0.05), roest, 0.65, y + 0.9, z));
+    // steunen onder het bordes
+    const st = mesh(box(0.05, 0.05, 1.7), ijzer, 0.65, y - 0.5, 0); st.rotation.y = Math.PI / 2; st.rotation.z = 0.6; g.add(st);
+  }
+  for (let i = 0; i < NOODTRAP_LAGEN.length; i++) {
+    const y0 = i ? NOODTRAP_LAGEN[i - 1] : 0.6, y1 = NOODTRAP_LAGEN[i], len = Math.hypot(y1 - y0, 2.6);
+    const tr = mesh(box(0.7, 0.06, len), ijzer, 0.5, (y0 + y1) / 2, 0); tr.rotation.x = Math.atan2(y1 - y0, 2.6) * (i % 2 ? -1 : 1); g.add(tr);
+    for (const s of [-1, 1]) { const l = mesh(box(0.04, 0.04, len), roest, 0.5 + s * 0.36, (y0 + y1) / 2 + 0.6, 0); l.rotation.x = tr.rotation.x; g.add(l); }
+  }
+  return g;
+}
+function startKruiwagen() {
+  kruiwagenT = KRUIWAGEN_TIME; kruiwagenLeft = KRUIWAGEN_N; kruiwagenTik = 0.25;
+  queueClip('kruiwagen', 'audio/sfx/kruiwagen.mp3');
+  toast(`🛒 KRUIWAGENS!<small>${KRUIWAGEN_N} kruiwagens vol bekers storten van de noodtrappen</small>`, 2);
+  bubble(jens.head, 'KRUIWAGENS!', 'shout', 1.4, 0.5);
+  goodShout(true);
+}
+function stopKruiwagen() {
+  kruiwagenT = 0; kruiwagenLeft = 0;
+  kruiwagens.length = 0;
+}
+// elk een eigen geluid; boven de 8 tegelijk wordt het alleen nog maar brij
+function kruiwagenKlank(side) {
+  if (!ac || !save.sound || !clips.kruiwagen || kruiwagenGeluid >= 8) return;
+  const s = ac.createBufferSource(), g = ac.createGain();
+  s.buffer = clips.kruiwagen; s.playbackRate.value = rand(0.9, 1.12);
+  g.gain.value = 1.1;
+  let n = g;
+  if (ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = side * 0.6; g.connect(p); n = p; }
+  s.connect(g); n.connect(master); s.start();
+  kruiwagenGeluid++; s.onended = () => kruiwagenGeluid--;
+}
+function spawnKruiwagen() {
+  const side = (kruiwagenKant = Math.random() < 0.8 ? -kruiwagenKant : kruiwagenKant);
+  const z = Math.max(-64, -(speed * 1.4 + rand(10, 24))), gevel = side * (ROAD_W / 2 + 4);
+  // een trap op die plek, of er komt er een bij
+  let trap = objs.find((o) => o.noodtrap && o.side === side && !o.dead && Math.abs(o.z - z) < 3.5);
+  if (!trap) {
+    const m = proxyVan('noodtrap', makeNoodtrap);
+    m.rotation.y = side < 0 ? 0 : Math.PI;
+    trap = addObj('deco', m, gevel, z, 0, 0, 0, { noodtrap: true, side });
+  }
+  const laag = pick(NOODTRAP_LAGEN), m = proxyVan('kruiwagen', makeKruiwagen);
+  m.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; // wiel naar de weg
+  const x0 = gevel - side * 1.0, y0 = laag + 0.1, vy = rand(1.5, 3.5);
+  const T = (vy + Math.sqrt(vy * vy + 44 * y0)) / 22, xL = side * (ROAD_W / 2 + rand(0.3, 1.1));
+  const o = addObj('deco', m, x0, trap.z + rand(-1.2, 1.2), 0, 0, 0, { y: y0, kruiwagen: true, side, t: 0, T, x0, xL, y0, vy, rot: rand(4, 7) * -side, upd: updKruiwagen });
+  m.position.y = y0;
+  kruiwagens.push(o);
+  kruiwagenKlank(side);
+}
+function updKruiwagen(o, dt) {
+  if (state !== 'run' || o.geland === 2) return;
+  o.t += dt;
+  const m = o.mesh;
+  if (!o.geland) {
+    const t = Math.min(o.t, o.T);
+    m.position.x = o.x = o.x0 + (o.xL - o.x0) * (t / o.T);
+    m.position.y = Math.max(0, o.y0 + o.vy * t - 11 * t * t);
+    m.rotation.x = o.rot * 0.35 * t; m.rotation.z = o.rot * t;
+    if (o.t >= o.T) {
+      o.geland = 1; o.t = 0;
+      // omgekieperd op de stoep, de bak naar de weg
+      m.rotation.set(0, m.rotation.y, o.side * 1.9);
+      m.position.y = 0.45;
+      noise(0.05, 0.25); tone(110 + Math.random() * 40, 0.1, 'square', 0.08, 50);
+      burst(_pv.set(o.x, 0.5, o.z), lowFx ? 4 : 10, 3, [goldMat, ...glinsterMats], 0.4);
+      for (let i = 0; i < KRUIWAGEN_BEKERS; i++) {
+        const tx = LANES[Math.floor(Math.random() * 3)] + rand(-0.35, 0.35), tz = rand(-2.5, 2.5), dur = rand(0.35, 0.7), h = rand(1, 2.2);
+        addObj('beker', coinProxy(), o.x, o.z + tz, 0, 0, 0, { y: 0.6, upd(b, d) {
+          if (b.dead || b.vt >= dur) return;
+          b.vt = Math.min(dur, (b.vt || 0) + d);
+          const k = b.vt / dur;
+          b.x = o.x + (tx - o.x) * k; b.y = 0.6 + Math.sin(k * Math.PI) * h;
+          b.mesh.position.x = b.x; b.mesh.position.y = b.y;
+        } });
+      }
+    }
+  } else if (o.t < 0.25) m.position.y = 0.45 + Math.sin(o.t / 0.25 * Math.PI) * 0.18;
+  else { m.position.y = 0.45; o.geland = 2; }
+}
+function updKruiwagenPower(dt) {
+  for (let i = kruiwagens.length - 1; i >= 0; i--) if (kruiwagens[i].dead || !objs.includes(kruiwagens[i])) kruiwagens.splice(i, 1);
+  if (kruiwagenT <= 0 || state !== 'run') return;
+  kruiwagenT -= dt;
+  if (indoor || wild || seg?.active) return; // binnen of boven de afgrond geen gevels
+  kruiwagenTik -= dt;
+  while (kruiwagenLeft > 0 && kruiwagenTik <= 0) {
+    kruiwagenTik += (KRUIWAGEN_TIME - 1.5) / KRUIWAGEN_N * rand(0.5, 1.5);
+    kruiwagenLeft--;
+    spawnKruiwagen();
+  }
+  if (kruiwagenLeft <= 0) kruiwagenT = Math.min(kruiwagenT, 1.2);
+}
 function throwNitraat() {
   if (state !== 'run' || nitraten <= 0) return;
   nitraten--;
@@ -4186,7 +4328,7 @@ function activatePower(type) {
   liveEv('power', type);
   if (type === 'kist') { buzz([30, 40, 30]); missionEvent('power'); fxFlash('#b18cff', 0.3); mysteryKist(); return; }
   buzz([30, 40, 30]);
-  fxFlash({ brommer: '#5ad1ff', 'beker-van-ons': '#ffd23f', sjaal: '#7dff6a', fiets: '#ff5a3a', darko: '#c8202b' }[type] || '#ffffff', 0.28);
+  fxFlash({ brommer: '#5ad1ff', 'beker-van-ons': '#ffd23f', sjaal: '#7dff6a', fiets: '#ff5a3a', darko: '#c8202b', kruiwagen: '#2f8a3a' }[type] || '#ffffff', 0.28);
   missionEvent('power');
   sfx.power();
   flash(false);
@@ -4204,6 +4346,7 @@ function activatePower(type) {
   }
   if (type === 'fiets') { startFiets(); goodShout(true); verslaggever('fiets', true); return; }
   if (type === 'darko') { startDarkoPower(); return; }
+  if (type === 'kruiwagen') { startKruiwagen(); return; }
   if (type === 'sjaal') { sjaalT = SJAAL_TIME; jensSjaal.visible = true; toast('🧣 NEC-SJAAL!<small>Alle bekers komen naar je toe</small>', 1.8); return; }
   if (type === 'brommer') {
     if (fietsT > 0) stopFiets();
@@ -4517,6 +4660,7 @@ function updateRun(dt) {
   updateRocket(dt, m);
   updateShots(dt);
   updDarkoPower(dt);
+  updKruiwagenPower(dt);
   updateParticles(dt, m);
   updateFireworks(dt, m);
   spawnZ += m;
@@ -13250,7 +13394,7 @@ function liveEv(k, n) {
   if (k === 'struikel') { if (now() - evStruikelT < 2) return; evStruikelT = now(); }
   liveSend({ t: 'ev', k, n });
 }
-const EV_POWER = { brommer: 'pakt de brommer 🛵', 'beker-van-ons': 'heeft DE BEKER 🏆', fiets: 'springt op de fiets 🚲', sjaal: 'pakt de sjaal 🧣', kist: 'opent een mystery kist 📦', nitraat: 'heeft nitraat 🧨', nitraat2: 'heeft nitraat 🧨' };
+const EV_POWER = { brommer: 'pakt de brommer 🛵', 'beker-van-ons': 'heeft DE BEKER 🏆', fiets: 'springt op de fiets 🚲', sjaal: 'pakt de sjaal 🧣', kist: 'opent een mystery kist 📦', kruiwagen: 'laat 53 kruiwagens vallen 🛒', nitraat: 'heeft nitraat 🧨', nitraat2: 'heeft nitraat 🧨' };
 function evText(m) {
   const n = `<b>${escHtml(m.name)}</b>`;
   if (m.k === 'power') return `${n} ${EV_POWER[m.n] || 'pakt een power-up ⚡'}`;
@@ -13728,7 +13872,7 @@ function warmUp() {
     makeTrekker, makeTrofee, makeTrolleybus, makeTruck, makeUitgang, makeViskrat, () => makeVriend('tim'), () => makeVriend('jesse'), () => makeVriend('patrick'), makeVrouw,
     () => makeWandelaars(3), makeWinkelwagen, makeJos, makeLoslopendWild, makeEiland, () => makeClubFan(CLUBS[0]), () => makeCup(1.15), makeSteve,
     makeJules, makeLinus, makeDarko, () => makeDarkoBord(1), makeBal,
-    ...['brommer', 'beker-van-ons', 'nitraat', 'sjaal', 'fiets', 'darko'].map((t) => () => makePower(t)),
+    ...['brommer', 'beker-van-ons', 'kruiwagen', 'nitraat', 'sjaal', 'fiets', 'darko'].map((t) => () => makePower(t)),
     ...Object.keys(LANDMARKS).filter((k) => typeof LANDMARKS[k] === 'function').map((k) => () => LANDMARKS[k](k === 'stadion' ? ['X', '#c8202b', '#f4f4f4'] : 'WINKELCENTRUM')),
   ];
   makers.forEach(add);
