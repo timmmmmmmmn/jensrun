@@ -1448,3 +1448,4 @@ p { font-weight: 500; font-size: 17px; line-height: 1.35; }
 #aanbod .panel > * + * { margin-top: 12px; }
 #aanbod .aanbod-let { color: #ffd23f; font-size: 14px; }
 #aanbod .btn { width: 100%; }
+.credits-klein { font-size: 12px; opacity: .7; margin: 8px 0 0; line-height: 1.4; }
