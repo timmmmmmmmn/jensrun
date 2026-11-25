@@ -3722,7 +3722,7 @@ function aanbodNee() {
   finishRun();
 }
 $('#aanbodNee').addEventListener('click', aanbodNee);
-const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4', 'ads/patricus.mp4', 'ads/hohoho.mp4', 'ads/istanbulcola.mp4', 'ads/rocketleague.mp4', 'ads/doekoe.mp4', 'ads/mast.mp4', 'ads/knalbel.mp4'];
+const ADS = ['ads/smashit.mp4', 'ads/agora.mp4', 'ads/go.mp4', 'ads/nijmegenactueel.mp4', 'ads/plus.mp4', 'ads/patricus.mp4', 'ads/hohoho.mp4', 'ads/istanbulcola.mp4', 'ads/rocketleague.mp4', 'ads/doekoe.mp4', 'ads/mast.mp4', 'ads/knalbel.mp4', 'ads/bosweg.mp4', 'ads/hooligans.mp4', 'ads/shane.mp4', 'ads/stadstour.mp4', 'ads/hatert.mp4'];
 var respawned = false, respawnDist = 0, adOpen = false;
 let adVorige = -1;
 const magRespawn = (s) => !respawned && s > 0 && !jacht && !live && !curLevel && !mapSeed && !MODES[mode]?.mini;
