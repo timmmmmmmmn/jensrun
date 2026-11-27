@@ -192,8 +192,6 @@ const SHOP = {
     { id: 'eurotour', name: 'NEC European Tour-shirt', price: 1200 },
     { id: 'feyenoord', name: 'Feyenoord-shirt', price: 900 },
     { id: 'vitesse', name: 'Oud Vitesse-shirt', price: 50 },
-    { id: 'sint', name: 'Sinterklaaspak', price: 6250 },
-    { id: 'piet', name: 'Pietenpak', price: 3125 },
     { id: 'goud', name: 'Gouden NEC-shirt (plakboek)', price: 99999 },
     { id: 'pas', name: 'Seizoensshirt (seizoenspas)', price: 99999, pass: true },
   ] },
@@ -239,7 +237,15 @@ const SHOP = {
     { id: 'lennon', name: 'John Lennon bril', price: 750 },
     { id: 'snor', name: 'Snor', price: 600 },
   ] },
+  // complete pakken: gaan over shirt, broek en kapsel heen
+  outfit: { label: 'Outfit', items: [
+    { id: 'geen', name: 'Eigen kleren', price: 0 },
+    { id: 'sint', name: 'Sinterklaaspak', price: 6250 },
+    { id: 'piet', name: 'Pietenpak', price: 3125 },
+  ] },
 };
+// het shirt dat je echt ziet: een outfit gaat voor
+const pakShirt = (eq) => (eq.outfit && eq.outfit !== 'geen' ? eq.outfit : eq.shirt);
 for (const s of Object.values(SHOP)) for (const it of s.items) if (it.price > 0 && it.price < 99999 && it.id !== 'vitesse') it.price = Math.round((it.price * INFLATIE) / 50) * 50;
 
 // =====================================================================
@@ -248,7 +254,7 @@ for (const s of Object.values(SHOP)) for (const it of s.items) if (it.price > 0 
 const SAVE_KEY = 'jensrun-v1';
 const DEFAULT_SAVE = {
   bekers: 0, owned: {}, mode: 'fiets', sound: true,
-  eq: { shout: 'hup', shirt: 'wit', head: 'normaal', bril: 'geen', rug: 'geen', hand: 'geen', maatje: 'geen' },
+  eq: { shout: 'hup', shirt: 'wit', head: 'normaal', bril: 'geen', rug: 'geen', hand: 'geen', maatje: 'geen', outfit: 'geen' },
   best: { fiets: 0, telefoon: 0, terror: 0, school: 0 },
 };
 function loadSave() {
@@ -260,6 +266,11 @@ function loadSave() {
 }
 const save = loadSave();
 if (!save.set) save.set = { music: 100, sfx: 100, voice: 100, quality: 'normaal' };
+// Sint- en Pietenpak zaten eerst bij de shirts
+for (const id of ['sint', 'piet']) {
+  if (save.owned['shirt:' + id]) { save.owned['outfit:' + id] = true; delete save.owned['shirt:' + id]; }
+  if (save.eq.shirt === id) { save.eq.outfit = id; save.eq.shirt = 'wit'; }
+}
 for (const slot of Object.keys(SHOP)) if (!SHOP[slot].items.some((i) => i.id === save.eq[slot])) save.eq[slot] = SHOP[slot].items[0].id;
 const newUuid = () => crypto.randomUUID ? crypto.randomUUID() : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) => (c ^ (Math.random() * 16) >> (c / 4)).toString(16));
 if (!save.playerId) save.playerId = newUuid();
@@ -2163,16 +2174,16 @@ function pietPak(p, on) {
   p.piet = g;
 }
 function applyOutfit(eq = save.eq) {
-  const key = [eq.shirt, eq.head, eq.bril, eq.rug, eq.hand, eq.maatje].join('|');
+  const key = [eq.shirt, eq.head, eq.bril, eq.rug, eq.hand, eq.maatje, eq.outfit].join('|');
   if (key === wornKey) return;
   wornKey = key;
-  const sint = eq.shirt === 'sint';
-  jens.setShirt(eq.shirt);
-  if (eq.shirt === 'heineken') jens.setPants('#1f7a3a', true); else jens.setPants('#2f3f5c', false);
+  const shirt = pakShirt(eq), sint = shirt === 'sint';
+  jens.setShirt(shirt);
+  if (shirt === 'heineken') jens.setPants('#1f7a3a', true); else jens.setPants('#2f3f5c', false);
   sintPak(jens, sint);
-  pietPak(jens, eq.shirt === 'piet');
+  pietPak(jens, shirt === 'piet');
   const hairColor = eq.head === 'manen' ? '#e3c47e' : eq.head === 'spike' ? '#4a3626' : eq.head === 'kuif' ? '#e8e3d4' : '#6e5038';
-  buildHair(jens.hair, sint ? 'sint' : eq.shirt === 'piet' ? 'piet' : eq.head, sint ? '#efe9da' : hairColor);
+  buildHair(jens.hair, sint ? 'sint' : shirt === 'piet' ? 'piet' : eq.head, sint ? '#efe9da' : hairColor);
   jens.face.userData.setHair(sint ? '#d9d3c4' : eq.head === 'kuif' ? '#7a6a58' : hairColor);
   buildBril(jens.bril, eq.bril);
   buildGear(sint ? 'geen' : eq.rug, sint ? 'staf' : eq.hand);
@@ -5246,6 +5257,7 @@ function toMenu() {
 const GANGEN = [
   ['shout', 'Kreten', '📣'], ['shirt', 'Shirts', '👕'], ['head', 'Kapsels & petten', '💇'], ['bril', 'Brillen', '🕶️'],
   ['hand', 'Snoep & feest', '🥤'], ['rug', 'Capes', '🦸'], ['maatje', 'Dieren', '🐾'], ['skill', 'Sportvoeding', '🦘'],
+  ['outfit', 'Outfits', '🛍'],
 ];
 const ARTIKEL_ICOON = {
   shout: { hup: '🙌', gonl: '🦁', bio: '🎵', dbivo: '🏆', hohoho: '🎅' },
@@ -5255,9 +5267,10 @@ const ARTIKEL_ICOON = {
   skill: { geen: '🦵', dubbel: '🦘' },
   maatje: { geen: '🧍', duif: '🕊️', hond: '🐶', sef: '🧑' },
   bril: { geen: '👀', filter: '😎', lennon: '👓', snor: '🥸' },
+  outfit: { geen: '👕', sint: '🎄', piet: '🍬' },
 };
 const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', sint: '#c8102e', piet: '#6a2bb0', goud: '#e8b923', pas: '#7a4cff' };
-const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a' };
+const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a', outfit: '#c8102e' };
 const shirtje = (k) => `<svg class="shirtje" viewBox="0 0 40 36"><path d="M13 2 4 7 1 16l7 2 2-5v21h20V13l2 5 7-2-3-9-9-5c-1 3-4 5-7 5s-6-2-7-5Z" fill="${k}" stroke="rgba(0,0,0,.45)" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 const icoon = (tab, id) => tab === 'shirt' ? shirtje(SHIRT_KLEUR[id] || '#fff') : ARTIKEL_ICOON[tab]?.[id] || GANGEN.find((g) => g[0] === tab)[2];
 const pakKleur = (tab, id) => tab === 'shirt' ? '#e9ece4' : PAK_KLEUR[tab];
@@ -5386,7 +5399,7 @@ function previewOutfit() {
     const pas = { ...save.eq };
     for (const m of mandje) pas[m.tab] = m.id;
     applyOutfit(pas);
-  } else if (plusView === 'schap') applyOutfit({ ...save.eq, [shopTab]: shopSel[shopTab] });
+  } else if (plusView === 'schap') applyOutfit({ ...save.eq, [shopTab]: shopSel[shopTab], ...(shopTab === 'shirt' ? { outfit: 'geen' } : {}) });
   else applyOutfit();
 }
 function naarPlus(view, tab) {
@@ -5414,7 +5427,7 @@ function renderShop() {
 function renderVloer() {
   $('#plusGangen').innerHTML = GANGEN.map(([k, naam, ic], i) => {
     const nieuw = SHOP[k].items.filter((it) => !owns(k, it.id) && it.price < 99999 && it.price <= save.bekers).length;
-    return `<button class="gang" data-gang="${k}"><span class="gang-nr">${i + 1}</span><span class="gang-ic">${ic}</span><b>${naam}</b><small>${SHOP[k].items.length} artikelen${nieuw ? ` · <em>${nieuw} te koop</em>` : ''}</small><span class="gang-plank"></span></button>`;
+    return `<button class="gang${k === 'outfit' ? ' breed' : ''}" data-gang="${k}"><span class="gang-nr">${i + 1}</span><span class="gang-ic">${ic}</span><b>${naam}</b><small>${SHOP[k].items.length} artikelen${nieuw ? ` · <em>${nieuw} te koop</em>` : ''}</small><span class="gang-plank"></span></button>`;
   }).join('');
   $('#naarKassa').innerHTML = `<span class="kassa-ic">🛒</span><b>Kassa</b><small>${mandje.length ? `${mandje.length} in je mandje · 🏆 ${prijs(mandTotaal())}` : 'Je mandje is nog leeg'}</small>`;
 }
@@ -5473,6 +5486,7 @@ $('#siBtn').addEventListener('click', () => {
   if (owns(shopTab, it.id)) {
     sfx.beker();
     save.eq[shopTab] = it.id;
+    if (shopTab === 'shirt') save.eq.outfit = 'geen'; // een shirt aantrekken = het pak uit
     persist();
     applyOutfit();
   } else if (inMandje(shopTab, it.id)) {
@@ -5504,7 +5518,7 @@ $('#pinBtn').addEventListener('click', () => {
   setTimeout(() => {
     save.bekers -= tot;
     const gekocht = mandje;
-    for (const m of mandje) { save.owned[m.tab + ':' + m.id] = true; save.eq[m.tab] = m.id; shopSel[m.tab] = m.id; }
+    for (const m of mandje) { save.owned[m.tab + ':' + m.id] = true; save.eq[m.tab] = m.id; shopSel[m.tab] = m.id; if (m.tab === 'shirt' && !mandje.some((o) => o.tab === 'outfit')) save.eq.outfit = 'geen'; }
     mandje = [];
     persist();
     applyOutfit();
@@ -9236,7 +9250,7 @@ function plusVariant() {
       if (t >= 1.6) { faceDir(jens.root, 0, -6); pose(jens, 'run', dt, 0.6); jens.root.position.z = -(t - 1.6) * 0.8; pose(c, 'point', dt, 0.3); faceDir(c.root, 0, jens.root.position.z); }
       // polo uit: weer in z'n eigen outfit
       if (t > 2.05 && !A.s3) {
-        A.s3 = 1; jens.setShirt(save.eq.shirt);
+        A.s3 = 1; jens.setShirt(pakShirt(save.eq));
         burst(new THREE.Vector3(0, 1.4, jens.root.position.z), 10, 1.5, M(PLUS_GROEN), 0.4);
         aanProp(mesh(box(0.5, 0.04, 0.4), M(PLUS_GROEN)), 0.3, 0.03, jens.root.position.z + 0.6);
         bubble(jens.head, 'Ik neem ontslag!', 'shout', 1.2, 0.5);
@@ -9435,12 +9449,12 @@ const ease = (t) => t * t * (3 - 2 * t);
 const faceTo = (o, x, z) => { o.rotation.y = Math.atan2(-(x - o.position.x), -(z - o.position.z)); };
 // een Jens voor in de filmpjes, in z'n huidige outfit
 function cutJens() {
-  const p = makePerson({ key: 'jens', skin: '#f2cfbf', hair: '#6e5038', hairStyle: 'normaal', shirt: save.eq.shirt || 'wit', pants: '#2f3f5c', shoes: '#f4f4f4', face: { skin: '#f2cfbf', eye: '#4a6b8a', cheeks: true } });
+  const p = makePerson({ key: 'jens', skin: '#f2cfbf', hair: '#6e5038', hairStyle: 'normaal', shirt: pakShirt(save.eq) || 'wit', pants: '#2f3f5c', shoes: '#f4f4f4', face: { skin: '#f2cfbf', eye: '#4a6b8a', cheeks: true } });
   const hc = save.eq.head === 'manen' ? '#e3c47e' : save.eq.head === 'spike' ? '#4a3626' : save.eq.head === 'kuif' ? '#e8e3d4' : '#6e5038';
-  const sint = save.eq.shirt === 'sint';
+  const sint = save.eq.outfit === 'sint';
   buildHair(p.hair, sint ? 'sint' : save.eq.head, sint ? '#efe9da' : hc);
   if (sint) { sintPak(p, true); p.face.userData.setHair('#d9d3c4'); }
-  if (save.eq.shirt === 'piet') { pietPak(p, true); buildHair(p.hair, 'piet', hc); }
+  if (save.eq.outfit === 'piet') { pietPak(p, true); buildHair(p.hair, 'piet', hc); }
   buildBril(p.bril, save.eq.bril);
   return p;
 }
@@ -9807,7 +9821,7 @@ function endAanloop() {
   aan = null;
   const c = a.A.c;
   c.root.rotation.y = a.ry; c.root.position.y = 0; c.body.position.y = 0;
-  if (mode === 'terror') jens.setShirt(save.eq.shirt);
+  if (mode === 'terror') jens.setShirt(pakShirt(save.eq));
   jens.root.rotation.set(0, 0, 0); jens.root.position.set(player.x, 0, 0);
   chaseX = c.root.position.x; chaseDist = Math.max(0.8, c.root.position.z);
   camPos.copy(camera.position);
@@ -10485,7 +10499,7 @@ async function openProfile(name, from = '#board') {
       <div class="reacts">${REACTIES.map((e) => `<button class="react ${r.myReaction === e ? 'sel' : ''}" data-react="${e}">${e} <small>${r.reactions?.[e] || 0}</small></button>`).join('')}</div>
       <button id="prReact" class="glas-kies" data-mijn="${r.myReaction || ''}" data-tel="${escHtml(JSON.stringify(r.reactions || {}))}"><span>${REACTIES.filter((e) => r.reactions?.[e]).map((e) => `${e} ${r.reactions[e]}`).join(' &nbsp; ') || 'Reageren'}</span></button>
       <ol class="board">${scores}</ol>
-      ${p.outfit ? `<div class="outfit"><b>Outfit</b><span>👕 ${ITEM('shirt', p.outfit.shirt)}</span><span>💇 ${ITEM('head', p.outfit.head)}</span><span>🕶️ ${ITEM('bril', p.outfit.bril)}</span><span>📣 ${ITEM('shout', p.outfit.shout)}</span><span>🦸 ${ITEM('rug', p.outfit.rug)}</span><span>✋ ${ITEM('hand', p.outfit.hand)}</span><span>🐾 ${ITEM('maatje', p.outfit.maatje)}</span></div>` : ''}`;
+      ${p.outfit ? `<div class="outfit"><b>Outfit</b><span>👕 ${ITEM('shirt', p.outfit.shirt)}</span><span>💇 ${ITEM('head', p.outfit.head)}</span><span>🕶️ ${ITEM('bril', p.outfit.bril)}</span><span>📣 ${ITEM('shout', p.outfit.shout)}</span><span>🦸 ${ITEM('rug', p.outfit.rug)}</span><span>✋ ${ITEM('hand', p.outfit.hand)}</span><span>🐾 ${ITEM('maatje', p.outfit.maatje)}</span>${p.outfit.outfit && p.outfit.outfit !== 'geen' ? `<span>🛍 ${ITEM('outfit', p.outfit.outfit)}</span>` : ''}</div>` : ''}`;
   } catch (e) { $('#prBody').innerHTML = '<p>Kan dit profiel niet laden.</p>'; }
 }
 $('#prBack').addEventListener('click', () => { applyOutfit(); if (profileFrom === '#weekly') { openWeekly(); return; } if (profileFrom === '#social') { openSocial(); return; } showScreen(profileFrom); if (profileFrom === '#board') renderBoard(); });
