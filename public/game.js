@@ -243,6 +243,13 @@ const SHOP = {
     { id: 'sint', name: 'Sinterklaaspak', price: 6250 },
     { id: 'piet', name: 'Pietenpak', price: 3125 },
   ] },
+  // skins voor Shane: in Telefoon-modus en in Shane jaagt (de tegenstander ziet ze ook)
+  shane: { label: 'Shane', items: [
+    { id: 'gewoon', name: 'Gewone Shane', price: 0 },
+    { id: 'security', name: 'Shane Security', price: 1250 },
+    { id: 'boa', name: 'Shane de BOA', price: 1500 },
+    { id: 'piet', name: 'Shane als Piet', price: 2000 },
+  ] },
 };
 // het shirt dat je echt ziet: een outfit gaat voor
 const pakShirt = (eq) => (eq.outfit && eq.outfit !== 'geen' ? eq.outfit : eq.shirt);
@@ -254,7 +261,7 @@ for (const s of Object.values(SHOP)) for (const it of s.items) if (it.price > 0 
 const SAVE_KEY = 'jensrun-v1';
 const DEFAULT_SAVE = {
   bekers: 0, owned: {}, mode: 'fiets', sound: true,
-  eq: { shout: 'hup', shirt: 'wit', head: 'normaal', bril: 'geen', rug: 'geen', hand: 'geen', maatje: 'geen', outfit: 'geen' },
+  eq: { shout: 'hup', shirt: 'wit', head: 'normaal', bril: 'geen', rug: 'geen', hand: 'geen', maatje: 'geen', outfit: 'geen', shane: 'gewoon' },
   best: { fiets: 0, telefoon: 0, terror: 0, school: 0 },
 };
 function loadSave() {
@@ -2204,14 +2211,67 @@ const chasers = {};
   chasers.fiets = p;
 }
 // Shane: knot, stoppels, zwarte hoodie met bandprint (ook in het schooltijd-slot)
+const SHANE_HOODIE = { base: '#151515', paint(x, side) {
+  if (side === 'front') { x.fillStyle = '#c9cfd8'; x.fillRect(58, 0, 2, 50); x.fillRect(68, 0, 2, 50); text(x, 'WINTERSUN', '#7f9fe0', 16, 92); }
+  else { x.fillStyle = '#222'; x.fillRect(30, 0, 68, 26); } // capuchon
+} };
 function makeShane() {
-  const p = makePerson({ key: 'shane', skin: '#f0cbb2', hair: '#7a4a2c', hairStyle: 'knot', shirt: { base: '#151515', paint(x, side) {
-      if (side === 'front') { x.fillStyle = '#c9cfd8'; x.fillRect(58, 0, 2, 50); x.fillRect(68, 0, 2, 50); text(x, 'WINTERSUN', '#7f9fe0', 16, 92); }
-      else { x.fillStyle = '#222'; x.fillRect(30, 0, 68, 26); } // capuchon
-    } }, pants: '#2a2f3a', shoes: '#1a1a1a',
+  const p = makePerson({ key: 'shane', skin: '#f0cbb2', hair: '#7a4a2c', hairStyle: 'knot', shirt: SHANE_HOODIE, pants: '#2a2f3a', shoes: '#1a1a1a',
     face: { skin: '#f0cbb2', brow: '#6a4428', stubble: '#7a4a2c' } });
   longSleeves(p, fabricMat('#151515'));
+  p.skinId = 'gewoon';
   return p;
+}
+const SHANE_SHIRTS = {
+  security: { base: '#121212', paint(x, side) {
+    if (side === 'back') { text(x, 'SECURITY', '#f2f2f2', 22, 40, 'Impact, sans-serif'); return; }
+    x.fillStyle = '#f2f2f2'; x.beginPath(); x.moveTo(50, 0); x.lineTo(64, 46); x.lineTo(78, 0); x.fill(); // overhemd in de V van het colbert
+    x.fillStyle = '#151515'; x.fillRect(61, 4, 6, 40); // stropdas
+    x.fillStyle = '#ffd23f'; x.fillRect(84, 30, 16, 6); // pasje
+  } },
+  boa: { base: '#1c2433', paint(x, side) {
+    if (side === 'back') text(x, 'HANDHAVING', '#ffd23f', 18, 40);
+    else { x.fillStyle = '#ffd23f'; x.fillRect(80, 30, 18, 12); x.fillStyle = '#c9cde6'; x.fillRect(30, 30, 20, 4); }
+  } },
+};
+// trek Shane een skin aan (eerst alles terug naar de hoodie)
+function shaneSkin(p, id) {
+  if (p.skinId === id) return;
+  p.skinId = id;
+  pietPak(p, false);
+  if (p.skinExtra) { for (const o of p.skinExtra) o.parent.remove(o); }
+  p.skinExtra = [];
+  const extra = (parent, o) => { parent.add(o); p.skinExtra.push(o); };
+  p.setShirt(SHANE_HOODIE);
+  p.setArms(fabricMat('#151515'), fabricMat('#151515'));
+  p.setPants('#2a2f3a', false);
+  p.setShoes('#1a1a1a');
+  buildHair(p.hair, 'knot', '#7a4a2c');
+  buildBril(p.bril, 'geen');
+  if (id === 'security') {
+    p.setShirt(SHANE_SHIRTS.security);
+    p.setArms(fabricMat('#121212'), fabricMat('#121212'));
+    p.setPants('#121212', false); p.setShoes('#0c0c0c');
+    buildBril(p.bril, 'filter');
+    extra(p.hair, mesh(sphG(0.035, 6, 4), M('#111'), 0.215, -0.02, 0.01)); // oortje met krulsnoer
+    extra(p.hair, mesh(cylG(0.008, 0.008, 0.36, 4), M('#d8d0c0'), 0.2, -0.22, 0.06));
+  } else if (id === 'boa') {
+    p.setShirt(SHANE_SHIRTS.boa);
+    p.setArms(fabricMat('#1c2433'), fabricMat('#1c2433'));
+    p.setPants('#141a26', false); p.setShoes('#111');
+    buildHair(p.hair, 'boapet', '#7a4a2c');
+    extra(p.body, mesh(box(0.07, 0.09, 0.04), M('#111'), -0.08, 1.36, -0.16)); // bodycam
+    extra(p.body, mesh(box(0.015, 0.015, 0.01), M('#ff2a2a', { emissive: '#ff0000' }), -0.06, 1.39, -0.185));
+  } else if (id === 'piet') {
+    p.setShirt('piet');
+    pietPak(p, true);
+    buildHair(p.hair, 'piet', '#7a4a2c');
+  }
+}
+// welke Shane er nu rondloopt: in Shane jaagt als Jens die van de tegenstander, anders die van jezelf
+function shaneSkinNu() {
+  const id = jacht && jacht.rol === 'jens' ? (jacht.bot ? 'gewoon' : jacht.sk || 'gewoon') : save.eq.shane;
+  shaneSkin(chasers.telefoon, id);
 }
 {
   const p = makeShane();
@@ -4660,7 +4720,10 @@ function updateCamera(dt) {
     // vooraanzicht: Jens en de achtervolger
     const wide = camera.aspect > 1.1;
     const px = player.x;
-    if (state === 'shop' && plusView !== 'schap') {
+    if (state === 'shop' && plusView === 'schap' && shopTab === 'shane') {
+      camTargetPos.set(wide ? 1.25 : 0, portrait ? 1.3 : 1.45, portrait ? -5.2 : -3.8);
+      camTargetLook.set(wide ? 1.25 : 0, portrait ? -0.6 : 1.0, 0);
+    } else if (state === 'shop' && plusView !== 'schap') {
       camTargetPos.set(wide ? 0.85 : 0, portrait ? 1.3 : 1.55, portrait ? -5.5 : -3.3);
       camTargetLook.set(wide ? 0.85 : 0, portrait ? -1.0 : 0.95, 0);
     } else if (state === 'shop' && shopTab === 'rug') {
@@ -4724,6 +4787,7 @@ function updateCamera(dt) {
 }
 
 function updateChaser(dt, moving) {
+  shaneSkinNu();
   if (state === 'aanloop') return;
   const c = chaser();
   if (!c) return;
@@ -5036,6 +5100,8 @@ renderer.setAnimationLoop(() => {
     if (state !== 'over') {
       // op slot onder schooltijd: Jens rent recht op je af, de straat schuift onder hem door
       if (!schoolRent()) pose(jens, mode === 'telefoon' ? 'phoneIdle' : 'idle', dt);
+      toonWinkelShane();
+      if (winkelShane?.root.visible) pose(winkelShane, 'idle', dt);
       jens.root.position.set(0, 0, 0);
       jens.root.rotation.set(0, 0, 0);
       kamer.visible = false;
@@ -5062,7 +5128,7 @@ renderer.setAnimationLoop(() => {
   // in de PLUS is de straat weg: alleen de winkel, Jens, z'n maatje en de achtervolger
   const verborgen = [];
   if (state === 'shop') {
-    const blijft = new Set([plusWinkel, jens.root, pet, chaser()?.root]);
+    const blijft = new Set([plusWinkel, jens.root, pet, chaser()?.root, winkelShane?.root]);
     for (const c of scene.children) if (c.visible && !c.isLight && !blijft.has(c)) { c.visible = false; verborgen.push(c); }
   }
   const [rs, rc] = state === 'mini' && mini.scene ? [mini.scene, mini.cam] : [scene, camera];
@@ -5257,7 +5323,7 @@ function toMenu() {
 const GANGEN = [
   ['shout', 'Kreten', '📣'], ['shirt', 'Shirts', '👕'], ['head', 'Kapsels & petten', '💇'], ['bril', 'Brillen', '🕶️'],
   ['hand', 'Snoep & feest', '🥤'], ['rug', 'Capes', '🦸'], ['maatje', 'Dieren', '🐾'], ['skill', 'Sportvoeding', '🦘'],
-  ['outfit', 'Outfits', '🛍'],
+  ['outfit', 'Outfits', '🛍'], ['shane', 'Shane', '📱'],
 ];
 const ARTIKEL_ICOON = {
   shout: { hup: '🙌', gonl: '🦁', bio: '🎵', dbivo: '🏆', hohoho: '🎅' },
@@ -5268,9 +5334,10 @@ const ARTIKEL_ICOON = {
   maatje: { geen: '🧍', duif: '🕊️', hond: '🐶', sef: '🧑' },
   bril: { geen: '👀', filter: '😎', lennon: '👓', snor: '🥸' },
   outfit: { geen: '👕', sint: '🎄', piet: '🍬' },
+  shane: { gewoon: '📱', security: '🛡', boa: '👮', piet: '🍬' },
 };
 const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', sint: '#c8102e', piet: '#6a2bb0', goud: '#e8b923', pas: '#7a4cff' };
-const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a', outfit: '#c8102e' };
+const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a', outfit: '#c8102e', shane: '#151515' };
 const shirtje = (k) => `<svg class="shirtje" viewBox="0 0 40 36"><path d="M13 2 4 7 1 16l7 2 2-5v21h20V13l2 5 7-2-3-9-9-5c-1 3-4 5-7 5s-6-2-7-5Z" fill="${k}" stroke="rgba(0,0,0,.45)" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 const icoon = (tab, id) => tab === 'shirt' ? shirtje(SHIRT_KLEUR[id] || '#fff') : ARTIKEL_ICOON[tab]?.[id] || GANGEN.find((g) => g[0] === tab)[2];
 const pakKleur = (tab, id) => tab === 'shirt' ? '#e9ece4' : PAK_KLEUR[tab];
@@ -5372,6 +5439,15 @@ function bouwPlus() {
 
 let shopTab = 'shout', plusView = 'vloer';
 const shopSel = {};
+// in de Shane-gang staat Shane zelf op de plek van Jens
+let winkelShane = null, winkelAan = false;
+const SHANE_ROEP = { gewoon: ['Telefoon. Nu.', 'Geef hier'], security: ['Pasje?', 'Jij komt er niet in', 'Telefoon in het bakje'], boa: ['Telefoon inleveren!', 'Dat wordt een bon', 'Ik zie alles op de bodycam'], piet: ['Pepernoten voor je telefoon', 'Ruilen?', 'In de zak ermee'] };
+function toonWinkelShane() {
+  const aan = state === 'shop' && plusView === 'schap' && shopTab === 'shane';
+  if (aan && !winkelShane) { winkelShane = makeShane(); scene.add(winkelShane.root); }
+  if (winkelShane) { winkelShane.root.visible = aan; if (aan) shaneSkin(winkelShane, shopSel.shane); }
+  if (aan !== winkelAan) { winkelAan = aan; jens.root.visible = !aan; }
+}
 let mandje = [];
 const inMandje = (tab, id) => mandje.some((m) => m.tab === tab && m.id === id);
 const artikel = (tab, id) => SHOP[tab].items.find((i) => i.id === id);
@@ -5399,7 +5475,7 @@ function previewOutfit() {
     const pas = { ...save.eq };
     for (const m of mandje) pas[m.tab] = m.id;
     applyOutfit(pas);
-  } else if (plusView === 'schap') applyOutfit({ ...save.eq, [shopTab]: shopSel[shopTab], ...(shopTab === 'shirt' ? { outfit: 'geen' } : {}) });
+  } else if (plusView === 'schap' && shopTab === 'shane') { toonWinkelShane(); return; } else if (plusView === 'schap') applyOutfit({ ...save.eq, [shopTab]: shopSel[shopTab], ...(shopTab === 'shirt' ? { outfit: 'geen' } : {}) });
   else applyOutfit();
 }
 function naarPlus(view, tab) {
@@ -5427,7 +5503,7 @@ function renderShop() {
 function renderVloer() {
   $('#plusGangen').innerHTML = GANGEN.map(([k, naam, ic], i) => {
     const nieuw = SHOP[k].items.filter((it) => !owns(k, it.id) && it.price < 99999 && it.price <= save.bekers).length;
-    return `<button class="gang${k === 'outfit' ? ' breed' : ''}" data-gang="${k}"><span class="gang-nr">${i + 1}</span><span class="gang-ic">${ic}</span><b>${naam}</b><small>${SHOP[k].items.length} artikelen${nieuw ? ` · <em>${nieuw} te koop</em>` : ''}</small><span class="gang-plank"></span></button>`;
+    return `<button class="gang${k === 'outfit' || k === 'shane' ? ' breed' : ''}" data-gang="${k}"><span class="gang-nr">${i + 1}</span><span class="gang-ic">${ic}</span><b>${naam}</b><small>${SHOP[k].items.length} artikelen${nieuw ? ` · <em>${nieuw} te koop</em>` : ''}</small><span class="gang-plank"></span></button>`;
   }).join('');
   $('#naarKassa').innerHTML = `<span class="kassa-ic">🛒</span><b>Kassa</b><small>${mandje.length ? `${mandje.length} in je mandje · 🏆 ${prijs(mandTotaal())}` : 'Je mandje is nog leeg'}</small>`;
 }
@@ -5475,8 +5551,9 @@ $('#items').addEventListener('click', (e) => {
   shopSel[shopTab] = it.id;
   previewOutfit();
   if (shopTab === 'shout') { lastSpeak = 0; singBusyUntil = 0; shout(it, true); }
+  else if (shopTab === 'shane') { if (winkelShane) bubble(winkelShane.head, pick(SHANE_ROEP[it.id]), '', 1.2, 0.5); }
   else if (it.id === 'piet') bubble(jens.head, pick(['Pepernoten!', 'Waar is de Sint?', 'Zak vol bekers', 'Wie zoet is krijgt lekkers']), '', 1.2, 0.5);
-  else if (it.id === 'sint') bubble(jens.head, pick(['Heerlijk avondje!', 'Zie ginds komt de stoomboot', 'Waar is m\'n paard?', 'Ho ho... nee, dat is de andere']), '', 1.2, 0.5);
+  else if (it.id === 'sint' && shopTab === 'outfit') bubble(jens.head, pick(['Heerlijk avondje!', 'Zie ginds komt de stoomboot', 'Waar is m\'n paard?', 'Ho ho... nee, dat is de andere']), '', 1.2, 0.5);
   else if (it.id === 'vitesse') { playClip('boe', true); bubble(jens.head, pick(['Bah', 'Moet dat echt?', 'Ik voel me vies']), '', 1.2, 0.5); }
   else { jens.root.position.y = 0; tone(660, 0.06, 'square', 0.05); }
   renderShop();
@@ -10499,7 +10576,7 @@ async function openProfile(name, from = '#board') {
       <div class="reacts">${REACTIES.map((e) => `<button class="react ${r.myReaction === e ? 'sel' : ''}" data-react="${e}">${e} <small>${r.reactions?.[e] || 0}</small></button>`).join('')}</div>
       <button id="prReact" class="glas-kies" data-mijn="${r.myReaction || ''}" data-tel="${escHtml(JSON.stringify(r.reactions || {}))}"><span>${REACTIES.filter((e) => r.reactions?.[e]).map((e) => `${e} ${r.reactions[e]}`).join(' &nbsp; ') || 'Reageren'}</span></button>
       <ol class="board">${scores}</ol>
-      ${p.outfit ? `<div class="outfit"><b>Outfit</b><span>👕 ${ITEM('shirt', p.outfit.shirt)}</span><span>💇 ${ITEM('head', p.outfit.head)}</span><span>🕶️ ${ITEM('bril', p.outfit.bril)}</span><span>📣 ${ITEM('shout', p.outfit.shout)}</span><span>🦸 ${ITEM('rug', p.outfit.rug)}</span><span>✋ ${ITEM('hand', p.outfit.hand)}</span><span>🐾 ${ITEM('maatje', p.outfit.maatje)}</span>${p.outfit.outfit && p.outfit.outfit !== 'geen' ? `<span>🛍 ${ITEM('outfit', p.outfit.outfit)}</span>` : ''}</div>` : ''}`;
+      ${p.outfit ? `<div class="outfit"><b>Outfit</b><span>👕 ${ITEM('shirt', p.outfit.shirt)}</span><span>💇 ${ITEM('head', p.outfit.head)}</span><span>🕶️ ${ITEM('bril', p.outfit.bril)}</span><span>📣 ${ITEM('shout', p.outfit.shout)}</span><span>🦸 ${ITEM('rug', p.outfit.rug)}</span><span>✋ ${ITEM('hand', p.outfit.hand)}</span><span>🐾 ${ITEM('maatje', p.outfit.maatje)}</span>${p.outfit.outfit && p.outfit.outfit !== 'geen' ? `<span>🛍 ${ITEM('outfit', p.outfit.outfit)}</span>` : ''}${p.outfit.shane && p.outfit.shane !== 'gewoon' ? `<span>📱 ${ITEM('shane', p.outfit.shane)}</span>` : ''}</div>` : ''}`;
   } catch (e) { $('#prBody').innerHTML = '<p>Kan dit profiel niet laden.</p>'; }
 }
 $('#prBack').addEventListener('click', () => { applyOutfit(); if (profileFrom === '#weekly') { openWeekly(); return; } if (profileFrom === '#social') { openSocial(); return; } showScreen(profileFrom); if (profileFrom === '#board') renderBoard(); });
@@ -13586,7 +13663,7 @@ function updateLive(dt) {
     liveSendT -= dt;
     if (liveSendT <= 0) {
       liveSendT = 0.1;
-      const d = jacht ? jachtMijnD() : dist, jx = jacht ? { tr: jacht.pw.troeki.t > 0 ? 1 : 0, bk: fietsT > 0 || indoor ? 1 : 0 } : {};
+      const d = jacht ? jachtMijnD() : dist, jx = jacht ? { tr: jacht.pw.troeki.t > 0 ? 1 : 0, bk: fietsT > 0 || indoor ? 1 : 0, ...(jacht.rol === 'shane' ? { sk: save.eq.shane } : {}) } : {};
       liveSend({ t: 's', d: Math.round(d * 10) / 10, x: Math.round(player.x * 100) / 100, y: Math.round(player.y * 100) / 100, sl: player.slideT > 0 ? 1 : 0, sc: Math.floor(score), ...jx });
     }
   }
@@ -13830,6 +13907,7 @@ function jachtMsg(m) {
     const o = jacht.o, t = now();
     if (o.at && t > o.at) o.v = clamp((m.d - o.d) / (t - o.at), 0, 60);
     Object.assign(o, { d: m.d, x: m.x, y: m.y, sl: m.sl, tr: m.tr, bk: m.bk, at: t });
+    if (m.sk && SHOP.shane.items.some((i) => i.id === m.sk)) jacht.sk = m.sk;
   }
   if (m.t === 'dead' && jacht.rol === 'shane') jachtEinde(true, 'GEPAKT!', `Shane heeft Jens na ${Math.floor(jacht.t)} seconden te pakken. Telefoon inleveren, om half 4 mag hij hem ophalen.`);
   if (m.t === 'j' && m.e === 'trap' && jacht.rol === 'jens') jacht.trapQ++;
