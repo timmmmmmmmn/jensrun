@@ -192,6 +192,7 @@ const SHOP = {
     { id: 'eurotour', name: 'NEC European Tour-shirt', price: 1200 },
     { id: 'feyenoord', name: 'Feyenoord-shirt', price: 900 },
     { id: 'vitesse', name: 'Oud Vitesse-shirt', price: 50 },
+    { id: 'sint', name: 'Sinterklaaspak', price: 1500 },
     { id: 'goud', name: 'Gouden NEC-shirt (plakboek)', price: 99999 },
     { id: 'pas', name: 'Seizoensshirt (seizoenspas)', price: 99999, pass: true },
   ] },
@@ -1122,6 +1123,15 @@ const SHIRTS = {
     else { text(x, 'JENS', '#111', 24, 34); text(x, '9', '#111', 54, 84); }
   } },
   wit: { base: '#e9e7e1', paint() {} },
+  // toga van Sinterklaas: wit met de rode stola over de borst (de mantel hangt erover, zie sintPak)
+  sint: { base: '#f3f1ea', paint(x, side) {
+    if (side !== 'front') { x.fillStyle = '#b3121c'; x.fillRect(0, 0, 128, 128); return; }
+    for (const sx of [38, 72]) {
+      x.fillStyle = '#b3121c'; x.fillRect(sx, 0, 18, 128);
+      x.fillStyle = '#e0b43c'; x.fillRect(sx, 0, 2, 128); x.fillRect(sx + 16, 0, 2, 128); x.fillRect(sx, 120, 18, 4);
+      x.fillRect(sx + 7, 96, 4, 16); x.fillRect(sx + 3, 101, 12, 4); // kruisje onderaan
+    }
+  } },
   // de vijand: vaal, vergeeld, vlekken en gaten
   vitesse: { base: '#a58a30', img: 'img/shirt-vitesse.png', paint(x, side) {
     x.fillStyle = '#1e1b12'; for (let i = 6; i < 128; i += 26) x.fillRect(i, 0, 13, 128);
@@ -1471,6 +1481,40 @@ function buildHair(group, style, color) {
     return c;
   };
   switch (style) {
+    case 'sint': {
+      // Sinterklaas: witte krullenpruik tot op de schouders, baard tot op de borst en de mijter erop (gezicht blijft van Jens)
+      cap(Math.PI * 0.47, 0.45, 1.1);
+      const krul = new THREE.IcosahedronGeometry(0.075, 0);
+      const k = (x, y, z, sc = 1) => { const b = mesh(krul, hm, x, y, z); b.scale.setScalar(sc); b.rotation.set(x * 9 + y * 3, y * 7, z * 5); group.add(b); };
+      for (let y = 0.06; y > -0.66; y -= 0.09) {
+        const w = 0.21 + Math.min(0.1, -y * 0.16);
+        for (const sx of [-1, 1]) { k(sx * w, y, 0.0, 1.1); k(sx * (w - 0.04), y - 0.04, 0.13, 1.15); }
+        for (const x of [-0.12, 0, 0.12]) k(x, y - 0.02, 0.2 + Math.min(0.06, -y * 0.08), 1.15);
+      }
+      const blob = (sx, sy, sz, x, y, z) => { const b = mesh(sphG(1, 10, 7).scale(sx, sy, sz), hm, x, y, z); group.add(b); return b; };
+      blob(0.16, 0.34, 0.11, 0, -0.5, -0.15);          // de baard, onder de mond zodat Jens herkenbaar blijft
+      for (const sx of [-1, 1]) blob(0.07, 0.026, 0.03, sx * 0.06, -0.1, -0.215).rotation.z = sx * -0.35; // snor
+      for (let i = 0; i < 9; i++) k(rand(-0.12, 0.12), rand(-0.74, -0.34), -0.24, rand(0.75, 1.0));
+      // mijter: spits, van opzij smaller naar boven, rood met gouden band en kruis
+      const mg = cached('mijterGeo', () => {
+        const sh = new THREE.Shape([new THREE.Vector2(-0.24, 0), new THREE.Vector2(0.24, 0), new THREE.Vector2(0.26, 0.34), new THREE.Vector2(0, 0.62), new THREE.Vector2(-0.26, 0.34)]);
+        const g = new THREE.ExtrudeGeometry(sh, { depth: 0.5, bevelEnabled: false }).translate(0, 0, -0.25);
+        const pos = g.attributes.position;
+        for (let i = 0; i < pos.count; i++) pos.setZ(i, pos.getZ(i) * (1 - 0.887 * (pos.getY(i) / 0.62)));
+        g.computeVertexNormals();
+        return g;
+      });
+      const mijter = new THREE.Group(); mijter.position.y = 0.17; mijter.rotation.x = 0.12; group.add(mijter);
+      mijter.add(mesh(mg, M('#b5121b')));
+      const goud = M('#e0b43c', { emissive: '#3a2800' });
+      mijter.add(mesh(box(0.5, 0.06, 0.52), goud, 0, 0.03, 0));
+      for (const sz of [-1, 1]) {
+        const zAt = (y) => sz * (0.25 * (1 - 0.887 * (y / 0.62)) + 0.008);
+        const v = mesh(box(0.04, 0.48, 0.015), goud, 0, 0.3, zAt(0.3)); v.rotation.x = -sz * 0.217; mijter.add(v);
+        const hz = mesh(box(0.34, 0.04, 0.015), goud, 0, 0.3, zAt(0.3)); hz.rotation.x = -sz * 0.217; mijter.add(hz);
+      }
+      break;
+    }
     case 'normaal': case 'laser': {
       cap(Math.PI * 0.42, 0.5, 1.06);
       const f = mesh(box(0.26, 0.05, 0.08), hm, 0, 0.19, -0.2); f.rotation.x = 0.55; group.add(f);
@@ -1709,18 +1753,19 @@ function makePerson(o) {
     const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
     el.add(mesh(limbGeo(0.044, 0.033, 0.25), skinTex));
     const hand = new THREE.Group(); hand.position.y = -0.25; el.add(hand);
-    if (!lite) { const hm = mesh(limbGeo(0.036, 0.03, 0.1, 5), skinTex); hm.scale.set(1.15, 1, 0.6); hand.add(hm); }
+    let hm = null;
+    if (!lite) { hm = mesh(limbGeo(0.036, 0.03, 0.1, 5), skinTex); hm.scale.set(1.15, 1, 0.6); hand.add(hm); }
     body.add(sh);
-    return { sh, el, hand, sleeve };
+    return { sh, el, hand, sleeve, hm };
   };
-  const legMeshes = [];
+  const legMeshes = [], shoeMeshes = [];
   const leg = (sx) => {
     const hip = new THREE.Group(); hip.position.set(sx * 0.095, 0.93, 0);
     const up = mesh(limbGeo(0.085, 0.063, 0.44), pants); hip.add(up);
     const knee = new THREE.Group(); knee.position.y = -0.44; hip.add(knee);
     const low = mesh(limbGeo(0.061, 0.047, 0.42), pants); knee.add(low);
     legMeshes.push([up, low]);
-    knee.add(mesh(SHOE_GEO, shoe, 0, -0.45, -0.05));
+    const sm = mesh(SHOE_GEO, shoe, 0, -0.45, -0.05); knee.add(sm); shoeMeshes.push(sm);
     body.add(hip);
     return { hip, knee };
   };
@@ -1738,6 +1783,11 @@ function makePerson(o) {
     pelvis.material = pm;
     for (const [up, low] of legMeshes) { up.material = pm; low.material = shorts ? skinTex : pm; }
   };
+  // mouwen, handschoenen en schoenen (Sinterklaaspak); zonder argumenten weer gewoon huid en sneakers
+  p.setArms = (up = skinTex, low = skinTex, hand = skinTex) => {
+    for (const a of [L, Rr]) { a.sh.children[1].material = up; a.el.children[0].material = low; if (a.hm) a.hm.material = hand; }
+  };
+  p.setShoes = (color) => { for (const sm of shoeMeshes) sm.material = color ? fabricMat(color) : shoe; };
   p.setShirt = (id) => {
     const s = shirtMats(id);
     torso.material = s.torso;
@@ -1937,7 +1987,7 @@ let wornKey = '';
 // spullen in de linkerhand en op de rug
 const gearHand = new THREE.Group(); gearHand.position.y = -0.06;
 const gearBack = new THREE.Group();
-let fakkelOn = false, cape = null, ballonLine = null;
+let fakkelOn = false, stafOn = false, cape = null, ballonLine = null;
 const fakkelSparks = [];
 function canMat(bg, label, fg = '#ffffff') {
   return cached('can' + label, () => new THREE.MeshLambertMaterial({ map: canvasTex(64, 32, (x) => {
@@ -1949,7 +1999,7 @@ function canMat(bg, label, fg = '#ffffff') {
 function buildGear(rug, hand) {
   for (const g of [gearHand, gearBack]) while (g.children.length) g.remove(g.children[0]);
   if (ballonLine) { jens.root.remove(ballonLine.parent); ballonLine = null; }
-  fakkelOn = false; cape = null;
+  fakkelOn = false; stafOn = false; cape = null;
   gearHand.rotation.set(0, 0, 0);
   if (!gearHand.parent) jens.handL.add(gearHand);
   if (!gearBack.parent) jens.body.add(gearBack);
@@ -1977,6 +2027,15 @@ function buildGear(rug, hand) {
       g.rotation.x = 0.5; // naar voren gericht, vlam aan de onderkant
       fakkelOn = true; break;
     }
+    case 'staf': {
+      // gouden staf van Sinterklaas: blijft rechtop staan, ook als de arm zwaait (updateGear)
+      const goud = M('#d9a93a', { emissive: '#3a2a00' });
+      g.add(mesh(cylG(0.02, 0.02, 2.15, 6).translate(0, 0.26, 0), goud));
+      g.add(mesh(sphG(0.04, 6, 4), goud, 0, 1.05, 0));
+      const kr = mesh(torG(0.1, 0.02, 4, 10, Math.PI * 1.45), goud, -0.1, 1.33, 0); g.add(kr);
+      g.add(mesh(sphG(0.032, 6, 4), goud, -0.1 + Math.cos(Math.PI * 1.45) * 0.1, 1.33 + Math.sin(Math.PI * 1.45) * 0.1, 0));
+      stafOn = true; break;
+    }
     case 'ballon': {
       const hold = new THREE.Group(); jens.root.add(hold);
       const b = mesh(sphG(0.22, 12, 8), new THREE.MeshLambertMaterial({ color: pick(['#c8202b', '#1f7a3a', '#ff7b00', '#2667c9']), emissive: '#200000' }), -0.55, 2.55, 0.15);
@@ -1995,7 +2054,10 @@ function buildGear(rug, hand) {
   }
 }
 // per frame: cape wappert, fakkel sputtert, ballon wiebelt
+const stafQ = new THREE.Quaternion(), stafQ2 = new THREE.Quaternion();
 function updateGear(dt) {
+  if (stafOn) gearHand.quaternion.copy(jens.handL.getWorldQuaternion(stafQ).invert()).multiply(jens.root.getWorldQuaternion(stafQ2));
+  if (jens.sint) jens.sint.userData.mantel.rotation.x = damp(jens.sint.userData.mantel.rotation.x, state === 'run' ? -(0.12 + Math.min(0.35, speed / 60) + Math.sin(now() * 12) * 0.04) : 0, 6, dt);
   if (cape) cape.rotation.x = damp(cape.rotation.x, state === 'run' ? 0.35 + Math.min(0.6, speed / 40) + Math.sin(now() * 14) * 0.08 : 0.08, 6, dt);
   if (fakkelOn && Math.random() < (state === 'run' ? 0.7 : 0.3)) {
     const p = new THREE.Vector3(); gearHand.children[1].getWorldPosition(p); p.y -= 0.03;
@@ -2015,17 +2077,49 @@ function updateGear(dt) {
   const las = jens.hair.userData.laser;
   if (las) { const f = 0.75 + Math.random() * 0.5; for (const g of las) g.scale.set(f, f, 1); laserGlow.opacity = 0.25 + Math.random() * 0.2; }
 }
+// Sinterklaaspak om een persoon: mantel, kanten toga, gouden schouders, handschoenen, paarse broek, zwarte schoenen
+function sintPak(p, on) {
+  if (p.sint) { p.body.remove(p.sint); p.sint = null; }
+  if (!on) { p.setArms(); p.setShoes(); return; }
+  p.setArms(fabricMat('#b3121c'), fabricMat('#f3f1ea'), fabricMat('#ffffff'));
+  p.setShoes('#151515');
+  p.setPants('#5a4b9c', false);
+  const g = new THREE.Group();
+  const fluweel = cached('sintMantel', () => new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, map: canvasTex(128, 128, (x, w, h) => {
+    paintFabric(x, w, h, '#b3121c');
+    x.fillStyle = '#e0b43c'; x.fillRect(0, h - 8, w, 5); x.fillRect(0, 0, 5, h); x.fillRect(w - 5, 0, 5, h);
+    x.fillStyle = '#5a0a10'; x.fillRect(0, h - 3, w, 3);
+  }) }));
+  const kant = cached('sintKant', () => new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, map: canvasTex(128, 64, (x, w, h) => {
+    paintFabric(x, w, h, '#f3f1ea');
+    x.strokeStyle = 'rgba(120,110,95,.6)'; x.lineWidth = 2;
+    for (let i = 0; i < w; i += 16) { x.beginPath(); x.arc(i + 8, h - 18, 6, 0, 7); x.stroke(); x.beginPath(); x.moveTo(i, h - 4); x.lineTo(i + 8, h - 10); x.lineTo(i + 16, h - 4); x.stroke(); }
+  }) }));
+  const mantel = new THREE.Group(); mantel.position.set(0, 1.53, 0.02);
+  mantel.add(mesh(cached('sintMantelGeo', () => cylG(0.25, 0.44, 1.3, 12, 3, true, -0.68 * Math.PI, 1.36 * Math.PI).translate(0, -0.65, 0).scale(1, 1, 0.72)), fluweel));
+  g.add(mantel); g.userData.mantel = mantel;
+  g.add(mesh(cached('sintTogaGeo', () => cylG(0.18, 0.27, 0.55, 10, 1, true).translate(0, -0.275, 0).scale(1, 1, 0.75)), kant, 0, 1.08, 0));
+  const goud = M('#e0b43c', { emissive: '#3a2800' }), franje = M('#c9962a');
+  for (const sx of [-1, 1]) {
+    g.add(mesh(box(0.1, 0.03, 0.14), goud, sx * 0.19, 1.53, 0));
+    g.add(mesh(box(0.11, 0.06, 0.15), franje, sx * 0.2, 1.48, 0));
+  }
+  p.body.add(g);
+  p.sint = g;
+}
 function applyOutfit(eq = save.eq) {
   const key = [eq.shirt, eq.head, eq.bril, eq.rug, eq.hand, eq.maatje].join('|');
   if (key === wornKey) return;
   wornKey = key;
+  const sint = eq.shirt === 'sint';
   jens.setShirt(eq.shirt);
   if (eq.shirt === 'heineken') jens.setPants('#1f7a3a', true); else jens.setPants('#2f3f5c', false);
+  sintPak(jens, sint);
   const hairColor = eq.head === 'manen' ? '#e3c47e' : eq.head === 'spike' ? '#4a3626' : eq.head === 'kuif' ? '#e8e3d4' : '#6e5038';
-  buildHair(jens.hair, eq.head, hairColor);
-  jens.face.userData.setHair(eq.head === 'kuif' ? '#7a6a58' : hairColor);
+  buildHair(jens.hair, sint ? 'sint' : eq.head, sint ? '#efe9da' : hairColor);
+  jens.face.userData.setHair(sint ? '#d9d3c4' : eq.head === 'kuif' ? '#7a6a58' : hairColor);
   buildBril(jens.bril, eq.bril);
-  buildGear(eq.rug, eq.hand);
+  buildGear(sint ? 'geen' : eq.rug, sint ? 'staf' : eq.hand);
   setTimeout(() => buildPet(eq.maatje), 0); // maatje-code staat verderop in het bestand
 }
 applyOutfit();
@@ -5106,7 +5200,7 @@ const ARTIKEL_ICOON = {
   maatje: { geen: '🧍', duif: '🕊️', hond: '🐶', sef: '🧑' },
   bril: { geen: '👀', filter: '😎', lennon: '👓', snor: '🥸' },
 };
-const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', goud: '#e8b923', pas: '#7a4cff' };
+const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', sint: '#c8102e', goud: '#e8b923', pas: '#7a4cff' };
 const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a' };
 const shirtje = (k) => `<svg class="shirtje" viewBox="0 0 40 36"><path d="M13 2 4 7 1 16l7 2 2-5v21h20V13l2 5 7-2-3-9-9-5c-1 3-4 5-7 5s-6-2-7-5Z" fill="${k}" stroke="rgba(0,0,0,.45)" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 const icoon = (tab, id) => tab === 'shirt' ? shirtje(SHIRT_KLEUR[id] || '#fff') : ARTIKEL_ICOON[tab]?.[id] || GANGEN.find((g) => g[0] === tab)[2];
@@ -5312,6 +5406,7 @@ $('#items').addEventListener('click', (e) => {
   shopSel[shopTab] = it.id;
   previewOutfit();
   if (shopTab === 'shout') { lastSpeak = 0; singBusyUntil = 0; shout(it, true); }
+  else if (it.id === 'sint') bubble(jens.head, pick(['Heerlijk avondje!', 'Zie ginds komt de stoomboot', 'Waar is m\'n paard?', 'Ho ho... nee, dat is de andere']), '', 1.2, 0.5);
   else if (it.id === 'vitesse') { playClip('boe', true); bubble(jens.head, pick(['Bah', 'Moet dat echt?', 'Ik voel me vies']), '', 1.2, 0.5); }
   else { jens.root.position.y = 0; tone(660, 0.06, 'square', 0.05); }
   renderShop();
@@ -9285,7 +9380,9 @@ const faceTo = (o, x, z) => { o.rotation.y = Math.atan2(-(x - o.position.x), -(z
 function cutJens() {
   const p = makePerson({ key: 'jens', skin: '#f2cfbf', hair: '#6e5038', hairStyle: 'normaal', shirt: save.eq.shirt || 'wit', pants: '#2f3f5c', shoes: '#f4f4f4', face: { skin: '#f2cfbf', eye: '#4a6b8a', cheeks: true } });
   const hc = save.eq.head === 'manen' ? '#e3c47e' : save.eq.head === 'spike' ? '#4a3626' : save.eq.head === 'kuif' ? '#e8e3d4' : '#6e5038';
-  buildHair(p.hair, save.eq.head, hc);
+  const sint = save.eq.shirt === 'sint';
+  buildHair(p.hair, sint ? 'sint' : save.eq.head, sint ? '#efe9da' : hc);
+  if (sint) { sintPak(p, true); p.face.userData.setHair('#d9d3c4'); }
   buildBril(p.bril, save.eq.bril);
   return p;
 }
