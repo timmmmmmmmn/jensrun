@@ -192,7 +192,7 @@ const SHOP = {
     { id: 'eurotour', name: 'NEC European Tour-shirt', price: 1200 },
     { id: 'feyenoord', name: 'Feyenoord-shirt', price: 900 },
     { id: 'vitesse', name: 'Oud Vitesse-shirt', price: 50 },
-    { id: 'sint', name: 'Sinterklaaspak', price: 1500 },
+    { id: 'sint', name: 'Sinterklaaspak', price: 6250 },
     { id: 'goud', name: 'Gouden NEC-shirt (plakboek)', price: 99999 },
     { id: 'pas', name: 'Seizoensshirt (seizoenspas)', price: 99999, pass: true },
   ] },
