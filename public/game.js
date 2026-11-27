@@ -193,6 +193,7 @@ const SHOP = {
     { id: 'feyenoord', name: 'Feyenoord-shirt', price: 900 },
     { id: 'vitesse', name: 'Oud Vitesse-shirt', price: 50 },
     { id: 'sint', name: 'Sinterklaaspak', price: 6250 },
+    { id: 'piet', name: 'Pietenpak', price: 3125 },
     { id: 'goud', name: 'Gouden NEC-shirt (plakboek)', price: 99999 },
     { id: 'pas', name: 'Seizoensshirt (seizoenspas)', price: 99999, pass: true },
   ] },
@@ -1123,6 +1124,14 @@ const SHIRTS = {
     else { text(x, 'JENS', '#111', 24, 34); text(x, '9', '#111', 54, 84); }
   } },
   wit: { base: '#e9e7e1', paint() {} },
+  // wambuis van het pietenpak: zwart fluweel met paarse banen, goudbiezen en knoopjes
+  piet: { base: '#151017', paint(x, side) {
+    for (const sx of side === 'front' ? [26, 80] : [16, 90]) {
+      x.fillStyle = '#6a2bb0'; x.fillRect(sx, 0, 22, 128);
+      x.fillStyle = '#e0b43c'; x.fillRect(sx - 2, 0, 2, 128); x.fillRect(sx + 22, 0, 2, 128);
+    }
+    if (side === 'front') { x.fillStyle = '#e0b43c'; for (let y = 22; y < 124; y += 16) { x.beginPath(); x.arc(64, y, 3, 0, 7); x.fill(); } }
+  } },
   // toga van Sinterklaas: wit met de rode stola over de borst (de mantel hangt erover, zie sintPak)
   sint: { base: '#f3f1ea', paint(x, side) {
     if (side !== 'front') { x.fillStyle = '#b3121c'; x.fillRect(0, 0, 128, 128); return; }
@@ -1512,6 +1521,17 @@ function buildHair(group, style, color) {
         const zAt = (y) => sz * (0.25 * (1 - 0.887 * (y / 0.62)) + 0.008);
         const v = mesh(box(0.04, 0.48, 0.015), goud, 0, 0.3, zAt(0.3)); v.rotation.x = -sz * 0.217; mijter.add(v);
         const hz = mesh(box(0.34, 0.04, 0.015), goud, 0, 0.3, zAt(0.3)); hz.rotation.x = -sz * 0.217; mijter.add(hz);
+      }
+      break;
+    }
+    case 'piet': {
+      // eigen haar met een paarse baret schuin erop, met witte en zwarte veer
+      cap(Math.PI * 0.42, 0.5, 1.06);
+      const baret = new THREE.Group(); baret.position.set(0.03, 0.22, 0.02); baret.rotation.set(-0.15, 0, -0.28); group.add(baret);
+      baret.add(mesh(sphG(1, 10, 6).scale(0.29, 0.1, 0.28), M('#6a2bb0')));
+      baret.add(mesh(cylG(0.22, 0.23, 0.05, 12, 1, true), M('#e0b43c', { emissive: '#3a2800' }), 0, -0.04, 0));
+      for (const [kl, dx, ry] of [['#f4f2ec', 0, 0.3], ['#151515', 0.04, 0.6]]) {
+        const v = mesh(sphG(1, 8, 4).scale(0.05, 0.03, 0.26), M(kl), 0.2 + dx, 0.02, 0.12); v.rotation.set(0.5, ry, 0.3); baret.add(v);
       }
       break;
     }
@@ -2079,8 +2099,8 @@ function updateGear(dt) {
 }
 // Sinterklaaspak om een persoon: mantel, kanten toga, gouden schouders, handschoenen, paarse broek, zwarte schoenen
 function sintPak(p, on) {
-  if (p.sint) { p.body.remove(p.sint); p.sint = null; }
-  if (!on) { p.setArms(); p.setShoes(); return; }
+  if (p.sint) { p.body.remove(p.sint); p.sint = null; if (!on) { p.setArms(); p.setShoes(); } }
+  if (!on) return;
   p.setArms(fabricMat('#b3121c'), fabricMat('#f3f1ea'), fabricMat('#ffffff'));
   p.setShoes('#151515');
   p.setPants('#5a4b9c', false);
@@ -2107,6 +2127,41 @@ function sintPak(p, on) {
   p.body.add(g);
   p.sint = g;
 }
+// pietenpak: kanten kraag, schootje onder het wambuis, paarse pofbroek, zwarte maillot, handschoenen, schoenen met gesp
+function pietPak(p, on) {
+  if (p.piet) {
+    p.body.remove(p.piet); p.piet = null;
+    for (const b of p.pietGesp) b.parent.remove(b);
+    for (const leg of [p.legL, p.legR]) leg.children[0].scale.set(1, 1, 1);
+    if (!on) { p.setArms(); p.setShoes(); }
+  }
+  if (!on) return;
+  const zwart = fabricMat('#141016'), paars = cached('pietBroek', () => new THREE.MeshLambertMaterial({ map: canvasTex(64, 64, (x, w, h) => {
+    paintFabric(x, w, h, '#6a2bb0');
+    for (let i = 0; i < w; i += 16) { x.fillStyle = '#151017'; x.fillRect(i + 5, 0, 6, h); x.fillStyle = '#e0b43c'; x.fillRect(i + 4, 0, 1, h); x.fillRect(i + 11, 0, 1, h); }
+  }) }));
+  p.setArms(zwart, zwart, fabricMat('#0c0c0c'));
+  p.setShoes('#151515');
+  p.setPants('#141016', false);
+  p.body.children[1].material = paars;
+  for (const leg of [p.legL, p.legR]) { leg.children[0].material = paars; leg.children[0].scale.set(1.4, 1, 1.4); }
+  const goud = M('#e0b43c', { emissive: '#3a2800' });
+  p.pietGesp = [p.kneeL, p.kneeR].map((k) => { const b = mesh(box(0.07, 0.05, 0.03), goud, 0, -0.41, -0.13); k.add(b); return b; });
+  const g = new THREE.Group();
+  const kant = cached('pietKraag', () => new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, map: canvasTex(64, 16, (x, w, h) => {
+    paintFabric(x, w, h, '#f4f2ec');
+    x.strokeStyle = 'rgba(120,110,95,.6)'; for (let i = 0; i < w; i += 8) { x.beginPath(); x.arc(i + 4, h - 4, 3, 0, 7); x.stroke(); }
+  }) }));
+  g.add(mesh(cached('pietKraagGeo', () => cylG(0.09, 0.25, 0.09, 12, 1, true).scale(1, 1, 0.75)), kant, 0, 1.53, 0));
+  const schoot = cached('pietSchoot', () => new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, map: canvasTex(64, 32, (x, w, h) => {
+    paintFabric(x, w, h, '#151017');
+    x.fillStyle = '#6a2bb0'; for (let i = 0; i < w; i += 16) x.fillRect(i + 4, 0, 8, h);
+    x.fillStyle = '#e0b43c'; x.fillRect(0, h - 3, w, 3);
+  }) }));
+  g.add(mesh(cached('pietSchootGeo', () => cylG(0.18, 0.22, 0.16, 10, 1, true).translate(0, -0.08, 0).scale(1, 1, 0.72)), schoot, 0, 1.06, 0));
+  p.body.add(g);
+  p.piet = g;
+}
 function applyOutfit(eq = save.eq) {
   const key = [eq.shirt, eq.head, eq.bril, eq.rug, eq.hand, eq.maatje].join('|');
   if (key === wornKey) return;
@@ -2115,8 +2170,9 @@ function applyOutfit(eq = save.eq) {
   jens.setShirt(eq.shirt);
   if (eq.shirt === 'heineken') jens.setPants('#1f7a3a', true); else jens.setPants('#2f3f5c', false);
   sintPak(jens, sint);
+  pietPak(jens, eq.shirt === 'piet');
   const hairColor = eq.head === 'manen' ? '#e3c47e' : eq.head === 'spike' ? '#4a3626' : eq.head === 'kuif' ? '#e8e3d4' : '#6e5038';
-  buildHair(jens.hair, sint ? 'sint' : eq.head, sint ? '#efe9da' : hairColor);
+  buildHair(jens.hair, sint ? 'sint' : eq.shirt === 'piet' ? 'piet' : eq.head, sint ? '#efe9da' : hairColor);
   jens.face.userData.setHair(sint ? '#d9d3c4' : eq.head === 'kuif' ? '#7a6a58' : hairColor);
   buildBril(jens.bril, eq.bril);
   buildGear(sint ? 'geen' : eq.rug, sint ? 'staf' : eq.hand);
@@ -5200,7 +5256,7 @@ const ARTIKEL_ICOON = {
   maatje: { geen: '🧍', duif: '🕊️', hond: '🐶', sef: '🧑' },
   bril: { geen: '👀', filter: '😎', lennon: '👓', snor: '🥸' },
 };
-const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', sint: '#c8102e', goud: '#e8b923', pas: '#7a4cff' };
+const SHIRT_KLEUR = { wit: '#f2f2f2', vierdaagse: '#2e8b3d', oranje: '#ff7a00', uefa: '#1d3c8f', rammstein: '#222', heineken: '#0b7a3b', nec6: '#c8202b', eurotour: '#8a1420', feyenoord: '#e2231a', vitesse: '#ffd23f', sint: '#c8102e', piet: '#6a2bb0', goud: '#e8b923', pas: '#7a4cff' };
 const PAK_KLEUR = { shout: '#e2231a', head: '#5b4aa8', rug: '#c8202b', hand: '#ff9a1f', skill: '#1f7a4a', maatje: '#8a5a2b', bril: '#2a2a2a' };
 const shirtje = (k) => `<svg class="shirtje" viewBox="0 0 40 36"><path d="M13 2 4 7 1 16l7 2 2-5v21h20V13l2 5 7-2-3-9-9-5c-1 3-4 5-7 5s-6-2-7-5Z" fill="${k}" stroke="rgba(0,0,0,.45)" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 const icoon = (tab, id) => tab === 'shirt' ? shirtje(SHIRT_KLEUR[id] || '#fff') : ARTIKEL_ICOON[tab]?.[id] || GANGEN.find((g) => g[0] === tab)[2];
@@ -5406,6 +5462,7 @@ $('#items').addEventListener('click', (e) => {
   shopSel[shopTab] = it.id;
   previewOutfit();
   if (shopTab === 'shout') { lastSpeak = 0; singBusyUntil = 0; shout(it, true); }
+  else if (it.id === 'piet') bubble(jens.head, pick(['Pepernoten!', 'Waar is de Sint?', 'Zak vol bekers', 'Wie zoet is krijgt lekkers']), '', 1.2, 0.5);
   else if (it.id === 'sint') bubble(jens.head, pick(['Heerlijk avondje!', 'Zie ginds komt de stoomboot', 'Waar is m\'n paard?', 'Ho ho... nee, dat is de andere']), '', 1.2, 0.5);
   else if (it.id === 'vitesse') { playClip('boe', true); bubble(jens.head, pick(['Bah', 'Moet dat echt?', 'Ik voel me vies']), '', 1.2, 0.5); }
   else { jens.root.position.y = 0; tone(660, 0.06, 'square', 0.05); }
@@ -9383,6 +9440,7 @@ function cutJens() {
   const sint = save.eq.shirt === 'sint';
   buildHair(p.hair, sint ? 'sint' : save.eq.head, sint ? '#efe9da' : hc);
   if (sint) { sintPak(p, true); p.face.userData.setHair('#d9d3c4'); }
+  if (save.eq.shirt === 'piet') { pietPak(p, true); buildHair(p.hair, 'piet', hc); }
   buildBril(p.bril, save.eq.bril);
   return p;
 }
